@@ -1,10 +1,14 @@
 import {
-  DOMINATIONS_TO_WIN_PHASE,
   LEADER_MAX_HP,
   type ArenaState,
   type GameState,
   type PlayerId,
 } from "./types";
+import {
+  applyLeaderDamage,
+  beginPhaseEndChoice,
+  dominationsToWinPhase,
+} from "./phase-transition";
 import { applyArenaOnDominate } from "./arena-effects";
 import {
   appendLog,
@@ -26,13 +30,12 @@ function applyDomination(
   arena: ArenaState,
   player: PlayerId,
 ): GameState {
+  if (state.gamePhase === "reino-reverso") return state;
+
   const arenas = state.arenas.map((a) =>
     a.id === arena.id ? { ...a, dominatedBy: player } : a,
   );
-  const opp = opponent(player);
   const players = [...state.players] as GameState["players"];
-  const dmg = Math.max(0, players[opp].leaderHp - 1);
-  players[opp] = { ...players[opp], leaderHp: dmg };
   players[player] = {
     ...players[player],
     dominatedArenas: players[player].dominatedArenas + 1,
@@ -48,35 +51,17 @@ function applyDomination(
   next = applyArenaOnDominate(next, arena.id, player);
 
   const domCount = players[player].dominatedArenas;
-  next = {
-    ...next,
-    log: appendLog(
-      next,
-      `Jogador ${player + 1} conquistou ${arena.name}! (−1 vida do líder inimigo)`,
-    ),
-  };
+  next = applyLeaderDamage(
+    next,
+    player,
+    1,
+    `Jogador ${player + 1} conquistou ${arena.name}! (−1 vida do líder inimigo)`,
+  );
+  if (next.matchPhase === "finished") return next;
 
-  if (dmg <= 0) {
-    return {
-      ...next,
-      matchPhase: "finished",
-      winner: player,
-      winReason: "Líder inimigo derrotado",
-      log: appendLog(next, `Jogador ${player + 1} venceu a partida!`),
-    };
-  }
-
-  if (domCount >= DOMINATIONS_TO_WIN_PHASE) {
-    return {
-      ...next,
-      matchPhase: "finished",
-      winner: player,
-      winReason: "Mundo Normal dominado (3 arenas)",
-      log: appendLog(
-        next,
-        `Jogador ${player + 1} venceu a fase Mundo Normal!`,
-      ),
-    };
+  const threshold = dominationsToWinPhase(state.gamePhase);
+  if (threshold !== null && domCount >= threshold) {
+    return beginPhaseEndChoice(next, player, state.gamePhase);
   }
 
   return next;
@@ -87,6 +72,8 @@ function awardConquestPoint(
   arenaId: string,
   player: PlayerId,
 ): GameState {
+  if (state.gamePhase === "reino-reverso") return state;
+
   const arena = getArena(state, arenaId);
   if (arena.dominatedBy !== null) return state;
 
@@ -114,6 +101,8 @@ function awardConquestPoint(
 
 /** Fase de início: valida conquistas pendentes. */
 export function processStartPhase(state: GameState): GameState {
+  if (state.gamePhase === "reino-reverso") return state;
+
   const player = state.activePlayer;
   let next = { ...state };
 
@@ -143,6 +132,10 @@ export function processStartPhase(state: GameState): GameState {
 
 /** Ao fim do turno: marca arenas para possível conquista no próximo ciclo. */
 export function setConquestWatchOnEndTurn(state: GameState, player: PlayerId): GameState {
+  if (state.gamePhase === "reino-reverso") {
+    return { ...state, conquestWatch: { ...state.conquestWatch } };
+  }
+
   const watch = { ...state.conquestWatch };
 
   for (const arena of state.arenas) {

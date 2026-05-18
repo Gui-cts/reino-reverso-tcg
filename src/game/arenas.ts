@@ -76,9 +76,85 @@ export const MUNDO_NORMAL_ARENAS: ArenaDefinition[] = [
   },
 ];
 
-/** Reservado para fases futuras. */
-export const ABISMO_ARENAS: ArenaDefinition[] = [];
-export const REINO_REVERSO_ARENAS: ArenaDefinition[] = [];
+/** Arenas do Abismo (vencedor do MN escolhe 2, perdedor escolhe 1). */
+export const ABISMO_ARENAS: ArenaDefinition[] = [
+  {
+    id: "fosso-ecos",
+    name: "Fosso dos Ecos",
+    neutral: false,
+    phase: "abismo",
+    effect: "none",
+    conquestPointsToDominate: 2,
+    pickedBy: null,
+  },
+  {
+    id: "cripta-subterranea",
+    name: "Cripta Subterrânea",
+    neutral: false,
+    phase: "abismo",
+    effect: "ping-after-strike",
+    conquestPointsToDominate: 2,
+    pickedBy: null,
+  },
+  {
+    id: "labirinto-sal",
+    name: "Labirinto de Sal",
+    neutral: false,
+    phase: "abismo",
+    effect: "no-magic",
+    conquestPointsToDominate: 2,
+    pickedBy: null,
+  },
+  {
+    id: "altar-profanado",
+    name: "Altar Profanado",
+    neutral: false,
+    phase: "abismo",
+    effect: "conquest-3-corruption",
+    conquestPointsToDominate: 3,
+    pickedBy: null,
+  },
+  {
+    id: "ponte-quebrada",
+    name: "Ponte Quebrada",
+    neutral: false,
+    phase: "abismo",
+    effect: "random-buff-on-combat",
+    conquestPointsToDominate: 2,
+    pickedBy: null,
+  },
+  {
+    id: "covil-vermes",
+    name: "Covil de Vermes",
+    neutral: false,
+    phase: "abismo",
+    effect: "draw-two-on-dominate",
+    conquestPointsToDominate: 2,
+    pickedBy: null,
+  },
+];
+
+/** Arenas do Reino Reverso (vencedor do Abismo escolhe 1). */
+export const REINO_REVERSO_ARENAS: ArenaDefinition[] = [
+  {
+    id: "portal-reino-reverso",
+    name: "Portal do Reino Reverso",
+    neutral: false,
+    phase: "reino-reverso",
+    effect: "none",
+    conquestPointsToDominate: 99,
+    pickedBy: null,
+  },
+  {
+    id: "nexo-invertido",
+    name: "Nexo Invertido",
+    neutral: false,
+    phase: "reino-reverso",
+    effect: "no-magic",
+    conquestPointsToDominate: 99,
+    pickedBy: null,
+  },
+];
 
 export function arenasForPhase(phase: WorldPhase): ArenaDefinition[] {
   switch (phase) {

@@ -4,7 +4,9 @@ export const LEADER_MAX_HP = 3;
 export const MAX_TROOPS_PER_ZONE = 3;
 export const INITIAL_HAND_SIZE = 5;
 export const CARDS_DRAW_PER_TURN = 1;
+/** @deprecated Use dominationsToWinPhase(gamePhase) */
 export const DOMINATIONS_TO_WIN_PHASE = 3;
+export const DOMINATIONS_ABISMO = 2;
 export const MAX_CORRUPTION = 3;
 export const DEFAULT_CONQUEST_TO_DOMINATE = 2;
 
@@ -89,6 +91,10 @@ export type MatchPhase =
   | "setup_arenas_p1"
   | "mulligan_p0"
   | "mulligan_p1"
+  | "phase_end_choice"
+  | "setup_abismo_winner"
+  | "setup_abismo_loser"
+  | "setup_rr_winner"
   | "playing"
   | "finished";
 
@@ -141,6 +147,10 @@ export interface GameState {
   combat: CombatState | null;
   nextInstanceId: number;
   mulliganUsed: [boolean, boolean];
+  /** Vencedor da fase anterior (escolha pós-fase e draft de arenas). */
+  phaseWinner: PlayerId | null;
+  /** IDs acumulados no setup do Abismo / RR. */
+  arenaSetupPicks: string[];
 }
 
 export type GameAction =
@@ -154,4 +164,9 @@ export type GameAction =
   | { type: "DECLARE_COMBAT"; arenaId: string }
   | { type: "EXECUTE_COMBAT_ATTACK"; attackerId: string; targetId: string }
   | { type: "END_COMBAT_STRIKE" }
-  | { type: "END_TURN" };
+  | { type: "END_TURN" }
+  | {
+      type: "POST_PHASE_CHOICE";
+      player: PlayerId;
+      choice: "essence" | "corruption" | "recycle";
+    };

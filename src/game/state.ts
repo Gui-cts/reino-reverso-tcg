@@ -98,6 +98,8 @@ export function createInitialGame(catalogData: CardCatalog): GameState {
     combat: null,
     nextInstanceId: 1,
     mulliganUsed: [false, false],
+    phaseWinner: null,
+    arenaSetupPicks: [],
   };
 
   let nextId = state.nextInstanceId;

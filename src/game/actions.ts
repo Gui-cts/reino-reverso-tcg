@@ -16,6 +16,11 @@ import {
   opponent,
   sanitizePlayerHands,
 } from "./helpers";
+import {
+  applyPostPhaseChoice,
+  finishArenaSetupAndResume,
+  startNextPhaseSetup,
+} from "./phase-transition";
 import { drawFromDeck, finalizeArenas } from "./state";
 import { runTurnBegin } from "./turn";
 import { buryDeadTroops } from "./troop-cleanup";
@@ -307,18 +312,20 @@ function moveTroop(
   };
 }
 
-function selectArena(state: GameState, player: PlayerId, arenaId: string): GameState {
-  const expected =
-    player === 0 ? "setup_arenas_p0" : "setup_arenas_p1";
-  if (state.matchPhase !== expected) return state;
-
-  const def = state.arenaPool.find(
-    (a) =>
-      a.id === arenaId &&
-      !a.neutral &&
-      a.phase === state.gamePhase,
+function findArenaDef(state: GameState, arenaId: string): GameState["arenaPool"][0] | undefined {
+  return state.arenaPool.find(
+    (a) => a.id === arenaId && !a.neutral && a.phase === state.gamePhase,
   );
-  if (!def) return state;
+}
+
+function selectMundoNormalArena(
+  state: GameState,
+  player: PlayerId,
+  arenaId: string,
+): GameState {
+  const expected = player === 0 ? "setup_arenas_p0" : "setup_arenas_p1";
+  if (state.matchPhase !== expected) return state;
+  if (!findArenaDef(state, arenaId)) return state;
 
   const selected = [...state.selectedArenaIds] as [string[], string[]];
   const list = selected[player];
@@ -347,6 +354,104 @@ function selectArena(state: GameState, player: PlayerId, arenaId: string): GameS
   }
 
   return next;
+}
+
+function selectAbismoWinnerArena(
+  state: GameState,
+  player: PlayerId,
+  arenaId: string,
+): GameState {
+  if (state.matchPhase !== "setup_abismo_winner" || state.phaseWinner !== player) {
+    return state;
+  }
+  if (!findArenaDef(state, arenaId)) return state;
+
+  let picks = [...state.arenaSetupPicks];
+  if (picks.includes(arenaId)) {
+    picks = picks.filter((id) => id !== arenaId);
+  } else if (picks.length < 2) {
+    picks = [...picks, arenaId];
+  }
+
+  if (picks.length === 2) {
+    const loser = opponent(player);
+    return {
+      ...state,
+      arenaSetupPicks: picks,
+      matchPhase: "setup_abismo_loser",
+      log: appendLog(
+        state,
+        `Jogador ${loser + 1} escolhe 1 arena do Abismo (restante).`,
+      ),
+    };
+  }
+
+  return { ...state, arenaSetupPicks: picks };
+}
+
+function selectAbismoLoserArena(
+  state: GameState,
+  player: PlayerId,
+  arenaId: string,
+): GameState {
+  const winner = state.phaseWinner;
+  if (state.matchPhase !== "setup_abismo_loser" || winner === null) return state;
+  if (player !== opponent(winner)) return state;
+  if (!findArenaDef(state, arenaId)) return state;
+  if (state.arenaSetupPicks.includes(arenaId)) {
+    return { ...state, log: appendLog(state, "Arena já escolhida pelo vencedor.") };
+  }
+
+  const allPicks = [...state.arenaSetupPicks, arenaId];
+  const ready = finishArenaSetupAndResume(state, allPicks, winner);
+  return runTurnBegin(ready, winner);
+}
+
+function selectReinoReversoArena(
+  state: GameState,
+  player: PlayerId,
+  arenaId: string,
+): GameState {
+  if (state.matchPhase !== "setup_rr_winner" || state.phaseWinner !== player) {
+    return state;
+  }
+  if (!findArenaDef(state, arenaId)) return state;
+
+  const ready = finishArenaSetupAndResume(state, [arenaId], player);
+  return runTurnBegin(ready, player);
+}
+
+function selectArena(state: GameState, player: PlayerId, arenaId: string): GameState {
+  switch (state.matchPhase) {
+    case "setup_arenas_p0":
+    case "setup_arenas_p1":
+      return selectMundoNormalArena(state, player, arenaId);
+    case "setup_abismo_winner":
+      return selectAbismoWinnerArena(state, player, arenaId);
+    case "setup_abismo_loser":
+      return selectAbismoLoserArena(state, player, arenaId);
+    case "setup_rr_winner":
+      return selectReinoReversoArena(state, player, arenaId);
+    default:
+      return state;
+  }
+}
+
+function handlePostPhaseChoice(
+  state: GameState,
+  player: PlayerId,
+  choice: "essence" | "corruption" | "recycle",
+): GameState {
+  if (state.matchPhase !== "phase_end_choice") return state;
+  if (state.phaseWinner !== player) {
+    return {
+      ...state,
+      log: appendLog(state, "Só o vencedor da fase pode escolher."),
+    };
+  }
+
+  let next = applyPostPhaseChoice(state, player, choice);
+  return startNextPhaseSetup(next);
 }
 
 function applyAction(state: GameState, action: GameAction): GameState {
@@ -389,6 +494,9 @@ function applyAction(state: GameState, action: GameAction): GameState {
 
     case "END_TURN":
       return endPlayerTurn(state);
+
+    case "POST_PHASE_CHOICE":
+      return handlePostPhaseChoice(state, action.player, action.choice);
 
     default:
       return state;

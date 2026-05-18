@@ -36,7 +36,7 @@ flowchart LR
 
 **Fim da partida completa:** quando um **Líder chega a 0 de vida** (em qualquer momento em que dano se aplique ao Líder).
 
-> No protótipo v1 só o **Mundo Normal** está implementado.
+> Protótipo: **Mundo Normal → Abismo → Reino Reverso** com escolha pós-fase e draft de arenas.
 
 ---
 
@@ -130,17 +130,15 @@ flowchart LR
 - **1× por turno**: sacrificar da mão uma carta com ✦ → vai para o Espaço de Essência (+1 Essência disponível).
 - Cada carta no Espaço conta como **1 ponto** de Essência para pagar custos.
 
-### 6.3 Corrupção (futuro — pós-fase)
+### 6.3 Escolha pós-fase
 
-Ao **vencer uma fase** (ex.: Mundo Normal), o vencedor escolhe o que fazer com as tropas nas arenas:
+Ao **vencer uma fase** (Mundo Normal ou Abismo), o vencedor escolhe o que fazer com as tropas nas arenas:
 
 | Escolha | Efeito |
 |---------|--------|
 | **1 — Essência** | Destrói todas as tropas nas arenas; cada uma vira Essência (1 carta = 1 Essência) |
-| **2 — Corrupção** | Destrói todas; gera Corrupção (mana para cartas mais fortes), **teto 3** por mudança de fase |
+| **2 — Corrupção** | Destrói todas; gera Corrupção (**+1 por tropa**, máx. **+3** nesta escolha) |
 | **3 — Reciclar** | Todas as cartas nas arenas voltam ao baralho e embaralham |
-
-> Corrupção e escolha pós-fase **não estão no protótipo v1**.
 
 ---
 
@@ -204,11 +202,11 @@ Com **2 pontos** na mesma arena → **conquista**.
 ### 8.4 Fim da fase (Mundo Normal / Abismo)
 
 - Ao dominar **3** arenas (MN) ou **2** (Abismo), a fase **acaba na hora**.
-- Aplica-se escolha pós-fase (seção 6.3) — futuro.
+- Aplica-se escolha pós-fase (seção 6.3); em seguida draft das arenas da próxima fase.
 
 ---
 
-## 9. Reino Reverso (design completo — não no v1)
+## 9. Reino Reverso
 
 | Regra | Detalhe |
 |-------|---------|
@@ -244,6 +242,28 @@ Com **2 pontos** na mesma arena → **conquista**.
 | **Sanatório São Augustinho** | Após cada golpe de ataque: **1 de dano** em todas as tropas remanescentes na arena |
 | **Templo das Sombras** | Conquista com **3** pontos; ao dominar: **+1 Corrupção** (máx. 3) |
 
+### 10.3 Arenas do Abismo (protótipo)
+
+| Arena | Efeito |
+|-------|--------|
+| **Fosso dos Ecos** | Sem efeito |
+| **Cripta Subterrânea** | Após cada golpe: 1 de dano em todas as tropas na arena |
+| **Labirinto de Sal** | Magias bloqueadas no combate |
+| **Altar Profanado** | Conquista com 3 pontos; +1 Corrupção ao dominar |
+| **Ponte Quebrada** | Ao declarar combate: tropa aleatória +1/+1 |
+| **Covil de Vermes** | Ao dominar: compra 2 cartas |
+
+Setup: vencedor da fase escolhe **2**, perdedor escolhe **1** (3 arenas ativas). Vitória da fase: **2** domínios.
+
+### 10.4 Reino Reverso (protótipo)
+
+| Arena | Uso |
+|-------|-----|
+| **Portal do Reino Reverso** | Combate final (sem dominação) |
+| **Nexo Invertido** | Idem + magias bloqueadas no combate |
+
+Vencedor do Abismo escolhe **1** arena e **começa** a fase.
+
 ---
 
 ## 11. Tipos de carta (roadmap)
@@ -278,15 +298,15 @@ Checklist do que o código atual cobre:
 - [x] Efeitos de arena do Mundo Normal (8 cartas + neutra)
 - [x] Corrupção rastreada (ganho no Templo das Sombras)
 - [x] Tropas derrotadas vão ao descarte (removem do campo)
-- [ ] Fases Abismo / Reino Reverso (pools de arena vazios)
-- [ ] Magias e gasto de Corrupção
+- [x] Transição MN → Abismo → Reino Reverso (vitória por domínios na fase)
+- [x] Escolha pós-fase (Essência / Corrupção / Reciclar)
+- [x] Draft de arenas do Abismo (vencedor 2 + perdedor 1) e RR (vencedor 1)
+- [x] Reino Reverso: dano ao Líder ao vencer combate, tropas à base, vácuo
+- [ ] Magias e gasto de Corrupção em cartas
 
-Fora do v1:
+Fora do protótipo atual:
 
-- [ ] Abismo e Reino Reverso
-- [ ] Efeitos de arena
 - [ ] Magias, artefatos, equipamentos
-- [ ] Corrupção e escolha pós-fase
 - [ ] CPU / multiplayer online
 - [ ] Validação estrita de baralho por Líder
 

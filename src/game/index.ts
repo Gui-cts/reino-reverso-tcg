@@ -15,3 +15,4 @@ export {
 } from "./combat";
 export { runTurnBegin } from "./turn";
 export { buryDeadTroops } from "./troop-cleanup";
+export { phaseDisplayName, dominationsToWinPhase } from "./phase-transition";

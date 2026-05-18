@@ -8,6 +8,7 @@ import {
   hasAttackedThisStrike,
 } from "../game";
 import { describeArenaEffect } from "../game/arenas";
+import { dominationsToWinPhase, phaseDisplayName } from "../game";
 import { cardFromDef, createCardEl, createEssenceTokenEl } from "./card-view";
 import {
   bindDropZone,
@@ -109,13 +110,27 @@ export class GameApp {
     this.root.innerHTML = "";
 
     const header = document.createElement("header");
+    const domGoal = dominationsToWinPhase(s.gamePhase);
+    const phaseMeta =
+      domGoal !== null
+        ? `${domGoal} domínios para vencer a fase`
+        : "Combate final — derrote o Líder inimigo";
     header.innerHTML = `
-      <h1>Reino Reverso TCG — Protótipo v1</h1>
-      <p class="subtitle">Mundo Normal · 2 jogadores local · Líder 3 HP</p>
+      <h1>Reino Reverso TCG</h1>
+      <p class="subtitle">${phaseDisplayName(s.gamePhase)} · 2 jogadores local · Líder ${s.players[0].leaderHp}/${s.players[1].leaderHp} HP · ${phaseMeta}</p>
     `;
     this.root.appendChild(header);
 
-    if (s.matchPhase.startsWith("setup_arenas")) {
+    if (s.matchPhase === "phase_end_choice") {
+      this.renderPhaseEndChoice(s);
+      return;
+    }
+
+    if (
+      s.matchPhase.startsWith("setup_arenas") ||
+      s.matchPhase.startsWith("setup_abismo") ||
+      s.matchPhase === "setup_rr_winner"
+    ) {
       this.renderArenaSetup(s);
       return;
     }
@@ -129,31 +144,137 @@ export class GameApp {
     this.renderMatch(s);
   }
 
-  private renderArenaSetup(s: GameState): void {
-    const player: PlayerId = s.matchPhase === "setup_arenas_p0" ? 0 : 1;
+  private arenaSetupContext(s: GameState): {
+    player: PlayerId;
+    title: string;
+    hint: string;
+    pickedIds: string[];
+    takenIds: string[];
+  } | null {
+    if (s.matchPhase === "setup_arenas_p0") {
+      return {
+        player: 0,
+        title: "Jogador 1 — escolha 2 arenas",
+        hint: "Selecionadas: {n}/2 · Neutra: Ruas de São Paulo (automática)",
+        pickedIds: s.selectedArenaIds[0],
+        takenIds: s.selectedArenaIds[1],
+      };
+    }
+    if (s.matchPhase === "setup_arenas_p1") {
+      return {
+        player: 1,
+        title: "Jogador 2 — escolha 2 arenas",
+        hint: "Selecionadas: {n}/2",
+        pickedIds: s.selectedArenaIds[1],
+        takenIds: s.selectedArenaIds[0],
+      };
+    }
+    const winner = s.phaseWinner;
+    if (winner === null) return null;
+    if (s.matchPhase === "setup_abismo_winner") {
+      return {
+        player: winner,
+        title: `Jogador ${winner + 1} (vencedor) — escolha 2 arenas do Abismo`,
+        hint: "Selecionadas: {n}/2",
+        pickedIds: s.arenaSetupPicks,
+        takenIds: [],
+      };
+    }
+    if (s.matchPhase === "setup_abismo_loser") {
+      const loser = winner === 0 ? 1 : 0;
+      return {
+        player: loser,
+        title: `Jogador ${loser + 1} — escolha 1 arena do Abismo`,
+        hint: "Clique na arena restante para confirmar",
+        pickedIds: [],
+        takenIds: s.arenaSetupPicks,
+      };
+    }
+    if (s.matchPhase === "setup_rr_winner") {
+      return {
+        player: winner,
+        title: `Jogador ${winner + 1} — escolha a arena do Reino Reverso`,
+        hint: "Clique na arena para iniciar o combate final",
+        pickedIds: s.arenaSetupPicks,
+        takenIds: [],
+      };
+    }
+    return null;
+  }
+
+  private renderPhaseEndChoice(s: GameState): void {
+    const winner = s.phaseWinner;
+    if (winner === null) return;
+
     const panel = document.createElement("div");
-    panel.className = "panel";
-    panel.innerHTML = `<h2>Jogador ${player + 1} — escolha 2 arenas</h2>`;
+    panel.className = "panel phase-choice-panel";
+    panel.innerHTML = `
+      <h2>Jogador ${winner + 1} venceu o ${phaseDisplayName(s.gamePhase)}</h2>
+      <p class="mulligan-hint">Escolha o que fazer com as tropas ainda nas arenas:</p>
+    `;
+
+    const choices: {
+      id: "essence" | "corruption" | "recycle";
+      label: string;
+      desc: string;
+    }[] = [
+      {
+        id: "essence",
+        label: "Essência",
+        desc: "Destrói todas; cada uma vira 1 carta no Espaço de Essência.",
+      },
+      {
+        id: "corruption",
+        label: "Corrupção",
+        desc: "Destrói todas; você ganha até +3 Corrupção.",
+      },
+      {
+        id: "recycle",
+        label: "Reciclar",
+        desc: "Todas voltam ao baralho e embaralham.",
+      },
+    ];
+
     const grid = document.createElement("div");
     grid.className = "setup-grid";
+    for (const c of choices) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "setup-card";
+      btn.innerHTML = `<span class="setup-card__name">${c.label}</span><span class="setup-card__fx">${c.desc}</span>`;
+      btn.onclick = () => {
+        this.dispatchAction({ type: "POST_PHASE_CHOICE", player: winner, choice: c.id });
+      };
+      grid.appendChild(btn);
+    }
+    panel.appendChild(grid);
+    this.root.appendChild(panel);
+  }
 
-    const other = player === 0 ? 1 : 0;
-    const otherPicks = s.selectedArenaIds[other];
+  private renderArenaSetup(s: GameState): void {
+    const ctx = this.arenaSetupContext(s);
+    if (!ctx) return;
+
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    panel.innerHTML = `<h2>${ctx.title}</h2>`;
+    const grid = document.createElement("div");
+    grid.className = "setup-grid";
 
     for (const arena of s.arenaPool) {
       if (arena.neutral || arena.phase !== s.gamePhase) continue;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "setup-card";
-      const picked = s.selectedArenaIds[player].includes(arena.id);
-      const taken = otherPicks.includes(arena.id);
+      const picked = ctx.pickedIds.includes(arena.id);
+      const taken = ctx.takenIds.includes(arena.id);
       if (picked) btn.classList.add("picked");
       if (taken) btn.classList.add("taken");
       const effectHint = describeArenaEffect(arena.effect);
       btn.innerHTML = `<span class="setup-card__name">${arena.name}</span><span class="setup-card__fx">${effectHint}</span>`;
       btn.disabled = taken;
       btn.onclick = () => {
-        this.dispatchAction({ type: "SELECT_ARENA", player, arenaId: arena.id });
+        this.dispatchAction({ type: "SELECT_ARENA", player: ctx.player, arenaId: arena.id });
       };
       grid.appendChild(btn);
     }
@@ -161,7 +282,7 @@ export class GameApp {
     panel.appendChild(grid);
     const hint = document.createElement("p");
     hint.className = "mulligan-hint";
-    hint.textContent = `Selecionadas: ${s.selectedArenaIds[player].length}/2 · Neutra: Ruas de São Paulo (automática)`;
+    hint.textContent = ctx.hint.replace("{n}", String(ctx.pickedIds.length));
     panel.appendChild(hint);
     this.root.appendChild(panel);
   }
@@ -261,7 +382,7 @@ export class GameApp {
         assignP === s.combat.declaredBy ? "atacante" : "defensor";
       phase = `Combate em ${arenaName} · golpe ${s.combat.strike} · J${assignP + 1} (${role}) — um ataque por vez`;
     } else {
-      phase = `Turno ${s.turnNumber} · Jogador ${s.activePlayer + 1} · ${phaseLabel[s.turnPhase] ?? s.turnPhase}`;
+      phase = `${phaseDisplayName(s.gamePhase)} · Turno ${s.turnNumber} · Jogador ${s.activePlayer + 1} · ${phaseLabel[s.turnPhase] ?? s.turnPhase}`;
     }
     el.textContent = phase;
     return el;

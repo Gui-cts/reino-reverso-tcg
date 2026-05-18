@@ -1,6 +1,7 @@
 import type { CombatState, GameState, PlayerId, TroopInstance } from "./types";
 import { appendLog, getArena, getTroopName, getTroopsInZone, opponent } from "./helpers";
 import { applyArenaOnCombatDeclared, sanatorioPingAfterStrike } from "./arena-effects";
+import { resolveReinoReversoCombatWin } from "./reino-reverso";
 
 function livingTroops(troops: TroopInstance[]): TroopInstance[] {
   return troops.filter((t) => t.currentHealth > 0);
@@ -73,6 +74,19 @@ function endCombat(state: GameState, message: string): GameState {
   };
 }
 
+function finishCombatWithWinner(
+  state: GameState,
+  arenaId: string,
+  winner: PlayerId,
+  message: string,
+): GameState {
+  if (state.gamePhase === "reino-reverso") {
+    const cleared = endCombat(state, message);
+    return resolveReinoReversoCombatWin(cleared, winner, arenaId, message);
+  }
+  return endCombat(state, message);
+}
+
 function checkCombatEndAfterDamage(
   state: GameState,
   arenaId: string,
@@ -82,12 +96,17 @@ function checkCombatEndAfterDamage(
   const p1 = livingTroops(getTroopsInZone(state, 1, "arena", arenaId));
 
   if (p0.length === 0 && p1.length === 0) {
+    if (state.gamePhase === "reino-reverso") {
+      return endCombat(state, `${messagePrefix} — ambos os lados caíram.`);
+    }
     return endCombat(state, `${messagePrefix} — ambos os lados caíram.`);
   }
   if (p0.length === 0 || p1.length === 0) {
     const winner = p0.length > 0 ? 0 : 1;
-    return endCombat(
+    return finishCombatWithWinner(
       state,
+      arenaId,
+      winner,
       `${messagePrefix} — Jogador ${winner + 1} venceu na arena.`,
     );
   }
@@ -112,8 +131,10 @@ function advanceToNextStrike(state: GameState): GameState {
   const nextAllies = alliesInCombatArena(stateAfterPing, nextStriker);
 
   if (nextAllies.length === 0) {
-    return endCombat(
+    return finishCombatWithWinner(
       stateAfterPing,
+      arenaId,
+      strikingPlayer,
       `Combate encerrado — Jogador ${strikingPlayer + 1} venceu na arena.`,
     );
   }
