@@ -1,0 +1,144 @@
+{
+  "cards": [
+    {
+      "id": "cinza-rastejante",
+      "name": "Cinza Rastejante",
+      "cost": 1,
+      "attack": 1,
+      "health": 1,
+      "hasEssenceSymbol": true
+    },
+    {
+      "id": "fragmento-poco",
+      "name": "Fragmento do Poço",
+      "cost": 1,
+      "attack": 1,
+      "health": 2,
+      "hasEssenceSymbol": true
+    },
+    {
+      "id": "vigia-reverso",
+      "name": "Vigia do Reino Reverso",
+      "cost": 2,
+      "attack": 1,
+      "health": 3,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "eco-banshee",
+      "name": "Eco da Banshee",
+      "cost": 2,
+      "attack": 2,
+      "health": 2,
+      "hasEssenceSymbol": true
+    },
+    {
+      "id": "lamina-pacto",
+      "name": "Lâmina do Pacto",
+      "cost": 3,
+      "attack": 3,
+      "health": 2,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "guardiao-estandarte",
+      "name": "Guardião do Estandarte",
+      "cost": 3,
+      "attack": 2,
+      "health": 4,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "flagelo-cobre",
+      "name": "Flagelo de Cobre",
+      "cost": 4,
+      "attack": 4,
+      "health": 3,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "sombra-erudito",
+      "name": "Sombra do Erudito",
+      "cost": 4,
+      "attack": 3,
+      "health": 4,
+      "hasEssenceSymbol": true
+    },
+    {
+      "id": "colosso-abismo",
+      "name": "Colosso do Abismo",
+      "cost": 5,
+      "attack": 5,
+      "health": 5,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "carnical-incandescente",
+      "name": "Carniçal Incandescente",
+      "cost": 2,
+      "attack": 2,
+      "health": 1,
+      "hasEssenceSymbol": true
+    },
+    {
+      "id": "token-gargula",
+      "name": "Gárgula",
+      "cost": 0,
+      "attack": 1,
+      "health": 1,
+      "hasEssenceSymbol": false,
+      "isToken": true
+    },
+    {
+      "id": "susej-arauto",
+      "name": "Susej — o arauto da ignorância",
+      "cost": 3,
+      "attack": 2,
+      "health": 3,
+      "hasEssenceSymbol": false,
+      "isToken": false
+    }
+  ],
+  "starterDeck": [
+    "cinza-rastejante",
+    "cinza-rastejante",
+    "cinza-rastejante",
+    "cinza-rastejante",
+    "fragmento-poco",
+    "fragmento-poco",
+    "fragmento-poco",
+    "fragmento-poco",
+    "vigia-reverso",
+    "vigia-reverso",
+    "vigia-reverso",
+    "vigia-reverso",
+    "eco-banshee",
+    "eco-banshee",
+    "eco-banshee",
+    "eco-banshee",
+    "lamina-pacto",
+    "lamina-pacto",
+    "lamina-pacto",
+    "lamina-pacto",
+    "guardiao-estandarte",
+    "guardiao-estandarte",
+    "guardiao-estandarte",
+    "guardiao-estandarte",
+    "flagelo-cobre",
+    "flagelo-cobre",
+    "flagelo-cobre",
+    "flagelo-cobre",
+    "sombra-erudito",
+    "sombra-erudito",
+    "sombra-erudito",
+    "sombra-erudito",
+    "colosso-abismo",
+    "colosso-abismo",
+    "colosso-abismo",
+    "colosso-abismo",
+    "carnical-incandescente",
+    "carnical-incandescente",
+    "carnical-incandescente",
+    "carnical-incandescente"
+  ]
+}

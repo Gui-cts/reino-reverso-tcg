@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280" width="200" height="280">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4a2c14"/>
+      <stop offset="100%" stop-color="#0f0e14"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="280" fill="url(#g)"/>
+  <ellipse cx="100" cy="118" rx="62" ry="72" fill="#fdba74" opacity="0.35"/>
+  <ellipse cx="100" cy="112" rx="42" ry="50" fill="#fdba74" opacity="0.55"/>
+  <text x="100" y="132" text-anchor="middle" font-size="48" fill="#fdba74" opacity="0.9" font-family="Segoe UI, sans-serif">⚡</text>
+  <rect x="12" y="12" width="176" height="256" rx="8" fill="none" stroke="#fdba74" stroke-width="2" opacity="0.4"/>
+</svg>
