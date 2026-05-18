@@ -39,9 +39,9 @@ export function nextWorldPhase(phase: WorldPhase): WorldPhase | null {
   }
 }
 
-function troopsInAnyArena(state: GameState): TroopInstance[] {
+function troopsInArenaForPlayer(state: GameState, player: PlayerId): TroopInstance[] {
   return Object.values(state.troops).filter(
-    (t) => t.zone === "arena" && t.currentHealth > 0,
+    (t) => t.zone === "arena" && t.currentHealth > 0 && t.owner === player,
   );
 }
 
@@ -92,13 +92,13 @@ function addEssenceFromTroop(
   };
 }
 
-/** Aplica escolha pós-fase (GDD §6.3) sobre tropas nas arenas. */
-export function applyPostPhaseChoice(
+/** Aplica escolha pós-fase só nas tropas **desse jogador** nas arenas. */
+export function applyPostPhaseChoiceForPlayer(
   state: GameState,
-  winner: PlayerId,
+  player: PlayerId,
   choice: PhaseEndChoice,
 ): GameState {
-  const arenaTroops = troopsInAnyArena(state);
+  const arenaTroops = troopsInArenaForPlayer(state, player);
   let next = state;
   let nextId = state.nextInstanceId;
 
@@ -106,11 +106,10 @@ export function applyPostPhaseChoice(
     const players = [...next.players] as GameState["players"];
     const troops = { ...next.troops };
     for (const troop of arenaTroops) {
-      const p = troop.owner;
-      players[p] = {
-        ...players[p],
-        deck: shuffle([...players[p].deck, troop.cardId]),
-        hand: players[p].hand.filter((id) => id !== troop.instanceId),
+      players[player] = {
+        ...players[player],
+        deck: shuffle([...players[player].deck, troop.cardId]),
+        hand: players[player].hand.filter((id) => id !== troop.instanceId),
       };
       delete troops[troop.instanceId];
     }
@@ -120,7 +119,7 @@ export function applyPostPhaseChoice(
       troops,
       log: appendLog(
         next,
-        `Jogador ${winner + 1} reciclou ${arenaTroops.length} tropa(s) das arenas para o baralho.`,
+        `Jogador ${player + 1} reciclou ${arenaTroops.length} tropa(s) suas nas arenas.`,
       ),
     };
   } else if (choice === "corruption") {
@@ -132,9 +131,9 @@ export function applyPostPhaseChoice(
     const gain = Math.min(3, arenaTroops.length);
     const players = [...next.players] as GameState["players"];
     if (gain > 0) {
-      const cur = players[winner].corruption;
-      players[winner] = {
-        ...players[winner],
+      const cur = players[player].corruption;
+      players[player] = {
+        ...players[player],
         corruption: Math.min(MAX_CORRUPTION, cur + gain),
       };
     }
@@ -144,7 +143,7 @@ export function applyPostPhaseChoice(
       nextInstanceId: nextId,
       log: appendLog(
         next,
-        `Jogador ${winner + 1} gerou +${gain} Corrupção (tropas das arenas destruídas).`,
+        `Jogador ${player + 1} escolheu Corrupção (+${gain}).`,
       ),
     };
   } else {
@@ -161,21 +160,39 @@ export function applyPostPhaseChoice(
       nextInstanceId: nextId,
       log: appendLog(
         next,
-        `Jogador ${winner + 1} converteu ${arenaTroops.length} tropa(s) das arenas em Essência.`,
+        `Jogador ${player + 1} converteu ${arenaTroops.length} tropa(s) suas em Essência.`,
       ),
     };
   }
 
-  return clearArenaField(next);
+  return next;
+}
+
+/** Após as duas escolhas: limpa campo e abre setup da próxima fase. */
+export function finalizePhaseTransition(state: GameState): GameState {
+  return startNextPhaseSetup(clearArenaField(state));
 }
 
 function clearArenaField(state: GameState): GameState {
   const conquestWatch: Record<string, null> = {};
+  const troops = { ...state.troops };
+  const players = [...state.players] as GameState["players"];
+  for (const t of Object.values(troops)) {
+    if (t.zone !== "arena") continue;
+    const p = t.owner;
+    players[p] = {
+      ...players[p],
+      hand: players[p].hand.filter((id) => id !== t.instanceId),
+      discard: [...players[p].discard, t.cardId],
+    };
+    delete troops[t.instanceId];
+  }
   return {
     ...state,
     arenas: [],
     conquestWatch,
-    players: state.players.map((pl) => ({
+    troops,
+    players: players.map((pl) => ({
       ...pl,
       dominatedArenas: 0,
     })) as GameState["players"],
@@ -201,13 +218,13 @@ export function beginPhaseEndChoice(
 
   return {
     ...state,
-    matchPhase: "phase_end_choice",
+    matchPhase: "phase_end_choice_p0",
     phaseWinner: winner,
     combat: null,
     turnPhase: "main",
     log: appendLog(
       state,
-      `Jogador ${winner + 1} venceu o ${phaseDisplayName(completedPhase)}! Escolha pós-fase (Essência, Corrupção ou Reciclar).`,
+      `Jogador ${winner + 1} venceu o ${phaseDisplayName(completedPhase)}! Cada jogador escolhe o destino das **próprias** tropas nas arenas.`,
     ),
   };
 }

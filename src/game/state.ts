@@ -21,6 +21,7 @@ function emptyPlayer(): PlayerState {
     deck: [],
     hand: [],
     discard: [],
+    exile: [],
     essenceIds: [],
     dominatedArenas: 0,
     sacrificedThisTurn: false,
@@ -100,6 +101,7 @@ export function createInitialGame(catalogData: CardCatalog): GameState {
     mulliganUsed: [false, false],
     phaseWinner: null,
     arenaSetupPicks: [],
+    cpuPlayer: 1,
   };
 
   let nextId = state.nextInstanceId;

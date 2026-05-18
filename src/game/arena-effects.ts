@@ -94,11 +94,42 @@ export function applyArenaOnCombatDeclared(state: GameState, arenaId: string): G
       return {
         ...state,
         combat: state.combat ? { ...state.combat, noMagic: true } : state.combat,
-        log: appendLog(state, "Bar do João — magias bloqueadas neste combate (quando existirem)."),
+        log: appendLog(
+          state,
+          `${arena.name} — magias bloqueadas neste combate (quando existirem).`,
+        ),
+      };
+    case "spells-cost-less":
+      return {
+        ...state,
+        combat: state.combat
+          ? { ...state.combat, spellsCostLess: true }
+          : state.combat,
+        log: appendLog(
+          state,
+          `${arena.name} — magias nesta arena custam 1 a menos (quando existirem).`,
+        ),
       };
     default:
       return state;
   }
+}
+
+export function arenaBlocksNormalExit(state: GameState, arenaId: string): boolean {
+  return getArena(state, arenaId).effect === "no-leave-by-move";
+}
+
+export function arenaUsesRandomCombatTargets(state: GameState, arenaId: string): boolean {
+  return getArena(state, arenaId).effect === "random-combat-target";
+}
+
+export function arenaExilesDeadTroops(state: GameState, arenaId: string): boolean {
+  return getArena(state, arenaId).effect === "exile-on-death";
+}
+
+/** Redução de custo de magia na arena em combate (0 ou 1). */
+export function spellCostReductionInCombat(state: GameState): number {
+  return state.combat?.spellsCostLess ? 1 : 0;
 }
 
 export function applyArenaOnDominate(

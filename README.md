@@ -32,6 +32,7 @@ node scripts/generate-card-placeholders.mjs
 
 ## O que o protótipo inclui
 
+- **vs CPU** (Jogador 1): IA básica; mão da CPU oculta (verso com símbolo de olho)
 - **Mundo Normal**: escolha de 2 arenas por jogador + neutra (Ruas de São Paulo)
 - **8 arenas** com efeitos (Bar do João, Estação da Luz, Colégio Aurélio, etc.)
 - Turno completo: preparação, compra, conquista, jogo, combate

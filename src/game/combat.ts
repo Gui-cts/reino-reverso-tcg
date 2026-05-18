@@ -1,7 +1,11 @@
 import type { CombatState, GameState, PlayerId, TroopInstance } from "./types";
 import { appendLog, getArena, getTroopName, getTroopsInZone, opponent } from "./helpers";
-import { applyArenaOnCombatDeclared, sanatorioPingAfterStrike } from "./arena-effects";
-import { resolveReinoReversoCombatWin } from "./reino-reverso";
+import {
+  applyArenaOnCombatDeclared,
+  arenaUsesRandomCombatTargets,
+  sanatorioPingAfterStrike,
+} from "./arena-effects";
+import { finalizeReinoReversoCombat } from "./reino-reverso";
 
 function livingTroops(troops: TroopInstance[]): TroopInstance[] {
   return troops.filter((t) => t.currentHealth > 0);
@@ -81,8 +85,7 @@ function finishCombatWithWinner(
   message: string,
 ): GameState {
   if (state.gamePhase === "reino-reverso") {
-    const cleared = endCombat(state, message);
-    return resolveReinoReversoCombatWin(cleared, winner, arenaId, message);
+    return finalizeReinoReversoCombat(state, arenaId, winner, message);
   }
   return endCombat(state, message);
 }
@@ -96,10 +99,11 @@ function checkCombatEndAfterDamage(
   const p1 = livingTroops(getTroopsInZone(state, 1, "arena", arenaId));
 
   if (p0.length === 0 && p1.length === 0) {
+    const msg = `${messagePrefix} — ambos os lados caíram.`;
     if (state.gamePhase === "reino-reverso") {
-      return endCombat(state, `${messagePrefix} — ambos os lados caíram.`);
+      return finalizeReinoReversoCombat(state, arenaId, null, msg);
     }
-    return endCombat(state, `${messagePrefix} — ambos os lados caíram.`);
+    return endCombat(state, msg);
   }
   if (p0.length === 0 || p1.length === 0) {
     const winner = p0.length > 0 ? 0 : 1;
@@ -165,7 +169,7 @@ export function executeCombatAttack(
 
   const { arenaId, strikingPlayer, attackedThisStrike } = state.combat;
   const attacker = state.troops[attackerId];
-  const target = state.troops[targetId];
+  let target = state.troops[targetId];
 
   if (!attacker || attacker.owner !== strikingPlayer) {
     return { ...state, log: appendLog(state, "Selecione uma de suas tropas para atacar.") };
@@ -179,19 +183,40 @@ export function executeCombatAttack(
   if (attacker.zone !== "arena" || attacker.arenaId !== arenaId || attacker.currentHealth <= 0) {
     return state;
   }
-  if (!target || target.owner === strikingPlayer) {
-    return { ...state, log: appendLog(state, "Escolha uma tropa inimiga como alvo.") };
-  }
-  if (target.zone !== "arena" || target.arenaId !== arenaId || target.currentHealth <= 0) {
-    return { ...state, log: appendLog(state, "Alvo inválido ou já destruído.") };
+  let resolvedTargetId = targetId;
+  if (arenaUsesRandomCombatTargets(state, arenaId)) {
+    const enemies = livingTroops(
+      getTroopsInZone(state, opponent(strikingPlayer), "arena", arenaId),
+    );
+    if (enemies.length === 0) {
+      return {
+        ...state,
+        log: appendLog(state, "Cidade das Curvas — não há alvos inimigos vivos."),
+      };
+    }
+    const pick = enemies[Math.floor(Math.random() * enemies.length)]!;
+    resolvedTargetId = pick.instanceId;
+    target = pick;
+  } else {
+    if (!target || target.owner === strikingPlayer) {
+      return { ...state, log: appendLog(state, "Escolha uma tropa inimiga como alvo.") };
+    }
+    if (target.zone !== "arena" || target.arenaId !== arenaId || target.currentHealth <= 0) {
+      return { ...state, log: appendLog(state, "Alvo inválido ou já destruído.") };
+    }
   }
 
   const retaliate = target.attack;
   let troops = { ...state.troops };
-  troops = applyDamage(troops, targetId, attacker.attack);
+  troops = applyDamage(troops, resolvedTargetId, attacker.attack);
   troops = applyDamage(troops, attackerId, retaliate);
 
   const arena = getArena(state, arenaId);
+  const targetName = getTroopName(state, target);
+  const attackLog = arenaUsesRandomCombatTargets(state, arenaId)
+    ? `${getTroopName(state, attacker)} atacou ${targetName} em ${arena.name} (alvo aleatório — Cidade das Curvas).`
+    : `${getTroopName(state, attacker)} atacou ${targetName} em ${arena.name} (troca de dano).`;
+
   let next: GameState = {
     ...state,
     troops,
@@ -199,10 +224,7 @@ export function executeCombatAttack(
       ...state.combat,
       attackedThisStrike: [...attackedThisStrike, attackerId],
     },
-    log: appendLog(
-      state,
-      `${getTroopName(state, attacker)} atacou ${getTroopName(state, target)} em ${arena.name} (troca de dano).`,
-    ),
+    log: appendLog(state, attackLog),
   };
 
   next = checkCombatEndAfterDamage(

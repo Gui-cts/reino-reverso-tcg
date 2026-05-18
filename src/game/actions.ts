@@ -16,10 +16,11 @@ import {
   opponent,
   sanitizePlayerHands,
 } from "./helpers";
+import { arenaBlocksNormalExit } from "./arena-effects";
 import {
-  applyPostPhaseChoice,
+  applyPostPhaseChoiceForPlayer,
+  finalizePhaseTransition,
   finishArenaSetupAndResume,
-  startNextPhaseSetup,
 } from "./phase-transition";
 import { drawFromDeck, finalizeArenas } from "./state";
 import { runTurnBegin } from "./turn";
@@ -274,6 +275,16 @@ function moveTroop(
 
   if (to === "base") {
     if (troop.zone !== "arena") return state;
+    if (troop.arenaId && arenaBlocksNormalExit(state, troop.arenaId)) {
+      const arena = state.arenas.find((a) => a.id === troop.arenaId);
+      return {
+        ...state,
+        log: appendLog(
+          state,
+          `${arena?.name ?? "Arena"} — tropas não podem sair pelo movimento normal.`,
+        ),
+      };
+    }
     if (countTroopsInZone(state, player, "base") >= MAX_TROOPS_PER_ZONE) {
       return { ...state, log: appendLog(state, "Base cheia.") };
     }
@@ -313,9 +324,11 @@ function moveTroop(
 }
 
 function findArenaDef(state: GameState, arenaId: string): GameState["arenaPool"][0] | undefined {
-  return state.arenaPool.find(
-    (a) => a.id === arenaId && !a.neutral && a.phase === state.gamePhase,
-  );
+  return state.arenaPool.find((a) => {
+    if (a.id !== arenaId || a.phase !== state.gamePhase) return false;
+    if (a.neutral && state.gamePhase !== "reino-reverso") return false;
+    return true;
+  });
 }
 
 function selectMundoNormalArena(
@@ -442,16 +455,31 @@ function handlePostPhaseChoice(
   player: PlayerId,
   choice: "essence" | "corruption" | "recycle",
 ): GameState {
-  if (state.matchPhase !== "phase_end_choice") return state;
-  if (state.phaseWinner !== player) {
+  const expected: GameState["matchPhase"] =
+    player === 0 ? "phase_end_choice_p0" : "phase_end_choice_p1";
+  if (state.matchPhase !== expected) {
     return {
       ...state,
-      log: appendLog(state, "Só o vencedor da fase pode escolher."),
+      log: appendLog(
+        state,
+        player === 0
+          ? "Aguardando a escolha pós-fase do Jogador 1."
+          : "Aguardando a escolha pós-fase do Jogador 2.",
+      ),
     };
   }
 
-  let next = applyPostPhaseChoice(state, player, choice);
-  return startNextPhaseSetup(next);
+  let next = applyPostPhaseChoiceForPlayer(state, player, choice);
+
+  if (player === 0) {
+    return {
+      ...next,
+      matchPhase: "phase_end_choice_p1",
+      log: appendLog(next, "Jogador 2 — escolha pós-fase (suas tropas nas arenas)."),
+    };
+  }
+
+  return finalizePhaseTransition(next);
 }
 
 function applyAction(state: GameState, action: GameAction): GameState {

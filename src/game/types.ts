@@ -1,6 +1,7 @@
 export type PlayerId = 0 | 1;
 
-export const LEADER_MAX_HP = 3;
+/** Vida inicial do Líder (protótipo — permite testar MN → Abismo → RR). */
+export const LEADER_MAX_HP = 15;
 export const MAX_TROOPS_PER_ZONE = 3;
 export const INITIAL_HAND_SIZE = 5;
 export const CARDS_DRAW_PER_TURN = 1;
@@ -20,7 +21,14 @@ export type ArenaEffectId =
   | "random-buff-on-combat"
   | "draw-two-on-dominate"
   | "ping-after-strike"
-  | "conquest-3-corruption";
+  | "conquest-3-corruption"
+  | "no-leave-by-move"
+  | "random-combat-target"
+  | "exile-on-death"
+  | "spells-cost-less"
+  | "rr-vacuum-2"
+  | "rr-mutual-wipe-leader-damage"
+  | "rr-loser-only-vacuum";
 
 export interface CardDefinition {
   id: string;
@@ -91,7 +99,8 @@ export type MatchPhase =
   | "setup_arenas_p1"
   | "mulligan_p0"
   | "mulligan_p1"
-  | "phase_end_choice"
+  | "phase_end_choice_p0"
+  | "phase_end_choice_p1"
   | "setup_abismo_winner"
   | "setup_abismo_loser"
   | "setup_rr_winner"
@@ -105,6 +114,8 @@ export interface PlayerState {
   deck: string[];
   hand: string[];
   discard: string[];
+  /** Cartas exiladas (fora do jogo). */
+  exile: string[];
   /** IDs no mapa `essencePool` do GameState. */
   essenceIds: string[];
   dominatedArenas: number;
@@ -124,6 +135,8 @@ export interface CombatState {
   attackedThisStrike: string[];
   /** Bar do João — magias bloqueadas neste combate. */
   noMagic?: boolean;
+  /** Castelo de Pedra Rubra — magias nesta arena custam 1 a menos. */
+  spellsCostLess?: boolean;
 }
 
 export interface GameState {
@@ -151,6 +164,8 @@ export interface GameState {
   phaseWinner: PlayerId | null;
   /** IDs acumulados no setup do Abismo / RR. */
   arenaSetupPicks: string[];
+  /** Jogador controlado pela CPU (null = hotseat). */
+  cpuPlayer: PlayerId | null;
 }
 
 export type GameAction =

@@ -1,6 +1,5 @@
 import { processStartPhase } from "./conquest";
 import { appendLog, sanitizePlayerHands, untapEssence } from "./helpers";
-import { applyVacuoIfNeeded } from "./reino-reverso";
 import { drawFromDeck } from "./state";
 import type { GameState, PlayerId } from "./types";
 import { CARDS_DRAW_PER_TURN } from "./types";
@@ -60,8 +59,6 @@ export function runTurnBegin(state: GameState, player: PlayerId): GameState {
 
   next = { ...next, turnPhase: "start" };
   next = processStartPhase(next);
-  if (next.matchPhase === "finished") return next;
-  next = applyVacuoIfNeeded(next, player);
   if (next.matchPhase === "finished") return next;
   next = sanitizePlayerHands(next);
 

@@ -51,7 +51,7 @@ flowchart LR
 
 | Constante | Valor (protótipo v1) | Valor (jogo completo — sugestão) |
 |-----------|----------------------|----------------------------------|
-| Vida inicial | **3 HP** (partida curta só com MN) | 15–20 HP total ou por fase |
+| Vida inicial | **15 HP** (protótipo — loop MN → Abismo → RR) | Ajustável por modo de jogo |
 
 ### 3.2 Baralho
 
@@ -132,13 +132,15 @@ flowchart LR
 
 ### 6.3 Escolha pós-fase
 
-Ao **vencer uma fase** (Mundo Normal ou Abismo), o vencedor escolhe o que fazer com as tropas nas arenas:
+Ao **terminar uma fase** (Mundo Normal ou Abismo), **cada jogador** escolhe o destino das **próprias** tropas ainda nas arenas (podem ser escolhas diferentes):
 
-| Escolha | Efeito |
+| Escolha | Efeito (só nas suas tropas em arena) |
 |---------|--------|
-| **1 — Essência** | Destrói todas as tropas nas arenas; cada uma vira Essência (1 carta = 1 Essência) |
-| **2 — Corrupção** | Destrói todas; gera Corrupção (**+1 por tropa**, máx. **+3** nesta escolha) |
-| **3 — Reciclar** | Todas as cartas nas arenas voltam ao baralho e embaralham |
+| **1 — Essência** | Cada uma vira 1 carta no seu Espaço de Essência |
+| **2 — Corrupção** | Destrói-as; **+1 Corrupção** por tropa (máx. **+3** nesta escolha) |
+| **3 — Reciclar** | Voltam ao seu baralho e embaralham |
+
+Ordem no protótipo: Jogador 1 escolhe, depois Jogador 2.
 
 ---
 
@@ -212,10 +214,11 @@ Com **2 pontos** na mesma arena → **conquista**.
 |-------|---------|
 | Arenas | **1** arena escolhida pelo vencedor do Abismo |
 | Dominação | **Não** há dominação permanente |
-| Dano no Líder | Quem **vence o combate** na arena causa dano ao Líder inimigo |
-| Tropas sobreviventes | Voltam automaticamente para a **base** do dono |
-| Fluxo | Combates repetem até um Líder morrer |
-| **Vácuo** | Se, no seu turno no RR, você não tiver **nenhuma** tropa na base → **1 dano passivo** no seu Líder |
+| Dano no Líder | Quem **vence o combate** causa **1** de dano ao Líder inimigo |
+| Tropas sobreviventes | **Destruídas** ao fim do combate (não voltam à base), independente do vencedor |
+| Fluxo | Deathmatch — combates repetem até um Líder a **0** |
+| **Vácuo** | Ao **fim de cada combate**, se não houver tropa na sua **base** → **1** de dano no seu Líder |
+| Dano máximo / round | Até **2** no Líder (1 vitória + 1 vácuo) |
 | Iniciativa | Começa quem **venceu o Abismo** |
 
 ---
@@ -244,25 +247,25 @@ Com **2 pontos** na mesma arena → **conquista**.
 
 ### 10.3 Arenas do Abismo (protótipo)
 
+Pool de **4** arenas; setup: vencedor escolhe **2**, perdedor escolhe **1** (3 ativas). Vitória da fase: **2** domínios.
+
 | Arena | Efeito |
 |-------|--------|
-| **Fosso dos Ecos** | Sem efeito |
-| **Cripta Subterrânea** | Após cada golpe: 1 de dano em todas as tropas na arena |
-| **Labirinto de Sal** | Magias bloqueadas no combate |
-| **Altar Profanado** | Conquista com 3 pontos; +1 Corrupção ao dominar |
-| **Ponte Quebrada** | Ao declarar combate: tropa aleatória +1/+1 |
-| **Covil de Vermes** | Ao dominar: compra 2 cartas |
-
-Setup: vencedor da fase escolhe **2**, perdedor escolhe **1** (3 arenas ativas). Vitória da fase: **2** domínios.
+| **Armazém do Colecionador** | Tropas não saem desta arena pelo movimento normal |
+| **Cidade das Curvas** | Alvo do ataque em combate é **aleatório** |
+| **Prisão do Conglomerado** | Tropas que morrem aqui são **exiladas** |
+| **Castelo de Pedra Rubra** | Magias que afetam a arena custam **1 a menos** |
 
 ### 10.4 Reino Reverso (protótipo)
 
-| Arena | Uso |
-|-------|-----|
-| **Portal do Reino Reverso** | Combate final (sem dominação) |
-| **Nexo Invertido** | Idem + magias bloqueadas no combate |
+Pool de **4** arenas; vencedor do Abismo escolhe **1** e **começa** a fase.
 
-Vencedor do Abismo escolhe **1** arena e **começa** a fase.
+| Arena | Efeito |
+|-------|--------|
+| **Arena do Reino Reverso** (neutra) | Deathmatch padrão (regras §9) |
+| **Vácuo Eterno** | Vácuo ao fim do combate: base vazia = **2** de dano |
+| **Salão dos Lordes** | Ambos zeram a arena → **cada** Líder leva 1 |
+| **Trono Negro** | Só o **perdedor** do combate sofre Vácuo |
 
 ---
 
@@ -324,7 +327,7 @@ Título da aba: **Reino Reverso TCG — Protótipo v1.1**
 
 Arquivo `src/game/types.ts`:
 
-- `LEADER_MAX_HP = 3`
+- `LEADER_MAX_HP = 15`
 - `MAX_TROOPS_PER_ZONE = 3`
 - `INITIAL_HAND_SIZE = 5`
 - `CARDS_DRAW_PER_TURN = 1`

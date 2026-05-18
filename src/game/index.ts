@@ -13,6 +13,11 @@ export {
   getContestedArenaNames,
   hasAttackedThisStrike,
 } from "./combat";
+export {
+  arenaBlocksNormalExit,
+  arenaUsesRandomCombatTargets,
+  spellCostReductionInCombat,
+} from "./arena-effects";
 export { runTurnBegin } from "./turn";
 export { buryDeadTroops } from "./troop-cleanup";
 export { phaseDisplayName, dominationsToWinPhase } from "./phase-transition";

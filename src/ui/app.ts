@@ -1,5 +1,6 @@
 import { createInitialGame, dispatch, loadCardCatalog } from "../game";
 import type { GameAction, GameState, PlayerId, TroopInstance } from "../game/types";
+import { LEADER_MAX_HP } from "../game/types";
 import {
   getAvailableEssence,
   getCombatAssigningPlayer,
@@ -8,8 +9,14 @@ import {
   hasAttackedThisStrike,
 } from "../game";
 import { describeArenaEffect } from "../game/arenas";
-import { dominationsToWinPhase, phaseDisplayName } from "../game";
-import { cardFromDef, createCardEl, createEssenceTokenEl } from "./card-view";
+import {
+  arenaUsesRandomCombatTargets,
+  dominationsToWinPhase,
+  phaseDisplayName,
+} from "../game";
+import { opponent } from "../game/helpers";
+import { pickCpuAction, cpuControlsPhase } from "./cpu";
+import { cardFromDef, createCardEl, createEssenceTokenEl, createHiddenCardEl } from "./card-view";
 import {
   bindDropZone,
   setCardDraggable,
@@ -31,9 +38,14 @@ export class GameApp {
     mulliganIndices: new Set(),
   };
   private root: HTMLElement;
+  private cpuRunning = false;
 
   constructor(root: HTMLElement) {
     this.root = root;
+  }
+
+  private humanPlayer(s: GameState): PlayerId {
+    return s.cpuPlayer === 0 ? 1 : 0;
   }
 
   async init(): Promise<void> {
@@ -52,6 +64,34 @@ export class GameApp {
     this.selection.troopId = null;
     this.selection.arenaId = null;
     this.render();
+    void this.runCpuLoop();
+  }
+
+  private async runCpuLoop(): Promise<void> {
+    if (this.cpuRunning) return;
+    const s = this.getState();
+    if (s.cpuPlayer === null) return;
+
+    this.cpuRunning = true;
+    try {
+      let safety = 0;
+      while (safety++ < 48) {
+        const cur = this.getState();
+        if (cur.matchPhase === "finished" || cur.cpuPlayer === null) break;
+        if (!cpuControlsPhase(cur, cur.cpuPlayer)) break;
+
+        const action = pickCpuAction(cur, cur.cpuPlayer);
+        if (!action) break;
+
+        await new Promise((r) => setTimeout(r, 420));
+        this.state = dispatch(cur, action);
+        this.selection.troopId = null;
+        this.selection.arenaId = null;
+        this.render();
+      }
+    } finally {
+      this.cpuRunning = false;
+    }
   }
 
   /** Sempre usa o estado atual — evita sobrescrever ações com estado antigo. */
@@ -117,12 +157,16 @@ export class GameApp {
         : "Combate final — derrote o Líder inimigo";
     header.innerHTML = `
       <h1>Reino Reverso TCG</h1>
-      <p class="subtitle">${phaseDisplayName(s.gamePhase)} · 2 jogadores local · Líder ${s.players[0].leaderHp}/${s.players[1].leaderHp} HP · ${phaseMeta}</p>
+      <p class="subtitle">${phaseDisplayName(s.gamePhase)} · ${s.cpuPlayer !== null ? `Você = J${this.humanPlayer(s) + 1} · CPU = J${s.cpuPlayer + 1}` : "2 jogadores local"} · Líderes J1 ${s.players[0].leaderHp}/${LEADER_MAX_HP} · J2 ${s.players[1].leaderHp}/${LEADER_MAX_HP} · ${phaseMeta}</p>
     `;
     this.root.appendChild(header);
 
-    if (s.matchPhase === "phase_end_choice") {
-      this.renderPhaseEndChoice(s);
+    if (s.matchPhase === "phase_end_choice_p0") {
+      this.renderPhaseEndChoice(s, 0);
+      return;
+    }
+    if (s.matchPhase === "phase_end_choice_p1") {
+      this.renderPhaseEndChoice(s, 1);
       return;
     }
 
@@ -194,7 +238,7 @@ export class GameApp {
       return {
         player: winner,
         title: `Jogador ${winner + 1} — escolha a arena do Reino Reverso`,
-        hint: "Clique na arena para iniciar o combate final",
+        hint: "Escolha 1 das 4 arenas (inclui a neutra padrão)",
         pickedIds: s.arenaSetupPicks,
         takenIds: [],
       };
@@ -202,15 +246,26 @@ export class GameApp {
     return null;
   }
 
-  private renderPhaseEndChoice(s: GameState): void {
+  private countArenaTroops(s: GameState, player: PlayerId): number {
+    return Object.values(s.troops).filter(
+      (t) => t.owner === player && t.zone === "arena" && t.currentHealth > 0,
+    ).length;
+  }
+
+  private renderPhaseEndChoice(s: GameState, player: PlayerId): void {
     const winner = s.phaseWinner;
-    if (winner === null) return;
+    const troopCount = this.countArenaTroops(s, player);
 
     const panel = document.createElement("div");
     panel.className = "panel phase-choice-panel";
+    const winnerLine =
+      winner !== null
+        ? `<p class="mulligan-hint">Jogador ${winner + 1} venceu o ${phaseDisplayName(s.gamePhase)}. Cada um escolhe só para <strong>suas</strong> tropas.</p>`
+        : "";
     panel.innerHTML = `
-      <h2>Jogador ${winner + 1} venceu o ${phaseDisplayName(s.gamePhase)}</h2>
-      <p class="mulligan-hint">Escolha o que fazer com as tropas ainda nas arenas:</p>
+      <h2>Jogador ${player + 1} — escolha pós-fase</h2>
+      ${winnerLine}
+      <p class="mulligan-hint">Suas tropas nas arenas: <strong>${troopCount}</strong></p>
     `;
 
     const choices: {
@@ -221,17 +276,17 @@ export class GameApp {
       {
         id: "essence",
         label: "Essência",
-        desc: "Destrói todas; cada uma vira 1 carta no Espaço de Essência.",
+        desc: "Suas tropas nas arenas viram cartas no seu Espaço de Essência.",
       },
       {
         id: "corruption",
         label: "Corrupção",
-        desc: "Destrói todas; você ganha até +3 Corrupção.",
+        desc: "Destrói suas tropas nas arenas; +1 Corrupção cada (máx. +3).",
       },
       {
         id: "recycle",
         label: "Reciclar",
-        desc: "Todas voltam ao baralho e embaralham.",
+        desc: "Suas tropas nas arenas voltam ao seu baralho e embaralham.",
       },
     ];
 
@@ -243,7 +298,7 @@ export class GameApp {
       btn.className = "setup-card";
       btn.innerHTML = `<span class="setup-card__name">${c.label}</span><span class="setup-card__fx">${c.desc}</span>`;
       btn.onclick = () => {
-        this.dispatchAction({ type: "POST_PHASE_CHOICE", player: winner, choice: c.id });
+        this.dispatchAction({ type: "POST_PHASE_CHOICE", player, choice: c.id });
       };
       grid.appendChild(btn);
     }
@@ -261,8 +316,12 @@ export class GameApp {
     const grid = document.createElement("div");
     grid.className = "setup-grid";
 
+    const hideNeutral =
+      s.matchPhase.startsWith("setup_arenas") || s.matchPhase.startsWith("setup_abismo");
+
     for (const arena of s.arenaPool) {
-      if (arena.neutral || arena.phase !== s.gamePhase) continue;
+      if (arena.phase !== s.gamePhase) continue;
+      if (arena.neutral && hideNeutral) continue;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "setup-card";
@@ -416,11 +475,11 @@ export class GameApp {
     const p = s.players[player];
     leader.innerHTML = `
       <strong>Jogador ${player + 1}</strong><br/>
-      Líder: ${p.leaderHp} HP<br/>
+      Líder: ${p.leaderHp}/${LEADER_MAX_HP} HP<br/>
       Domínios: ${p.dominatedArenas}/3<br/>
       Corrupção: ${p.corruption}/3<br/>
       <span class="essence-badge">Essência: ${getAvailableEssence(s, player).length}/${getPlayerEssence(s, player).length} pronta(s)</span><br/>
-      Deck: ${p.deck.length} · Descarte: ${p.discard.length}
+      Deck: ${p.deck.length} · Descarte: ${p.discard.length} · Exílio: ${p.exile.length}
       ${this.discardSummaryHtml(s, player)}
     `;
 
@@ -560,11 +619,15 @@ export class GameApp {
   private renderHand(s: GameState, player: PlayerId): HTMLElement {
     const bar = document.createElement("div");
     bar.className = "hand-bar";
+    const human = this.humanPlayer(s);
+    const hiddenHand = s.cpuPlayer !== null && player !== human;
     const isActive = s.activePlayer === player && s.matchPhase === "playing";
     const pl = s.players[player];
-    const canDragHand = isActive && !s.combat && s.turnPhase === "main";
+    const canDragHand =
+      !hiddenHand && isActive && !s.combat && s.turnPhase === "main" && player === human;
 
-    bar.innerHTML = `<strong>Mão — Jogador ${player + 1}</strong>${isActive ? " ◀ SUA VEZ" : ""}`;
+    const handCount = pl.hand.length;
+    bar.innerHTML = `<strong>Mão — Jogador ${player + 1}${hiddenHand ? ` (${handCount} cartas ocultas)` : ""}</strong>${isActive && player === human ? " ◀ SUA VEZ" : isActive ? " ◀ vez da CPU" : ""}`;
 
     if (isActive && !s.combat) {
       const tip = document.createElement("p");
@@ -585,15 +648,18 @@ export class GameApp {
       const wrap = document.createElement("div");
       wrap.className = "hand-card";
 
-      if (!def) return;
-      const chip = cardFromDef(def, {
-        cost: def.cost,
-        attack: def.attack,
-        health: def.health,
-        hasEssenceSymbol: def.hasEssenceSymbol,
-      });
+      if (!def && !hiddenHand) return;
 
-      if (canDragHand) {
+      const chip = hiddenHand
+        ? createHiddenCardEl(false)
+        : cardFromDef(def!, {
+            cost: def!.cost,
+            attack: def!.attack,
+            health: def!.health,
+            hasEssenceSymbol: def!.hasEssenceSymbol,
+          });
+
+      if (canDragHand && !hiddenHand) {
         setCardDraggable(chip, { kind: "hand", troopId }, true);
         if (def.hasEssenceSymbol && !pl.sacrificedThisTurn) {
           chip.addEventListener("contextmenu", (e) => {
@@ -621,15 +687,19 @@ export class GameApp {
     const btns = document.createElement("div");
     btns.className = "actions";
 
-    const canAct = s.matchPhase === "playing";
+    const human = this.humanPlayer(s);
+    const canAct = s.matchPhase === "playing" && s.activePlayer === human;
 
     if (s.combat) {
       const combatHint = document.createElement("p");
       combatHint.className = "mulligan-hint";
+      const striker = getCombatAssigningPlayer(s.combat);
       combatHint.textContent =
-        "Combate: selecione sua tropa e clique no inimigo. Quando todas atacarem, passa a vez automaticamente.";
+        striker === human
+          ? "Combate: selecione sua tropa e clique no inimigo. Quando todas atacarem, passa a vez automaticamente."
+          : "Combate: vez da CPU…";
       actions.appendChild(combatHint);
-    } else if (canAct && s.turnPhase === "main") {
+    } else if (canAct && s.turnPhase === "main" && !s.combat) {
       const essencePanel = document.createElement("div");
       essencePanel.className = "essence-panel";
       essencePanel.innerHTML = `
@@ -737,19 +807,32 @@ export class GameApp {
     if (inCombatArena && combat) {
       const assigningPlayer = getCombatAssigningPlayer(combat);
       const alreadyAttacked = hasAttackedThisStrike(combat, troop.instanceId);
+      const randomTargets = arenaUsesRandomCombatTargets(s, combat.arenaId);
 
       if (troop.owner === assigningPlayer) {
         if (alreadyAttacked) subLabel = "já atacou";
+        else if (randomTargets) subLabel = "clique para atacar (alvo aleatório)";
         else if (this.selection.troopId === troop.instanceId) subLabel = "escolha alvo";
         if (!alreadyAttacked) {
           onClick = (e) => {
             e.stopPropagation();
+            if (randomTargets) {
+              const enemies = this.troopsInArena(s, opponent(assigningPlayer), combat.arenaId);
+              if (enemies.length === 0) return;
+              this.selection.troopId = null;
+              this.dispatchAction({
+                type: "EXECUTE_COMBAT_ATTACK",
+                attackerId: troop.instanceId,
+                targetId: enemies[0]!.instanceId,
+              });
+              return;
+            }
             this.selection.troopId =
               this.selection.troopId === troop.instanceId ? null : troop.instanceId;
             this.render();
           };
         }
-      } else {
+      } else if (!randomTargets) {
         const attackerId = this.selection.troopId;
         const attacker = attackerId ? s.troops[attackerId] : null;
         if (
@@ -794,8 +877,15 @@ export class GameApp {
         })
       : createCardEl("?", { compact: true });
 
-    if (inCombatArena && combat && hasAttackedThisStrike(combat, troop.instanceId)) {
-      chip.classList.add("combat-attacked");
+    if (inCombatArena && combat) {
+      const alreadyAttacked = hasAttackedThisStrike(combat, troop.instanceId);
+      if (!alreadyAttacked) {
+        chip.classList.add(
+          troop.owner === 0 ? "combat-highlight-p0" : "combat-highlight-p1",
+        );
+      } else {
+        chip.classList.add("combat-attacked");
+      }
     }
 
     if (

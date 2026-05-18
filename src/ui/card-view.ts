@@ -22,6 +22,19 @@ export type CardViewOptions = {
 };
 
 /** Carta convertida no Espaço de Essência (apenas ✦). */
+/** Verso da carta (mão oculta do oponente / CPU). */
+export function createHiddenCardEl(compact = false): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "game-card game-card--hidden";
+  if (compact) el.classList.add("game-card--compact");
+  const eye = document.createElement("span");
+  eye.className = "game-card__hidden-eye";
+  eye.textContent = "👁";
+  eye.setAttribute("aria-hidden", "true");
+  el.appendChild(eye);
+  return el;
+}
+
 export function createEssenceTokenEl(exhausted = false): HTMLElement {
   const root = document.createElement("div");
   root.className = "game-card game-card--essence-token";

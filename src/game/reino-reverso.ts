@@ -1,70 +1,148 @@
-import { appendLog, countTroopsInZone, opponent } from "./helpers";
+import {
+  appendLog,
+  countTroopsInZone,
+  getArena,
+  getTroopName,
+  opponent,
+} from "./helpers";
 import { applyLeaderDamage, applyLeaderDamageTo } from "./phase-transition";
-import type { GameState, PlayerId } from "./types";
-import { MAX_TROOPS_PER_ZONE } from "./types";
+import type { ArenaEffectId, GameState, PlayerId } from "./types";
 
-/** Tropas vivas na arena voltam para a base do dono (GDD §9). */
-export function returnArenaSurvivorsToBase(state: GameState, arenaId: string): GameState {
-  let troops = { ...state.troops };
-  const logNames: string[] = [];
+function vacuumDamageForArena(effect: ArenaEffectId): number {
+  return effect === "rr-vacuum-2" ? 2 : 1;
+}
+
+/** Destrói todas as tropas vivas na arena (sobreviventes não voltam à base). */
+function destroyArenaSurvivors(state: GameState, arenaId: string): GameState {
+  const arena = getArena(state, arenaId);
+  const troops = { ...state.troops };
+  const players = [...state.players] as GameState["players"];
+  const names: string[] = [];
 
   for (const t of Object.values(troops)) {
     if (t.zone !== "arena" || t.arenaId !== arenaId || t.currentHealth <= 0) continue;
-    const owner = t.owner;
-    const inBase = countTroopsInZone({ ...state, troops }, owner, "base");
-    if (inBase >= MAX_TROOPS_PER_ZONE) {
-      troops[t.instanceId] = { ...t, zone: "discard", arenaId: null, pinned: false };
-      continue;
-    }
-    troops[t.instanceId] = {
-      ...t,
-      zone: "base",
-      arenaId: null,
-      pinned: false,
-      exhausted: true,
+    const p = t.owner;
+    players[p] = {
+      ...players[p],
+      hand: players[p].hand.filter((id) => id !== t.instanceId),
+      discard: [...players[p].discard, t.cardId],
     };
-    logNames.push(t.instanceId);
+    names.push(getTroopName(state, t));
+    delete troops[t.instanceId];
   }
+
+  if (names.length === 0) return { ...state, troops, players };
 
   return {
     ...state,
     troops,
-    log:
-      logNames.length > 0
-        ? appendLog(state, "Sobreviventes do combate retornaram à base.")
-        : state.log,
+    players,
+    log: appendLog(
+      state,
+      names.length === 1
+        ? `Reino Reverso (${arena.name}) — ${names[0]} foi destruída após o combate.`
+        : `Reino Reverso (${arena.name}) — ${names.length} tropas destruídas após o combate.`,
+    ),
   };
 }
 
-export function resolveReinoReversoCombatWin(
+/** Vácuo ao fim do combate: sem tropa na base → dano no próprio Líder. */
+function applyVacuoAfterCombat(
   state: GameState,
-  winner: PlayerId,
+  player: PlayerId,
   arenaId: string,
-  message: string,
 ): GameState {
-  let next = applyLeaderDamage(
-    state,
-    winner,
-    1,
-    `${message} — Jogador ${winner + 1} causa 1 de dano ao Líder inimigo.`,
-  );
-  if (next.matchPhase === "finished") return next;
-  next = returnArenaSurvivorsToBase(next, arenaId);
-  return next;
-}
-
-/** Vácuo: sem tropas na base no início do turno → 1 dano (GDD §9). */
-export function applyVacuoIfNeeded(state: GameState, player: PlayerId): GameState {
-  if (state.gamePhase !== "reino-reverso" || state.matchPhase !== "playing") {
-    return state;
-  }
   if (countTroopsInZone(state, player, "base") > 0) return state;
+
+  const arena = getArena(state, arenaId);
+  const damage = vacuumDamageForArena(arena.effect);
+  const arenaTag = arena.effect === "rr-vacuum-2" ? " — Vácuo Eterno" : "";
 
   return applyLeaderDamageTo(
     state,
     player,
-    1,
-    `Vácuo — Jogador ${player + 1} sem tropas na base: 1 de dano no próprio Líder.`,
+    damage,
+    `Vácuo (fim do combate)${arenaTag} — Jogador ${player + 1} sem tropas na base: ${damage} de dano no Líder.`,
     opponent(player),
   );
+}
+
+/** Salão dos Lordes: empate total na arena → 1 de dano em cada Líder. */
+function applyMutualWipeLeaderDamage(state: GameState, arenaName: string): GameState {
+  let next = state;
+  for (const p of [0, 1] as PlayerId[]) {
+    next = applyLeaderDamageTo(
+      next,
+      p,
+      1,
+      `${arenaName} — ambos os lados caíram: Jogador ${p + 1} leva 1 de dano no Líder.`,
+      opponent(p),
+    );
+    if (next.matchPhase === "finished") return next;
+  }
+  return next;
+}
+
+function applyVacuoChecks(
+  state: GameState,
+  arenaId: string,
+  winner: PlayerId | null,
+): GameState {
+  const arena = getArena(state, arenaId);
+  let next = state;
+
+  if (arena.effect === "rr-loser-only-vacuum") {
+    const toCheck: PlayerId[] =
+      winner !== null ? [opponent(winner)] : [0, 1];
+    for (const p of toCheck) {
+      next = applyVacuoAfterCombat(next, p, arenaId);
+      if (next.matchPhase === "finished") return next;
+    }
+    return next;
+  }
+
+  for (const p of [0, 1] as PlayerId[]) {
+    next = applyVacuoAfterCombat(next, p, arenaId);
+    if (next.matchPhase === "finished") return next;
+  }
+  return next;
+}
+
+/**
+ * Encerra combate no RR: dano ao Líder do vencedor (se houver),
+ * Salão dos Lordes em empate total, destrói sobreviventes, vácuo.
+ */
+export function finalizeReinoReversoCombat(
+  state: GameState,
+  arenaId: string,
+  winner: PlayerId | null,
+  message: string,
+): GameState {
+  const arena = getArena(state, arenaId);
+  let next: GameState = {
+    ...state,
+    combat: null,
+    turnPhase: "main",
+    log: appendLog(state, message),
+  };
+
+  if (winner === null && arena.effect === "rr-mutual-wipe-leader-damage") {
+    next = applyMutualWipeLeaderDamage(next, arena.name);
+    if (next.matchPhase === "finished") {
+      return destroyArenaSurvivors(next, arenaId);
+    }
+  } else if (winner !== null) {
+    next = applyLeaderDamage(
+      next,
+      winner,
+      1,
+      `Reino Reverso — Jogador ${winner + 1} venceu o combate e causa 1 de dano ao Líder inimigo.`,
+    );
+    if (next.matchPhase === "finished") {
+      return destroyArenaSurvivors(next, arenaId);
+    }
+  }
+
+  next = destroyArenaSurvivors(next, arenaId);
+  return applyVacuoChecks(next, arenaId, winner);
 }
