@@ -1,12 +1,16 @@
 import {
   arenaUsesRandomCombatTargets,
+  canPlaySpellNow,
+  canTargetSpell,
   getAvailableEssence,
   getCombatAssigningPlayer,
   getContestedArenaNames,
+  getRRUnansweredArenaNames,
   hasAttackedThisStrike,
+  isSpellCard,
 } from "../game";
 import { canAfford, countTroopsInZone, getTroopsInZone, opponent } from "../game/helpers";
-import type { GameAction, GameState, PlayerId } from "../game/types";
+import type { ArenaDefinition, GameAction, GameState, PlayerId } from "../game/types";
 import { MAX_TROOPS_PER_ZONE } from "../game/types";
 
 function pickRandom<T>(arr: T[]): T | undefined {
@@ -30,51 +34,359 @@ function availableArenaIds(state: GameState, player: PlayerId): string[] {
     .map((a) => a.id);
 }
 
-function pickArenaSetup(state: GameState, player: PlayerId): GameAction | null {
-  const ids = availableArenaIds(state, player);
-  const pick = pickRandom(ids);
-  return pick ? { type: "SELECT_ARENA", player, arenaId: pick } : null;
+function scoreArena(arena: ArenaDefinition, phase: GameState["gamePhase"]): number {
+  const scores: Record<string, number> = {
+    none: 1,
+    "no-magic": 2,
+    "gargoyle-fill": 7,
+    "susej-on-dominate": 8,
+    "random-buff-on-combat": 6,
+    "draw-two-on-dominate": 9,
+    "ping-after-strike": 5,
+    "conquest-3-corruption": 6,
+    "no-leave-by-move": 8,
+    "random-combat-target": 7,
+    "exile-on-death": 7,
+    "spells-cost-less": 4,
+    "rr-vacuum-2": 8,
+    "rr-mutual-wipe-leader-damage": 6,
+    "rr-loser-only-vacuum": 9,
+  };
+  let s = scores[arena.effect] ?? 3;
+  if (phase === "reino-reverso" && arena.neutral) s -= 2;
+  if (phase === "mundo-normal" && arena.effect === "conquest-3-corruption") s -= 1;
+  return s;
 }
 
-function pickPostPhaseChoice(player: PlayerId): GameAction {
-  const choices = ["essence", "corruption", "recycle"] as const;
-  return {
-    type: "POST_PHASE_CHOICE",
-    player,
-    choice: pickRandom([...choices]) ?? "recycle",
-  };
+function pickArenaSetup(state: GameState, player: PlayerId): GameAction | null {
+  const ids = availableArenaIds(state, player);
+  if (ids.length === 0) return null;
+
+  const ranked = ids
+    .map((id) => state.arenaPool.find((a) => a.id === id)!)
+    .filter(Boolean)
+    .sort((a, b) => scoreArena(b, state.gamePhase) - scoreArena(a, state.gamePhase));
+
+  const top = ranked.slice(0, Math.min(3, ranked.length));
+  const pick = pickRandom(top) ?? ranked[0]!;
+  return { type: "SELECT_ARENA", player, arenaId: pick.id };
+}
+
+function pickPostPhaseChoice(state: GameState, player: PlayerId): GameAction {
+  const troops = countTroopsInZone(state, player, "arena");
+  const corruption = state.players[player].corruption;
+
+  if (troops >= 2) {
+    return { type: "POST_PHASE_CHOICE", player, choice: "essence" };
+  }
+  if (troops === 0) {
+    return { type: "POST_PHASE_CHOICE", player, choice: "recycle" };
+  }
+  if (corruption < 3) {
+    return { type: "POST_PHASE_CHOICE", player, choice: "corruption" };
+  }
+  return { type: "POST_PHASE_CHOICE", player, choice: "essence" };
 }
 
 function livingInArena(state: GameState, player: PlayerId, arenaId: string) {
   return getTroopsInZone(state, player, "arena", arenaId).filter((t) => t.currentHealth > 0);
 }
 
-function pickCombatAction(state: GameState, cpu: PlayerId): GameAction | null {
-  const combat = state.combat;
-  if (!combat || state.turnPhase !== "combat") return null;
+function handTroopDefs(state: GameState, cpu: PlayerId) {
+  const out: {
+    troopId: string;
+    cost: number;
+    hasEssence: boolean;
+    power: number;
+    index: number;
+  }[] = [];
+  state.players[cpu].hand.forEach((troopId, index) => {
+    const troop = state.troops[troopId];
+    if (!troop || troop.owner !== cpu) return;
+    const def = state.catalog[troop.cardId];
+    if (!def || isSpellCard(def)) return;
+    out.push({
+      troopId,
+      cost: def.cost,
+      hasEssence: Boolean(def.hasEssenceSymbol),
+      power: def.attack + def.health,
+      index,
+    });
+  });
+  return out;
+}
 
-  const striker = getCombatAssigningPlayer(combat);
-  if (striker !== cpu) return null;
+function pickCpuMulligan(state: GameState, cpu: PlayerId): GameAction {
+  const hand = handTroopDefs(state, cpu);
+  const badIndices = hand
+    .filter((h) => !h.hasEssence && h.cost >= 3)
+    .map((h) => h.index);
+
+  if (badIndices.length >= 2) {
+    return { type: "MULLIGAN", player: cpu, handIndices: badIndices.slice(0, 4) };
+  }
+  return { type: "SKIP_MULLIGAN", player: cpu };
+}
+
+function pickPlaySpell(state: GameState, cpu: PlayerId): GameAction | null {
+  for (const spellId of state.players[cpu].hand) {
+    const spellInst = state.troops[spellId];
+    if (!spellInst || spellInst.owner !== cpu) continue;
+    const spellDef = state.catalog[spellInst.cardId];
+    if (!spellDef || !isSpellCard(spellDef) || !spellDef.spellEffect) continue;
+    if (!canPlaySpellNow(state, cpu, spellDef)) continue;
+    if (!canAfford(state, cpu, spellDef.cost)) continue;
+
+    const targets = Object.values(state.troops).filter((t) =>
+      canTargetSpell(state, cpu, spellDef, t),
+    );
+    if (targets.length === 0) continue;
+
+    if (spellDef.spellEffect === "gust-wind") {
+      const enemies = targets
+        .filter((t) => t.owner !== cpu)
+        .sort((a, b) => b.attack + b.currentHealth - (a.attack + a.currentHealth));
+      const pick = enemies[0] ?? targets[0]!;
+      return {
+        type: "PLAY_SPELL",
+        player: cpu,
+        spellInstanceId: spellId,
+        targetTroopId: pick.instanceId,
+      };
+    }
+
+    if (spellDef.spellEffect === "blood-cauldron") {
+      const enemy = targets.sort((a, b) => a.currentHealth - b.currentHealth)[0]!;
+      return {
+        type: "PLAY_SPELL",
+        player: cpu,
+        spellInstanceId: spellId,
+        targetTroopId: enemy.instanceId,
+      };
+    }
+
+    const ally = targets
+      .filter((t) => t.owner === cpu)
+      .sort((a, b) => b.attack + b.currentHealth - (a.attack + a.currentHealth));
+    const pick = ally[0] ?? targets[0]!;
+    return {
+      type: "PLAY_SPELL",
+      player: cpu,
+      spellInstanceId: spellId,
+      targetTroopId: pick.instanceId,
+    };
+  }
+  return null;
+}
+
+function cpuHasPlayableSpell(state: GameState, cpu: PlayerId): boolean {
+  return pickPlaySpell(state, cpu) !== null;
+}
+
+function pickCpuCombatMagic(state: GameState, cpu: PlayerId): GameAction | null {
+  if (!state.combat || state.combat.subPhase !== "magic") return null;
+
+  const spell = pickPlaySpell(state, cpu);
+  if (spell) return spell;
+
+  if (!state.combat.magicPassed[cpu]) {
+    return { type: "PASS_COMBAT_MAGIC", player: cpu };
+  }
+  return null;
+}
+
+/** Magias rápidas (ou reação) fora da vez principal ou após passar na fase de magias. */
+function pickCpuReactiveSpell(state: GameState, cpu: PlayerId): GameAction | null {
+  if (state.matchPhase !== "playing") return null;
+  if (state.turnPhase !== "main" && state.turnPhase !== "combat") return null;
+
+  if (state.combat?.subPhase === "magic" && !state.combat.magicPassed[cpu]) {
+    return null;
+  }
+  if (state.turnPhase === "main" && state.activePlayer === cpu && !state.combat) {
+    return null;
+  }
+  if (
+    state.combat?.subPhase === "strike" &&
+    getCombatAssigningPlayer(state.combat) === cpu
+  ) {
+    return null;
+  }
+
+  return pickPlaySpell(state, cpu);
+}
+
+function pickSacrificeForEssence(state: GameState, cpu: PlayerId): GameAction | null {
+  if (state.players[cpu].sacrificedThisTurn) return null;
+
+  const hand = handTroopDefs(state, cpu);
+  if (hand.length === 0) return null;
+
+  const canPlaySomething = hand.some((h) => canAfford(state, cpu, h.cost));
+  const available = getAvailableEssence(state, cpu).length;
+  const minCost = Math.min(...hand.map((h) => h.cost));
+
+  if (canPlaySomething && available >= minCost) return null;
+
+  const sacrificable = [...hand]
+    .filter((h) => h.hasEssence)
+    .sort((a, b) => a.power - b.power);
+  if (sacrificable.length === 0) return null;
+
+  return { type: "SACRIFICE_ESSENCE", troopId: sacrificable[0]!.troopId };
+}
+
+function pickPlayTroop(state: GameState, cpu: PlayerId): GameAction | null {
+  if (countTroopsInZone(state, cpu, "base") >= MAX_TROOPS_PER_ZONE) return null;
+
+  const affordable = handTroopDefs(state, cpu)
+    .filter((h) => canAfford(state, cpu, h.cost))
+    .sort((a, b) => b.cost - a.cost || b.power - a.power);
+
+  if (affordable.length === 0) return null;
+  return { type: "PLAY_TROOP", troopId: affordable[0]!.troopId };
+}
+
+function findArenaForMove(state: GameState, cpu: PlayerId): { arenaId: string } | null {
+  const baseTroops = getTroopsInZone(state, cpu, "base").filter(
+    (t) => !t.exhausted && !t.pinned,
+  );
+  if (baseTroops.length === 0) return null;
+
+  const unanswered = getRRUnansweredArenaNames(state, cpu);
+  if (unanswered.length > 0) {
+    const arena = state.arenas.find((a) => unanswered.includes(a.name));
+    if (
+      arena &&
+      arena.dominatedBy === null &&
+      countTroopsInZone(state, cpu, "arena", arena.id) < MAX_TROOPS_PER_ZONE
+    ) {
+      return { arenaId: arena.id };
+    }
+  }
+
+  let pressureArena: { id: string; enemyCount: number; allyCount: number } | null = null;
+  for (const arena of state.arenas) {
+    if (arena.dominatedBy !== null) continue;
+    const allies = countTroopsInZone(state, cpu, "arena", arena.id);
+    const enemies = countTroopsInZone(state, opponent(cpu), "arena", arena.id);
+    if (allies >= MAX_TROOPS_PER_ZONE) continue;
+    if (enemies === 0 && state.gamePhase !== "reino-reverso") continue;
+    if (enemies > 0 && (!pressureArena || enemies > pressureArena.enemyCount)) {
+      pressureArena = { id: arena.id, enemyCount: enemies, allyCount: allies };
+    }
+  }
+  if (pressureArena) return { arenaId: pressureArena.id };
+
+  let bestArena = state.arenas.find((a) => a.dominatedBy === null);
+  if (!bestArena) return null;
+  let bestCount = countTroopsInZone(state, cpu, "arena", bestArena.id);
+
+  for (const arena of state.arenas) {
+    if (arena.dominatedBy !== null) continue;
+    const n = countTroopsInZone(state, cpu, "arena", arena.id);
+    if (n < bestCount) {
+      bestCount = n;
+      bestArena = arena;
+    }
+  }
+
+  if (countTroopsInZone(state, cpu, "arena", bestArena.id) >= MAX_TROOPS_PER_ZONE) {
+    return null;
+  }
+  return { arenaId: bestArena.id };
+}
+
+function pickMoveTroop(state: GameState, cpu: PlayerId): GameAction | null {
+  const baseTroops = getTroopsInZone(state, cpu, "base").filter(
+    (t) => !t.exhausted && !t.pinned,
+  );
+  if (baseTroops.length === 0) return null;
+
+  const target = findArenaForMove(state, cpu);
+  if (!target) return null;
+
+  return {
+    type: "MOVE_TROOP",
+    troopId: baseTroops[0]!.instanceId,
+    to: "arena",
+    arenaId: target.arenaId,
+  };
+}
+
+function pickDeclareCombat(state: GameState, cpu: PlayerId): GameAction | null {
+  const contested = getContestedArenaNames(state, cpu);
+  if (contested.length === 0) return null;
+
+  let best: { arenaId: string; allies: number; enemies: number } | null = null;
+  for (const name of contested) {
+    const arena = state.arenas.find((a) => a.name === name);
+    if (!arena) continue;
+    const allies = livingInArena(state, cpu, arena.id).length;
+    const enemies = livingInArena(state, opponent(cpu), arena.id).length;
+    if (allies === 0) continue;
+    if (!best || allies > best.allies || (allies === best.allies && enemies < best.enemies)) {
+      best = { arenaId: arena.id, allies, enemies };
+    }
+  }
+  if (!best) return null;
+  return { type: "DECLARE_COMBAT", arenaId: best.arenaId };
+}
+
+function pickBestCombatAttack(
+  state: GameState,
+  cpu: PlayerId,
+): GameAction | null {
+  const combat = state.combat;
+  if (!combat || state.turnPhase !== "combat" || combat.subPhase !== "strike") return null;
+  if (getCombatAssigningPlayer(combat) !== cpu) return null;
 
   const { arenaId } = combat;
   const allies = livingInArena(state, cpu, arenaId).filter(
     (t) => !hasAttackedThisStrike(combat, t.instanceId),
   );
-  if (allies.length === 0) return null;
-
-  const attacker = allies[0]!;
   const enemies = livingInArena(state, opponent(cpu), arenaId);
-  if (enemies.length === 0) return null;
+  if (allies.length === 0 || enemies.length === 0) return null;
 
-  const target = arenaUsesRandomCombatTargets(state, arenaId)
-    ? pickRandom(enemies)!
-    : enemies[0]!;
+  let best: { attackerId: string; targetId: string; score: number } | null = null;
 
+  for (const attacker of allies) {
+    const candidates = arenaUsesRandomCombatTargets(state, arenaId)
+      ? [pickRandom(enemies)!]
+      : enemies;
+
+    for (const target of candidates) {
+      const lethal = target.currentHealth <= attacker.attack;
+      const score =
+        (lethal ? 1000 : 0) +
+        (100 - target.currentHealth) +
+        attacker.attack -
+        (attacker.currentHealth <= target.attack ? target.attack : 0) * 0.3;
+      if (!best || score > best.score) {
+        best = {
+          attackerId: attacker.instanceId,
+          targetId: target.instanceId,
+          score,
+        };
+      }
+    }
+  }
+
+  if (!best) return null;
   return {
     type: "EXECUTE_COMBAT_ATTACK",
-    attackerId: attacker.instanceId,
-    targetId: target.instanceId,
+    attackerId: best.attackerId,
+    targetId: best.targetId,
   };
+}
+
+function hasMainPhaseWork(state: GameState, cpu: PlayerId): boolean {
+  if (pickSacrificeForEssence(state, cpu)) return true;
+  if (pickPlaySpell(state, cpu)) return true;
+  if (pickPlayTroop(state, cpu)) return true;
+  if (pickMoveTroop(state, cpu)) return true;
+  if (pickDeclareCombat(state, cpu)) return true;
+  return false;
 }
 
 function pickMainTurnAction(state: GameState, cpu: PlayerId): GameAction | null {
@@ -83,65 +395,38 @@ function pickMainTurnAction(state: GameState, cpu: PlayerId): GameAction | null 
   }
   if (state.activePlayer !== cpu) return null;
 
-  const hand = state.players[cpu].hand;
-  for (const troopId of hand) {
-    const troop = state.troops[troopId];
-    if (!troop || troop.owner !== cpu) continue;
-    const def = state.catalog[troop.cardId];
-    if (!def) continue;
-    if (countTroopsInZone(state, cpu, "base") >= MAX_TROOPS_PER_ZONE) break;
-    if (canAfford(state, cpu, def.cost)) {
-      return { type: "PLAY_TROOP", troopId };
-    }
-  }
+  const combat = pickDeclareCombat(state, cpu);
+  if (combat) return combat;
 
-  const baseTroops = getTroopsInZone(state, cpu, "base").filter(
-    (t) => !t.exhausted && !t.pinned,
-  );
-  if (baseTroops.length > 0 && state.arenas.length > 0) {
-    let bestArena = state.arenas[0]!;
-    let bestCount = countTroopsInZone(state, cpu, "arena", bestArena.id);
-    for (const arena of state.arenas) {
-      if (arena.dominatedBy !== null) continue;
-      const n = countTroopsInZone(state, cpu, "arena", arena.id);
-      if (n < bestCount) {
-        bestCount = n;
-        bestArena = arena;
-      }
-    }
-    if (
-      bestArena.dominatedBy === null &&
-      countTroopsInZone(state, cpu, "arena", bestArena.id) < MAX_TROOPS_PER_ZONE
-    ) {
-      return {
-        type: "MOVE_TROOP",
-        troopId: baseTroops[0]!.instanceId,
-        to: "arena",
-        arenaId: bestArena.id,
-      };
-    }
-  }
+  const sacrifice = pickSacrificeForEssence(state, cpu);
+  if (sacrifice) return sacrifice;
+
+  const spell = pickPlaySpell(state, cpu);
+  if (spell) return spell;
+
+  const play = pickPlayTroop(state, cpu);
+  if (play) return play;
+
+  const move = pickMoveTroop(state, cpu);
+  if (move) return move;
+
+  const combatAfterMove = pickDeclareCombat(state, cpu);
+  if (combatAfterMove) return combatAfterMove;
+
+  const playAgain = pickPlayTroop(state, cpu);
+  if (playAgain) return playAgain;
+
+  const moveAgain = pickMoveTroop(state, cpu);
+  if (moveAgain) return moveAgain;
 
   const contested = getContestedArenaNames(state, cpu);
-  if (contested.length > 0) {
-    const arena = state.arenas.find((a) => contested.includes(a.name));
-    if (arena) return { type: "DECLARE_COMBAT", arenaId: arena.id };
-  }
+  if (contested.length > 0) return null;
 
-  if (getAvailableEssence(state, cpu).length > 0 && !state.players[cpu].sacrificedThisTurn) {
-    for (const troopId of hand) {
-      const troop = state.troops[troopId];
-      const def = troop ? state.catalog[troop.cardId] : undefined;
-      if (def?.hasEssenceSymbol) {
-        return { type: "SACRIFICE_ESSENCE", troopId };
-      }
-    }
-  }
+  if (hasMainPhaseWork(state, cpu)) return null;
 
   return { type: "END_TURN" };
 }
 
-/** Próxima ação da CPU, ou null se for vez do humano / nada a fazer. */
 export function pickCpuAction(state: GameState, cpuPlayer: PlayerId): GameAction | null {
   const cpu = cpuPlayer;
 
@@ -151,14 +436,14 @@ export function pickCpuAction(state: GameState, cpuPlayer: PlayerId): GameAction
   }
 
   if (state.matchPhase === "mulligan_p1" && cpu === 1) {
-    return { type: "SKIP_MULLIGAN", player: 1 };
+    return pickCpuMulligan(state, 1);
   }
 
   if (state.matchPhase === "phase_end_choice_p1" && cpu === 1) {
-    return pickPostPhaseChoice(1);
+    return pickPostPhaseChoice(state, 1);
   }
   if (state.matchPhase === "phase_end_choice_p0" && cpu === 0) {
-    return pickPostPhaseChoice(0);
+    return pickPostPhaseChoice(state, 0);
   }
 
   if (state.matchPhase === "setup_abismo_winner" && state.phaseWinner === cpu) {
@@ -177,7 +462,15 @@ export function pickCpuAction(state: GameState, cpuPlayer: PlayerId): GameAction
     return pickArenaSetup(state, cpu);
   }
 
-  const combatAction = pickCombatAction(state, cpu);
+  if (state.combat?.subPhase === "magic") {
+    const magic = pickCpuCombatMagic(state, cpu);
+    if (magic) return magic;
+  }
+
+  const reactive = pickCpuReactiveSpell(state, cpu);
+  if (reactive) return reactive;
+
+  const combatAction = pickBestCombatAttack(state, cpu);
   if (combatAction) return combatAction;
 
   return pickMainTurnAction(state, cpu);
@@ -205,8 +498,25 @@ export function cpuControlsPhase(state: GameState, cpuPlayer: PlayerId): boolean
   }
 
   if (state.combat) {
-    return getCombatAssigningPlayer(state.combat) === cpuPlayer;
+    if (state.combat.subPhase === "magic") {
+      if (!state.combat.magicPassed[cpuPlayer]) return true;
+      return cpuHasPlayableSpell(state, cpuPlayer);
+    }
+    if (getCombatAssigningPlayer(state.combat) === cpuPlayer) return true;
+    return cpuHasPlayableSpell(state, cpuPlayer);
   }
 
-  return state.matchPhase === "playing" && state.activePlayer === cpuPlayer;
+  if (state.matchPhase === "playing" && state.activePlayer === cpuPlayer && state.turnPhase === "main") {
+    return true;
+  }
+
+  if (state.matchPhase === "playing" && state.turnPhase === "main") {
+    return cpuHasPlayableSpell(state, cpuPlayer);
+  }
+
+  if (state.matchPhase === "playing" && state.turnPhase === "combat") {
+    return cpuHasPlayableSpell(state, cpuPlayer);
+  }
+
+  return false;
 }

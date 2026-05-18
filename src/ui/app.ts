@@ -1,12 +1,22 @@
-import { createInitialGame, dispatch, loadCardCatalog } from "../game";
-import type { GameAction, GameState, PlayerId, TroopInstance } from "../game/types";
+import {
+  createInitialGame,
+  createTestGame,
+  dispatch,
+  loadCardCatalog,
+  testModeLabel,
+  type TestMode,
+} from "../game";
+import type { GameAction, CardCatalog, GameState, PlayerId, TroopInstance } from "../game/types";
 import { LEADER_MAX_HP } from "../game/types";
 import {
   getAvailableEssence,
   getCombatAssigningPlayer,
   getContestedArenaNames,
+  getRRUnansweredArenaNames,
   getPlayerEssence,
   hasAttackedThisStrike,
+  isCombatMagicPhase,
+  isCombatStrikePhase,
 } from "../game";
 import { describeArenaEffect } from "../game/arenas";
 import {
@@ -15,6 +25,14 @@ import {
   phaseDisplayName,
 } from "../game";
 import { opponent } from "../game/helpers";
+import {
+  canPlaySpellNow,
+  canTargetSpell,
+  describeSpellEffect,
+  getCardSpeed,
+  isSpellCard,
+  spellEffectLabel,
+} from "../game";
 import { pickCpuAction, cpuControlsPhase } from "./cpu";
 import { cardFromDef, createCardEl, createEssenceTokenEl, createHiddenCardEl } from "./card-view";
 import {
@@ -27,44 +45,190 @@ import {
 type UiSelection = {
   troopId: string | null;
   arenaId: string | null;
+  spellInstanceId: string | null;
   mulliganIndices: Set<number>;
 };
 
+type AppScreen = "menu" | "game";
+
 export class GameApp {
+  private catalog: CardCatalog | null = null;
   private state: GameState | null = null;
+  private screen: AppScreen = "menu";
+  private lastCpuPlayer: PlayerId | null = null;
+  private lastTestMode: TestMode | null = null;
   private selection: UiSelection = {
     troopId: null,
     arenaId: null,
+    spellInstanceId: null,
     mulliganIndices: new Set(),
   };
   private root: HTMLElement;
   private cpuRunning = false;
+  /** Incrementado a cada mudança de estado — invalida esperas/ações obsoletas do loop da CPU. */
+  private cpuLoopGeneration = 0;
+  /** Próxima ação da CPU usa 500 ms (botão "Acelerar"). */
+  private cpuDelayOverride = false;
+
+  private static readonly CPU_DELAY_MS = 7000;
+  private static readonly CPU_DELAY_FAST_MS = 500;
 
   constructor(root: HTMLElement) {
     this.root = root;
   }
 
   private humanPlayer(s: GameState): PlayerId {
+    if (s.cpuPlayer === null) return 0;
     return s.cpuPlayer === 0 ? 1 : 0;
   }
 
+  private isCpuPlayer(s: GameState, player: PlayerId): boolean {
+    return s.cpuPlayer !== null && s.cpuPlayer === player;
+  }
+
+  /** Jogador que pode usar mouse/teclado neste momento. */
+  private canControlPlayer(s: GameState, player: PlayerId): boolean {
+    if (this.isCpuPlayer(s, player)) return false;
+
+    if (s.matchPhase === "setup_arenas_p0") return player === 0;
+    if (s.matchPhase === "setup_arenas_p1") return player === 1;
+    if (s.matchPhase === "mulligan_p0") return player === 0;
+    if (s.matchPhase === "mulligan_p1") return player === 1;
+    if (s.matchPhase === "phase_end_choice_p0") return player === 0;
+    if (s.matchPhase === "phase_end_choice_p1") return player === 1;
+
+    const setup = this.arenaSetupContext(s);
+    if (setup) return player === setup.player;
+
+    if (s.matchPhase === "playing") {
+      if (s.combat) {
+        if (s.combat.subPhase === "magic" && !s.combat.magicPassed[player]) {
+          return true;
+        }
+        if (s.combat.subPhase === "strike") {
+          return player === getCombatAssigningPlayer(s.combat);
+        }
+        return false;
+      }
+      return player === s.activePlayer;
+    }
+
+    return false;
+  }
+
   async init(): Promise<void> {
-    const catalog = await loadCardCatalog();
-    this.state = createInitialGame(catalog);
+    this.catalog = await loadCardCatalog();
+    this.screen = "menu";
+    this.render();
+  }
+
+  private startGame(cpuPlayer: PlayerId | null, testMode: TestMode | null = null): void {
+    if (!this.catalog) throw new Error("Catálogo não carregado");
+    this.lastCpuPlayer = cpuPlayer;
+    this.lastTestMode = testMode;
+    this.state = testMode
+      ? createTestGame(this.catalog, { cpuPlayer, testMode })
+      : createInitialGame(this.catalog, { cpuPlayer });
+    this.screen = "game";
+    this.selection = {
+      troopId: null,
+      arenaId: null,
+      spellInstanceId: null,
+      mulliganIndices: new Set(),
+    };
+    this.render();
+    void this.runCpuLoop();
+  }
+
+  private returnToMenu(): void {
+    this.screen = "menu";
+    this.state = null;
+    this.cpuRunning = false;
     this.render();
   }
 
   private getState(): GameState {
     if (!this.state) throw new Error("Jogo não inicializado");
+    if (
+      this.state.matchPhase === "playing" &&
+      !this.state.combat &&
+      this.state.turnPhase === "combat"
+    ) {
+      this.state = { ...this.state, turnPhase: "main" };
+    }
     return this.state;
+  }
+
+  private canDragTroopsOnField(s: GameState, troop: TroopInstance): boolean {
+    return (
+      s.matchPhase === "playing" &&
+      s.turnPhase === "main" &&
+      !s.combat &&
+      s.activePlayer === troop.owner &&
+      !troop.pinned &&
+      !troop.exhausted &&
+      this.canControlPlayer(s, troop.owner)
+    );
   }
 
   private update(next: GameState): void {
     this.state = next;
     this.selection.troopId = null;
     this.selection.arenaId = null;
+    this.selection.spellInstanceId = null;
+    this.cpuLoopGeneration++;
     this.render();
     void this.runCpuLoop();
+  }
+
+  private humanHasFastSpellInHand(state: GameState): boolean {
+    const human = this.humanPlayer(state);
+    return state.players[human].hand.some((id) => {
+      const inst = state.troops[id];
+      if (!inst) return false;
+      const def = state.catalog[inst.cardId];
+      return Boolean(def && isSpellCard(def) && getCardSpeed(def) === "fast");
+    });
+  }
+
+  private humanHasPlayableFastSpell(state: GameState): boolean {
+    const human = this.humanPlayer(state);
+    for (const id of state.players[human].hand) {
+      const inst = state.troops[id];
+      if (!inst) continue;
+      const def = state.catalog[inst.cardId];
+      if (!def || !isSpellCard(def) || getCardSpeed(def) !== "fast") continue;
+      if (!canPlaySpellNow(state, human, def)) continue;
+      if (Object.values(state.troops).some((t) => canTargetSpell(state, human, def, t))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private getCpuActionDelayMs(state: GameState): number {
+    if (this.cpuDelayOverride) {
+      this.cpuDelayOverride = false;
+      return GameApp.CPU_DELAY_FAST_MS;
+    }
+    if (!this.humanHasPlayableFastSpell(state)) {
+      return GameApp.CPU_DELAY_FAST_MS;
+    }
+    return GameApp.CPU_DELAY_MS;
+  }
+
+  private requestCpuFastDelay(): void {
+    this.cpuDelayOverride = true;
+    this.cpuLoopGeneration++;
+    void this.runCpuLoop();
+  }
+
+  private applyCpuActionResult(after: GameState): void {
+    this.state = after;
+    this.selection.troopId = null;
+    this.selection.arenaId = null;
+    this.selection.spellInstanceId = null;
+    this.render();
   }
 
   private async runCpuLoop(): Promise<void> {
@@ -72,31 +236,60 @@ export class GameApp {
     const s = this.getState();
     if (s.cpuPlayer === null) return;
 
+    const loopGen = this.cpuLoopGeneration;
     this.cpuRunning = true;
     try {
       let safety = 0;
-      while (safety++ < 48) {
+      while (safety++ < 64 && loopGen === this.cpuLoopGeneration) {
         const cur = this.getState();
         if (cur.matchPhase === "finished" || cur.cpuPlayer === null) break;
-        if (!cpuControlsPhase(cur, cur.cpuPlayer)) break;
+        const cpu = cur.cpuPlayer;
+        if (!cpuControlsPhase(cur, cpu)) break;
 
-        const action = pickCpuAction(cur, cur.cpuPlayer);
+        const delayMs = this.getCpuActionDelayMs(cur);
+        await new Promise((r) => setTimeout(r, delayMs));
+        if (loopGen !== this.cpuLoopGeneration) break;
+
+        const latest = this.getState();
+        if (latest.matchPhase === "finished" || latest.cpuPlayer === null) break;
+        if (!cpuControlsPhase(latest, latest.cpuPlayer)) break;
+
+        const action = pickCpuAction(latest, latest.cpuPlayer);
         if (!action) break;
 
-        await new Promise((r) => setTimeout(r, 420));
-        this.state = dispatch(cur, action);
-        this.selection.troopId = null;
-        this.selection.arenaId = null;
-        this.render();
+        const after = dispatch(latest, action);
+        if (after === latest && action.type !== "END_TURN") break;
+
+        this.applyCpuActionResult(after);
+        this.cpuLoopGeneration++;
+
+        if (action.type === "END_TURN") break;
       }
     } finally {
       this.cpuRunning = false;
+      if (this.cpuLoopGeneration !== loopGen) {
+        void this.runCpuLoop();
+      }
     }
   }
 
   /** Sempre usa o estado atual — evita sobrescrever ações com estado antigo. */
   private dispatchAction(action: GameAction): void {
     this.update(dispatch(this.getState(), action));
+  }
+
+  private tryCastSelectedSpell(targetTroopId: string): void {
+    const s = this.getState();
+    const spellId = this.selection.spellInstanceId;
+    if (!spellId) return;
+    const spellInst = s.troops[spellId];
+    if (!spellInst) return;
+    this.dispatchAction({
+      type: "PLAY_SPELL",
+      player: spellInst.owner,
+      spellInstanceId: spellId,
+      targetTroopId,
+    });
   }
 
   private handleCardDrop(payload: DragPayload, zone: DropZoneInfo): void {
@@ -146,8 +339,19 @@ export class GameApp {
   }
 
   private render(): void {
-    const s = this.getState();
     this.root.innerHTML = "";
+
+    if (this.screen === "menu") {
+      this.renderMainMenu();
+      return;
+    }
+
+    const s = this.getState();
+
+    if (s.matchPhase === "finished") {
+      this.renderGameOver(s);
+      return;
+    }
 
     const header = document.createElement("header");
     const domGoal = dominationsToWinPhase(s.gamePhase);
@@ -157,9 +361,16 @@ export class GameApp {
         : "Combate final — derrote o Líder inimigo";
     header.innerHTML = `
       <h1>Reino Reverso TCG</h1>
-      <p class="subtitle">${phaseDisplayName(s.gamePhase)} · ${s.cpuPlayer !== null ? `Você = J${this.humanPlayer(s) + 1} · CPU = J${s.cpuPlayer + 1}` : "2 jogadores local"} · Líderes J1 ${s.players[0].leaderHp}/${LEADER_MAX_HP} · J2 ${s.players[1].leaderHp}/${LEADER_MAX_HP} · ${phaseMeta}</p>
+      <p class="subtitle">${phaseDisplayName(s.gamePhase)} · ${this.modeLabel(s)} · Líderes J1 ${s.players[0].leaderHp}/${LEADER_MAX_HP} · J2 ${s.players[1].leaderHp}/${LEADER_MAX_HP} · ${phaseMeta}</p>
     `;
     this.root.appendChild(header);
+
+    const menuBtn = document.createElement("button");
+    menuBtn.type = "button";
+    menuBtn.className = "secondary menu-back-btn";
+    menuBtn.textContent = "Menu";
+    menuBtn.onclick = () => this.returnToMenu();
+    header.appendChild(menuBtn);
 
     if (s.matchPhase === "phase_end_choice_p0") {
       this.renderPhaseEndChoice(s, 0);
@@ -186,6 +397,165 @@ export class GameApp {
     }
 
     this.renderMatch(s);
+  }
+
+  private modeLabel(s: GameState): string {
+    const base =
+      s.cpuPlayer === null
+        ? "2 jogadores local"
+        : `Você = J${this.humanPlayer(s) + 1} · CPU = J${s.cpuPlayer + 1}`;
+    if (s.testMode) return `${testModeLabel(s.testMode)} · ${base}`;
+    return base;
+  }
+
+  private renderMainMenu(): void {
+    const screen = document.createElement("div");
+    screen.className = "menu-screen";
+
+    const card = document.createElement("div");
+    card.className = "menu-card panel";
+    card.innerHTML = `
+      <h1>Reino Reverso TCG</h1>
+      <p class="menu-tagline">Protótipo v1.1 — fantasia urbana, arenas e domínio territorial</p>
+    `;
+
+    const actions = document.createElement("div");
+    actions.className = "menu-actions";
+
+    const vsCpu = document.createElement("button");
+    vsCpu.type = "button";
+    vsCpu.textContent = "Jogar vs CPU (você = Jogador 1)";
+    vsCpu.onclick = () => this.startGame(1);
+    actions.appendChild(vsCpu);
+
+    const hotseat = document.createElement("button");
+    hotseat.type = "button";
+    hotseat.className = "secondary";
+    hotseat.textContent = "2 jogadores no mesmo teclado";
+    hotseat.onclick = () => this.startGame(null);
+    actions.appendChild(hotseat);
+
+    card.appendChild(actions);
+
+    const testPanel = document.createElement("div");
+    testPanel.className = "menu-test panel";
+    testPanel.innerHTML = `
+      <h2 class="menu-test__title">Modos de teste</h2>
+      <p class="menu-tagline">Pula o Mundo Normal — já em jogo com recursos fixos.</p>
+    `;
+    const testActions = document.createElement("div");
+    testActions.className = "menu-actions";
+
+    const testAbismoCpu = document.createElement("button");
+    testAbismoCpu.type = "button";
+    testAbismoCpu.className = "secondary";
+    testAbismoCpu.textContent = "Teste Abismo vs CPU";
+    testAbismoCpu.onclick = () => this.startGame(1, "abismo");
+    testActions.appendChild(testAbismoCpu);
+
+    const testAbismoHot = document.createElement("button");
+    testAbismoHot.type = "button";
+    testAbismoHot.className = "secondary";
+    testAbismoHot.textContent = "Teste Abismo (2 jogadores)";
+    testAbismoHot.onclick = () => this.startGame(null, "abismo");
+    testActions.appendChild(testAbismoHot);
+
+    const testRrCpu = document.createElement("button");
+    testRrCpu.type = "button";
+    testRrCpu.className = "secondary";
+    testRrCpu.textContent = "Teste Reino Reverso vs CPU";
+    testRrCpu.onclick = () => this.startGame(1, "reino-reverso");
+    testActions.appendChild(testRrCpu);
+
+    const testRrHot = document.createElement("button");
+    testRrHot.type = "button";
+    testRrHot.className = "secondary";
+    testRrHot.textContent = "Teste Reino Reverso (2 jogadores)";
+    testRrHot.onclick = () => this.startGame(null, "reino-reverso");
+    testActions.appendChild(testRrHot);
+
+    testPanel.appendChild(testActions);
+    screen.append(card, testPanel);
+    this.root.appendChild(screen);
+  }
+
+  private renderGameOver(s: GameState): void {
+    const screen = document.createElement("div");
+    screen.className = "gameover-screen";
+
+    const card = document.createElement("div");
+    card.className = "gameover-card panel";
+
+    const headline = this.winnerHeadline(s);
+    const arenaList =
+      s.arenas.length > 0
+        ? s.arenas.map((a) => a.name).join(", ")
+        : "—";
+
+    card.innerHTML = `
+      <p class="gameover-eyebrow">Fim de partida</p>
+      <h2 class="gameover-title">${headline}</h2>
+      <p class="gameover-reason">${s.winReason ?? "Partida encerrada"}</p>
+    `;
+
+    const stats = document.createElement("dl");
+    stats.className = "gameover-stats";
+    const rows: [string, string][] = [
+      ["Fase final", phaseDisplayName(s.gamePhase)],
+      ["Turnos jogados", String(s.turnNumber)],
+      ["Líder J1", `${s.players[0].leaderHp} / ${LEADER_MAX_HP} HP`],
+      ["Líder J2", `${s.players[1].leaderHp} / ${LEADER_MAX_HP} HP`],
+      ["Domínios J1 / J2", `${s.players[0].dominatedArenas} / ${s.players[1].dominatedArenas}`],
+      ["Arenas", arenaList],
+    ];
+    for (const [dt, dd] of rows) {
+      const rowDt = document.createElement("dt");
+      rowDt.textContent = dt;
+      const rowDd = document.createElement("dd");
+      rowDd.textContent = dd;
+      stats.append(rowDt, rowDd);
+    }
+    card.appendChild(stats);
+
+    const logSnippet = document.createElement("div");
+    logSnippet.className = "gameover-log";
+    logSnippet.innerHTML = "<h3>Últimos eventos</h3>";
+    const logList = document.createElement("ul");
+    for (const line of s.log.slice(-6).reverse()) {
+      const li = document.createElement("li");
+      li.textContent = line;
+      logList.appendChild(li);
+    }
+    logSnippet.appendChild(logList);
+    card.appendChild(logSnippet);
+
+    const btns = document.createElement("div");
+    btns.className = "menu-actions";
+
+    const again = document.createElement("button");
+    again.type = "button";
+    again.textContent =
+      s.cpuPlayer !== null ? "Jogar de novo vs CPU" : "Nova partida (2 jogadores)";
+    again.onclick = () => this.startGame(this.lastCpuPlayer, this.lastTestMode);
+    btns.appendChild(again);
+
+    const menu = document.createElement("button");
+    menu.type = "button";
+    menu.className = "secondary";
+    menu.textContent = "Menu principal";
+    menu.onclick = () => this.returnToMenu();
+    btns.appendChild(menu);
+
+    card.appendChild(btns);
+    screen.appendChild(card);
+    this.root.appendChild(screen);
+  }
+
+  private winnerHeadline(s: GameState): string {
+    if (s.winner === null) return "Partida encerrada";
+    if (s.cpuPlayer === null) return `Jogador ${s.winner + 1} venceu!`;
+    const human = this.humanPlayer(s);
+    return s.winner === human ? "Você venceu!" : "CPU venceu!";
   }
 
   private arenaSetupContext(s: GameState): {
@@ -297,7 +667,9 @@ export class GameApp {
       btn.type = "button";
       btn.className = "setup-card";
       btn.innerHTML = `<span class="setup-card__name">${c.label}</span><span class="setup-card__fx">${c.desc}</span>`;
+      btn.disabled = !this.canControlPlayer(s, player);
       btn.onclick = () => {
+        if (!this.canControlPlayer(s, player)) return;
         this.dispatchAction({ type: "POST_PHASE_CHOICE", player, choice: c.id });
       };
       grid.appendChild(btn);
@@ -331,8 +703,9 @@ export class GameApp {
       if (taken) btn.classList.add("taken");
       const effectHint = describeArenaEffect(arena.effect);
       btn.innerHTML = `<span class="setup-card__name">${arena.name}</span><span class="setup-card__fx">${effectHint}</span>`;
-      btn.disabled = taken;
+      btn.disabled = taken || !this.canControlPlayer(s, ctx.player);
       btn.onclick = () => {
+        if (!this.canControlPlayer(s, ctx.player)) return;
         this.dispatchAction({ type: "SELECT_ARENA", player: ctx.player, arenaId: arena.id });
       };
       grid.appendChild(btn);
@@ -380,8 +753,10 @@ export class GameApp {
 
     const confirm = document.createElement("button");
     confirm.textContent = `Confirmar mulligan (${this.selection.mulliganIndices.size})`;
-    confirm.disabled = this.selection.mulliganIndices.size === 0;
+    const canMulligan = this.canControlPlayer(s, player);
+    confirm.disabled = this.selection.mulliganIndices.size === 0 || !canMulligan;
     confirm.onclick = () => {
+      if (!canMulligan) return;
       const indices = [...this.selection.mulliganIndices];
       this.selection.mulliganIndices = new Set();
       this.dispatchAction({ type: "MULLIGAN", player, handIndices: indices });
@@ -390,7 +765,9 @@ export class GameApp {
     const skip = document.createElement("button");
     skip.className = "secondary";
     skip.textContent = "Manter mão";
+    skip.disabled = !canMulligan;
     skip.onclick = () => {
+      if (!canMulligan) return;
       this.selection.mulliganIndices = new Set();
       this.dispatchAction({ type: "SKIP_MULLIGAN", player });
     };
@@ -436,10 +813,14 @@ export class GameApp {
     let phase: string;
     if (s.combat) {
       const arenaName = s.arenas.find((a) => a.id === s.combat!.arenaId)?.name ?? "?";
-      const assignP = getCombatAssigningPlayer(s.combat);
-      const role =
-        assignP === s.combat.declaredBy ? "atacante" : "defensor";
-      phase = `Combate em ${arenaName} · golpe ${s.combat.strike} · J${assignP + 1} (${role}) — um ataque por vez`;
+      if (s.combat.subPhase === "magic") {
+        phase = `Combate em ${arenaName} · fase de magias ${s.combat.magicWindow} (antes do golpe ${s.combat.strike}) — lance magias ou passe`;
+      } else {
+        const assignP = getCombatAssigningPlayer(s.combat);
+        const role =
+          assignP === s.combat.declaredBy ? "atacante" : "defensor";
+        phase = `Combate em ${arenaName} · golpe ${s.combat.strike} · J${assignP + 1} (${role}) — um ataque por vez`;
+      }
     } else {
       phase = `${phaseDisplayName(s.gamePhase)} · Turno ${s.turnNumber} · Jogador ${s.activePlayer + 1} · ${phaseLabel[s.turnPhase] ?? s.turnPhase}`;
     }
@@ -593,15 +974,20 @@ export class GameApp {
         s.matchPhase === "playing" &&
         s.turnPhase === "main" &&
         !s.combat &&
-        s.activePlayer !== null;
-      if (canDrop && arena.dominatedBy === null) {
-        el.classList.add("drop-zone");
-        bindDropZone(el, { kind: "arena", player: s.activePlayer, arenaId: arena.id }, (p, z) =>
-          this.handleCardDrop(p, z),
+        arena.dominatedBy === null;
+      if (canDrop) {
+        field.classList.add("drop-zone");
+        bindDropZone(
+          field,
+          { kind: "arena", player: s.activePlayer, arenaId: arena.id },
+          (p, z) => this.handleCardDrop(p, z),
         );
       }
 
-      el.onclick = () => this.onArenaClick(arena.id);
+      el.addEventListener("click", (e) => {
+        if ((e.target as HTMLElement).closest(".arena-field")) return;
+        this.onArenaClick(arena.id);
+      });
       row.appendChild(el);
     }
     return row;
@@ -619,22 +1005,35 @@ export class GameApp {
   private renderHand(s: GameState, player: PlayerId): HTMLElement {
     const bar = document.createElement("div");
     bar.className = "hand-bar";
-    const human = this.humanPlayer(s);
-    const hiddenHand = s.cpuPlayer !== null && player !== human;
+    const hiddenHand = this.isCpuPlayer(s, player);
     const isActive = s.activePlayer === player && s.matchPhase === "playing";
     const pl = s.players[player];
-    const canDragHand =
-      !hiddenHand && isActive && !s.combat && s.turnPhase === "main" && player === human;
+    const canInteractHand =
+      !hiddenHand &&
+      s.matchPhase === "playing" &&
+      (s.turnPhase === "main" || s.turnPhase === "combat");
 
     const handCount = pl.hand.length;
-    bar.innerHTML = `<strong>Mão — Jogador ${player + 1}${hiddenHand ? ` (${handCount} cartas ocultas)` : ""}</strong>${isActive && player === human ? " ◀ SUA VEZ" : isActive ? " ◀ vez da CPU" : ""}`;
+    const turnTag =
+      isActive && this.canControlPlayer(s, player)
+        ? " ◀ SUA VEZ"
+        : isActive && hiddenHand
+          ? " ◀ vez da CPU"
+          : isActive
+            ? ` ◀ vez do J${player + 1}`
+            : "";
+    bar.innerHTML = `<strong>Mão — Jogador ${player + 1}${hiddenHand ? ` (${handCount} cartas ocultas)` : ""}</strong>${turnTag}`;
 
-    if (isActive && !s.combat) {
+    if (canInteractHand && (!this.isCpuPlayer(s, player) || this.canControlPlayer(s, player))) {
       const tip = document.createElement("p");
       tip.className = "mulligan-hint";
-      tip.textContent = pl.sacrificedThisTurn
-        ? "Arraste para a base para jogar. Essência já usada neste turno."
-        : "Arraste → base (jogar) · poço ✦ (Essência) · botão direito ✦ na carta.";
+      tip.textContent = this.selection.spellInstanceId
+        ? "Magia selecionada — clique em uma tropa válida no campo."
+        : isCombatMagicPhase(s)
+          ? "Fase de magias: Padrão/Combate/Rápidas — clique na MAGIA e no alvo, ou Passe."
+          : pl.sacrificedThisTurn
+            ? "Arraste tropas → base · MAGIA (Padrão no turno; Rápida a qualquer hora)."
+            : "Arraste tropas → base · MAGIA: clique na carta e no alvo · ✦ no poço.";
       bar.appendChild(tip);
     }
 
@@ -650,6 +1049,12 @@ export class GameApp {
 
       if (!def && !hiddenHand) return;
 
+      const isSpell = isSpellCard(def);
+      const canSelectSpell =
+        isSpell &&
+        canInteractHand &&
+        !this.isCpuPlayer(s, player) &&
+        canPlaySpellNow(s, player, def!);
       const chip = hiddenHand
         ? createHiddenCardEl(false)
         : cardFromDef(def!, {
@@ -657,11 +1062,28 @@ export class GameApp {
             attack: def!.attack,
             health: def!.health,
             hasEssenceSymbol: def!.hasEssenceSymbol,
+            selected: this.selection.spellInstanceId === troopId,
+            onClick: canSelectSpell
+              ? () => {
+                  this.selection.spellInstanceId =
+                    this.selection.spellInstanceId === troopId ? null : troopId;
+                  this.selection.troopId = null;
+                  this.render();
+                }
+              : undefined,
           });
+
+      const canDragHand =
+        canInteractHand &&
+        !isSpell &&
+        isActive &&
+        s.turnPhase === "main" &&
+        !s.combat &&
+        this.canControlPlayer(s, player);
 
       if (canDragHand && !hiddenHand) {
         setCardDraggable(chip, { kind: "hand", troopId }, true);
-        if (def.hasEssenceSymbol && !pl.sacrificedThisTurn) {
+        if (def!.hasEssenceSymbol && !pl.sacrificedThisTurn) {
           chip.addEventListener("contextmenu", (e) => {
             e.preventDefault();
             this.dispatchAction({ type: "SACRIFICE_ESSENCE", troopId });
@@ -687,24 +1109,79 @@ export class GameApp {
     const btns = document.createElement("div");
     btns.className = "actions";
 
+    const active = s.activePlayer;
     const human = this.humanPlayer(s);
-    const canAct = s.matchPhase === "playing" && s.activePlayer === human;
+    const canAct =
+      s.matchPhase === "playing" && this.canControlPlayer(s, active);
 
-    if (s.combat) {
+    if (this.selection.spellInstanceId && s.matchPhase === "playing") {
+      const spellInst = s.troops[this.selection.spellInstanceId];
+      const spellDef = spellInst ? s.catalog[spellInst.cardId] : undefined;
+      if (spellInst?.owner === human && spellDef?.spellEffect) {
+        const spellHint = document.createElement("p");
+        spellHint.className = "mulligan-hint";
+        spellHint.style.color = "#c4b5fd";
+        spellHint.textContent = `${spellDef.name}: ${describeSpellEffect(spellDef.spellEffect)} — clique no alvo.`;
+        actions.appendChild(spellHint);
+
+        const cancelSpell = document.createElement("button");
+        cancelSpell.className = "secondary";
+        cancelSpell.textContent = "Cancelar magia";
+        cancelSpell.onclick = () => {
+          this.selection.spellInstanceId = null;
+          this.render();
+        };
+        btns.appendChild(cancelSpell);
+      }
+    }
+
+    if (
+      s.cpuPlayer !== null &&
+      s.matchPhase === "playing" &&
+      this.humanHasFastSpellInHand(s) &&
+      (cpuControlsPhase(s, s.cpuPlayer) || s.combat !== null)
+    ) {
+      const fastBtn = document.createElement("button");
+      fastBtn.className = "secondary";
+      fastBtn.textContent = "Acelerar CPU (0,5 s)";
+      fastBtn.onclick = () => this.requestCpuFastDelay();
+      btns.appendChild(fastBtn);
+    }
+
+    if (s.combat && isCombatMagicPhase(s)) {
+      const magicHint = document.createElement("p");
+      magicHint.className = "mulligan-hint";
+      magicHint.style.color = "#c4b5fd";
+      magicHint.textContent =
+        "Fase de magias: Padrão, Combate e Rápidas. Só Combate não pode ser usada fora do combate. Ambos passam para iniciar o golpe.";
+      actions.appendChild(magicHint);
+
+      for (const p of [0, 1] as PlayerId[]) {
+        if (s.combat!.magicPassed[p]) continue;
+        if (!this.canControlPlayer(s, p)) continue;
+        const passBtn = document.createElement("button");
+        passBtn.className = p === 1 ? "secondary" : "";
+        passBtn.textContent = `Jogador ${p + 1} — passar magias`;
+        passBtn.onclick = () =>
+          this.dispatchAction({ type: "PASS_COMBAT_MAGIC", player: p });
+        btns.appendChild(passBtn);
+      }
+    } else if (s.combat && isCombatStrikePhase(s)) {
       const combatHint = document.createElement("p");
       combatHint.className = "mulligan-hint";
       const striker = getCombatAssigningPlayer(s.combat);
-      combatHint.textContent =
-        striker === human
-          ? "Combate: selecione sua tropa e clique no inimigo. Quando todas atacarem, passa a vez automaticamente."
-          : "Combate: vez da CPU…";
+      combatHint.textContent = this.canControlPlayer(s, striker)
+        ? "Golpe de combate: selecione sua tropa e clique no inimigo."
+        : this.isCpuPlayer(s, striker)
+          ? "Combate: vez da CPU…"
+          : `Combate: vez do Jogador ${striker + 1}…`;
       actions.appendChild(combatHint);
     } else if (canAct && s.turnPhase === "main" && !s.combat) {
       const essencePanel = document.createElement("div");
       essencePanel.className = "essence-panel";
       essencePanel.innerHTML = `
         <p><strong>Espaço de Essência</strong></p>
-        <p class="essence-count">${getAvailableEssence(s, s.activePlayer).length} pronta(s) / ${getPlayerEssence(s, s.activePlayer).length} total</p>
+        <p class="essence-count">${getAvailableEssence(s, active).length} pronta(s) / ${getPlayerEssence(s, active).length} total</p>
         <p class="mulligan-hint">Ao jogar tropas, Essência fica deitada (exausta) e desvira na preparação.</p>
       `;
       actions.appendChild(essencePanel);
@@ -720,7 +1197,9 @@ export class GameApp {
       };
       btns.appendChild(combatBtn);
 
-      const contested = getContestedArenaNames(s, s.activePlayer);
+      const contested = getContestedArenaNames(s, active);
+      const rrUnanswered =
+        s.gamePhase === "reino-reverso" ? getRRUnansweredArenaNames(s, active) : [];
       const endBtn = document.createElement("button");
       endBtn.className = "secondary";
       endBtn.textContent = "Fim de turno";
@@ -733,6 +1212,12 @@ export class GameApp {
         warn.style.color = "#e85d5d";
         warn.textContent = `Combate obrigatório em: ${contested.join(", ")}`;
         actions.appendChild(warn);
+      } else if (rrUnanswered.length > 0) {
+        const warn = document.createElement("p");
+        warn.className = "mulligan-hint";
+        warn.style.color = "#e85d5d";
+        warn.textContent = `Responda em ${rrUnanswered.join(", ")} ou seu Líder leva 1 de dano ao encerrar o turno.`;
+        actions.appendChild(warn);
       }
     }
 
@@ -740,7 +1225,9 @@ export class GameApp {
     hint.className = "mulligan-hint";
     hint.textContent = s.combat
       ? "Um ataque por vez; alvo morto não revida."
-      : "Arraste cartas/tropas · arena contestada = declare combate antes do fim de turno.";
+      : s.gamePhase === "reino-reverso"
+        ? "RR: tropas inimigas na arena sem resposta = 1 de dano no Líder ao fim do turno; ambos presentes = declare combate."
+        : "Arraste cartas/tropas · arena contestada = declare combate antes do fim de turno.";
     actions.append(btns, hint);
     side.appendChild(actions);
 
@@ -804,7 +1291,7 @@ export class GameApp {
     let selected = this.selection.troopId === troop.instanceId;
     let subLabel: string | undefined;
 
-    if (inCombatArena && combat) {
+    if (inCombatArena && combat && isCombatStrikePhase(s)) {
       const assigningPlayer = getCombatAssigningPlayer(combat);
       const alreadyAttacked = hasAttackedThisStrike(combat, troop.instanceId);
       const randomTargets = arenaUsesRandomCombatTargets(s, combat.arenaId);
@@ -813,7 +1300,7 @@ export class GameApp {
         if (alreadyAttacked) subLabel = "já atacou";
         else if (randomTargets) subLabel = "clique para atacar (alvo aleatório)";
         else if (this.selection.troopId === troop.instanceId) subLabel = "escolha alvo";
-        if (!alreadyAttacked) {
+        if (!alreadyAttacked && this.canControlPlayer(s, assigningPlayer)) {
           onClick = (e) => {
             e.stopPropagation();
             if (randomTargets) {
@@ -832,7 +1319,7 @@ export class GameApp {
             this.render();
           };
         }
-      } else if (!randomTargets) {
+      } else if (!randomTargets && this.canControlPlayer(s, assigningPlayer)) {
         const attackerId = this.selection.troopId;
         const attacker = attackerId ? s.troops[attackerId] : null;
         if (
@@ -851,15 +1338,37 @@ export class GameApp {
         }
       }
     } else {
-      const canDragTroop =
-        s.matchPhase === "playing" &&
-        s.activePlayer === troop.owner &&
-        s.turnPhase === "main" &&
-        !troop.pinned &&
-        !troop.exhausted;
-
-      if (canDragTroop) {
+      if (this.canDragTroopsOnField(s, troop)) {
         // drag configurado após criar chip
+      }
+    }
+
+    if (troop.attachedSpell && !subLabel) {
+      subLabel = spellEffectLabel(troop.attachedSpell);
+    }
+
+    const spellTargeting =
+      this.selection.spellInstanceId &&
+      s.matchPhase === "playing" &&
+      (s.turnPhase === "main" || s.turnPhase === "combat") &&
+      (troop.zone === "base" || troop.zone === "arena") &&
+      troop.currentHealth > 0;
+
+    if (spellTargeting) {
+      const spellInst = s.troops[this.selection.spellInstanceId!];
+      const spellDef = spellInst ? s.catalog[spellInst.cardId] : undefined;
+      const caster = spellInst?.owner ?? s.activePlayer;
+      if (
+        spellDef &&
+        canPlaySpellNow(s, caster, spellDef) &&
+        canTargetSpell(s, caster, spellDef, troop)
+      ) {
+        const spellClick = (e: MouseEvent) => {
+          e.stopPropagation();
+          this.tryCastSelectedSpell(troop.instanceId);
+        };
+        onClick = spellClick;
+        subLabel = subLabel ? `${subLabel} · alvo` : "clique — alvo da magia";
       }
     }
 
@@ -871,7 +1380,22 @@ export class GameApp {
           compact: true,
           exhausted: troop.exhausted,
           pinned: troop.pinned,
-          selected,
+          selected:
+            selected ||
+            Boolean(
+              spellTargeting &&
+                this.selection.spellInstanceId &&
+                (() => {
+                  const si = s.troops[this.selection.spellInstanceId!];
+                  const sd = si ? s.catalog[si.cardId] : undefined;
+                  return (
+                    !!si &&
+                    !!sd &&
+                    canPlaySpellNow(s, si.owner, sd) &&
+                    canTargetSpell(s, si.owner, sd, troop)
+                  );
+                })(),
+            ),
           subLabel,
           onClick,
         })
@@ -888,14 +1412,7 @@ export class GameApp {
       }
     }
 
-    if (
-      !inCombatArena &&
-      s.matchPhase === "playing" &&
-      s.activePlayer === troop.owner &&
-      s.turnPhase === "main" &&
-      !troop.pinned &&
-      !troop.exhausted
-    ) {
+    if (!inCombatArena && this.canDragTroopsOnField(s, troop)) {
       setCardDraggable(chip, { kind: "troop", troopId: troop.instanceId }, true);
     }
 

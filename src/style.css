@@ -323,6 +323,15 @@ h1 {
   background: rgba(124, 92, 191, 0.12);
 }
 
+/* Durante arraste, filhos não roubam hit-test — drop na base/arena cheia funciona. */
+body.is-dragging-card .drop-zone * {
+  pointer-events: none;
+}
+
+body.is-dragging-card .drop-zone {
+  pointer-events: auto;
+}
+
 .arena.drop-target {
   box-shadow: 0 0 0 2px rgba(124, 92, 191, 0.55);
 }
@@ -728,4 +737,153 @@ button.danger {
 
 .troop-slots {
   min-height: 2rem;
+}
+
+header {
+  position: relative;
+}
+
+.menu-back-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.menu-screen,
+.gameover-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: min(72vh, 640px);
+  padding: 1.5rem 0;
+}
+
+.menu-card,
+.gameover-card {
+  width: min(100%, 480px);
+  text-align: center;
+}
+
+.menu-test {
+  margin-top: 1.25rem;
+  max-width: 28rem;
+}
+
+.menu-test__title {
+  font-size: 1rem;
+  margin: 0 0 0.35rem;
+  color: var(--text);
+}
+
+.menu-tagline {
+  color: var(--muted);
+  margin: 0 0 1.5rem;
+  line-height: 1.45;
+}
+
+.menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.menu-actions button {
+  width: 100%;
+}
+
+.gameover-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0 0 0.35rem;
+}
+
+.gameover-title {
+  font-size: 1.75rem;
+  margin: 0 0 0.5rem;
+  color: var(--success);
+}
+
+.gameover-reason {
+  color: var(--muted);
+  margin: 0 0 1.25rem;
+}
+
+.gameover-stats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  text-align: left;
+  margin: 0 auto 1.25rem;
+  max-width: 320px;
+  font-size: 0.9rem;
+}
+
+.gameover-stats dt {
+  color: var(--muted);
+  margin: 0;
+}
+
+.gameover-stats dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.gameover-log {
+  text-align: left;
+  margin-bottom: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.gameover-log h3 {
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+}
+
+.gameover-log ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.gameover-log li + li {
+  margin-top: 0.35rem;
+}
+
+.game-card--spell {
+  border-color: #9b6bd4;
+  background: linear-gradient(165deg, #2a1f3d 0%, #1a1824 55%);
+  min-height: 7.5rem;
+}
+
+.game-card--spell.game-card--compact {
+  min-height: 5.5rem;
+}
+
+.game-card__spell-badge {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #e8d4ff;
+  background: rgba(124, 92, 191, 0.55);
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+}
+
+.game-card__spell-fx {
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--muted);
+  padding: 0.25rem 0.4rem 0.4rem;
+  text-align: left;
 }

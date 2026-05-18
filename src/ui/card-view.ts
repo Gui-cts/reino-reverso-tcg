@@ -1,3 +1,4 @@
+import { describeSpellEffect, getCardSpeed, isSpellCard, speedLabel } from "../game/spells";
 import type { CardDefinition } from "../game/types";
 import { getCardArtUrl } from "../game/card-art";
 
@@ -143,7 +144,63 @@ export function createCardEl(name: string, opts: CardViewOptions = {}): HTMLElem
   return el;
 }
 
+function createSpellCardEl(def: CardDefinition, opts: CardViewOptions = {}): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "game-card game-card--spell";
+  if (opts.compact) el.classList.add("game-card--compact");
+  if (opts.selected) el.classList.add("selected");
+  if (opts.mulliganPick) el.classList.add("mulligan-pick");
+
+  const badge = document.createElement("span");
+  badge.className = "game-card__spell-badge";
+  badge.textContent = `MAGIA · ${speedLabel(getCardSpeed(def))}`;
+  el.appendChild(badge);
+
+  if (opts.cost !== undefined) {
+    const cost = document.createElement("span");
+    cost.className = "game-card__cost";
+    cost.textContent = String(opts.cost);
+    el.appendChild(cost);
+  }
+
+  if (opts.imageUrl) {
+    appendCardArt(el, opts.imageUrl, def.name);
+  }
+
+  const nameRow = document.createElement("div");
+  nameRow.className = "game-card__name";
+  nameRow.textContent = def.name;
+  el.appendChild(nameRow);
+
+  const fx = document.createElement("div");
+  fx.className = "game-card__spell-fx";
+  fx.textContent =
+    def.spellEffect ? describeSpellEffect(def.spellEffect) : opts.subLabel ?? "";
+  el.appendChild(fx);
+
+  if (opts.subLabel && def.spellEffect) {
+    const sub = document.createElement("div");
+    sub.className = "game-card__sub";
+    sub.textContent = opts.subLabel;
+    el.appendChild(sub);
+  }
+
+  if (opts.onClick) {
+    el.classList.add("game-card--interactive");
+    el.addEventListener("click", opts.onClick);
+  }
+
+  return el;
+}
+
 export function cardFromDef(def: CardDefinition, opts: CardViewOptions = {}): HTMLElement {
+  if (isSpellCard(def)) {
+    return createSpellCardEl(def, {
+      cost: def.cost,
+      imageUrl: getCardArtUrl(def),
+      ...opts,
+    });
+  }
   return createCardEl(def.name, {
     cost: def.cost,
     attack: def.attack,

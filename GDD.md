@@ -76,6 +76,7 @@ flowchart LR
 |------|--------|
 | **Baralho** | Compra |
 | **Mão** | Cartas jogáveis |
+| **Deck esgotado** | Se precisar comprar e o baralho não tiver cartas suficientes → **derrota automática** |
 | **Base** | Zona segura; tropas entram exaustas ao ser convocadas |
 | **Arena** | Combate e conquista; máx. 3 tropas por jogador |
 | **Espaço de Essência** | Cartas convertidas/sacrificadas viram mana (exiladas, visíveis) |
@@ -218,7 +219,8 @@ Com **2 pontos** na mesma arena → **conquista**.
 | Tropas sobreviventes | **Destruídas** ao fim do combate (não voltam à base), independente do vencedor |
 | Fluxo | Deathmatch — combates repetem até um Líder a **0** |
 | **Vácuo** | Ao **fim de cada combate**, se não houver tropa na sua **base** → **1** de dano no seu Líder |
-| Dano máximo / round | Até **2** no Líder (1 vitória + 1 vácuo) |
+| **Pressão na arena** | Se o oponente tem tropa na arena e você **não** tem, ao **encerrar seu turno** seu Líder leva **1** de dano (evita empate infinito na base) |
+| Dano máximo / round | Até **2** no Líder (1 vitória + 1 vácuo); pressão na arena é dano **extra** fora do combate |
 | Iniciativa | Começa quem **venceu o Abismo** |
 
 ---
@@ -242,7 +244,7 @@ Com **2 pontos** na mesma arena → **conquista**.
 | **Colégio Aurélio de Camargo** | Ao dominar: embaralha **Susej — o arauto da ignorância** no baralho (carta em desenvolvimento) |
 | **Ringue do Colecionador** | Ao declarar combate: uma tropa aleatória na arena ganha **+1/+1 permanente** |
 | **Mansão dos Omegas** | Ao dominar: compra **2** cartas |
-| **Sanatório São Augustinho** | Após cada golpe de ataque: **1 de dano** em todas as tropas remanescentes na arena |
+| **Sanatório São Augustinho** | Ao **fim de cada golpe** (rodada de ataques): **1 de dano** em todas as tropas vivas na arena — inclusive no golpe que encerra o combate |
 | **Templo das Sombras** | Conquista com **3** pontos; ao dominar: **+1 Corrupção** (máx. 3) |
 
 ### 10.3 Arenas do Abismo (protótipo)
@@ -274,12 +276,39 @@ Pool de **4** arenas; vencedor do Abismo escolhe **1** e **começa** a fase.
 | Tipo | Status |
 |------|--------|
 | **Tropa** | v1 — ataque, vida, custo em Essência; algumas com ✦ |
-| **Magia** | Planejado (ex.: Pacto de Cobre, Colapso de Arena…) |
+| **Magia** | Piloto v1 — Encore, Pele de Ferro, Caldeirão de Sangue (ver §11.1) |
 | **Artefato** | Planejado (ex.: Poço de Essência, Estandarte…) |
 | **Equipamento** | Planejado (ex.: Espada do Noah, Canino de Gelo e Chamas…) |
 | **Líder** | Fora do campo; define baralho |
 
 Recursos planejados além de Essência: **Corrupção** (cartas mais agressivas).
+
+### 11.1 Velocidades de carta
+
+| Velocidade | Quando pode jogar |
+|------------|-------------------|
+| **Padrão** | No **seu turno** (fase principal) **ou** nas **fases de magia** do combate |
+| **Combate** | **Somente** nas fases de magia do combate (não no turno normal) |
+| **Rápida** | Qualquer momento (seu turno, turno do adversário, fase de magias ou golpe de combate) |
+
+### 11.2 Fluxo de combate (com fases de magia)
+
+1. Combate declarado → **Fase de magias 1** (ambos passam ou lançam magias)
+2. **Golpe 1** (ataques alternados)
+3. **Fase de magias 2** → **Golpe 2** → … até o fim
+
+### 11.3 Magias piloto (protótipo)
+
+| Magia | Velocidade | Custo | Alvo | Efeito |
+|-------|------------|-------|------|--------|
+| **Encore** | Padrão | 2 | Tropa aliada (base no turno; arena no combate) | Se atacada: 1d6 ímpar = ataque erra |
+| **Pele de Ferro** | Padrão | 2 | Tropa aliada | +2 vida permanente |
+| **Caldeirão de Sangue** | Combate | 3 | Tropa inimiga **só na arena** do combate | 1d6 par = 2 de dano |
+| **Lufada de Vento** | Rápida | 2 | Tropa na arena (aliada ou inimiga) | Volta à **base do dono**, exausta |
+
+- Uma aura por tropa (Encore / Pele não empilham).
+- Lufada exige espaço na base do dono da tropa (máx. 3).
+- Bar do João bloqueia magias na arena durante todo o combate.
 
 ---
 
@@ -305,7 +334,8 @@ Checklist do que o código atual cobre:
 - [x] Escolha pós-fase (Essência / Corrupção / Reciclar)
 - [x] Draft de arenas do Abismo (vencedor 2 + perdedor 1) e RR (vencedor 1)
 - [x] Reino Reverso: dano ao Líder ao vencer combate, tropas à base, vácuo
-- [ ] Magias e gasto de Corrupção em cartas
+- [x] Magias piloto (Encore, Pele de Ferro, Caldeirão de Sangue)
+- [ ] Gasto de Corrupção em cartas
 
 Fora do protótipo atual:
 

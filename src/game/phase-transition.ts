@@ -346,3 +346,19 @@ export function applyLeaderDamage(
 ): GameState {
   return applyLeaderDamageTo(state, opponent(attacker), damage, reason, attacker);
 }
+
+/** Deck esgotado ao tentar comprar — derrota automática. */
+export function applyDeckoutLoss(state: GameState, player: PlayerId): GameState {
+  if (state.matchPhase === "finished") return state;
+  const winner = opponent(player);
+  return {
+    ...state,
+    matchPhase: "finished",
+    winner,
+    winReason: "Deck esgotado",
+    log: appendLog(
+      state,
+      `Jogador ${player + 1} não pôde comprar (deck vazio) — Jogador ${winner + 1} vence!`,
+    ),
+  };
+}

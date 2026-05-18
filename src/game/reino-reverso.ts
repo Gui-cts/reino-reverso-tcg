@@ -8,6 +8,41 @@ import {
 import { applyLeaderDamage, applyLeaderDamageTo } from "./phase-transition";
 import type { ArenaEffectId, GameState, PlayerId } from "./types";
 
+/** Arenas em que o oponente está presente e você não (pressão no RR). */
+export function getRRUnansweredArenaNames(state: GameState, player: PlayerId): string[] {
+  if (state.gamePhase !== "reino-reverso" || state.matchPhase !== "playing") {
+    return [];
+  }
+  const other = opponent(player);
+  return state.arenas
+    .filter((a) => {
+      if (a.dominatedBy !== null) return false;
+      const enemyPresent = countTroopsInZone(state, other, "arena", a.id) > 0;
+      const selfPresent = countTroopsInZone(state, player, "arena", a.id) > 0;
+      return enemyPresent && !selfPresent;
+    })
+    .map((a) => a.name);
+}
+
+/** Fim de turno no RR: não contestar a arena custa 1 de dano no Líder. */
+export function applyRRNonResponsePenaltyAtEndTurn(
+  state: GameState,
+  player: PlayerId,
+): GameState {
+  const arenas = getRRUnansweredArenaNames(state, player);
+  if (arenas.length === 0) return state;
+
+  const pressurer = opponent(player);
+  const label = arenas.join(", ");
+  return applyLeaderDamageTo(
+    state,
+    player,
+    1,
+    `Reino Reverso (${label}) — Jogador ${player + 1} não respondeu na arena: 1 de dano no Líder.`,
+    pressurer,
+  );
+}
+
 function vacuumDamageForArena(effect: ArenaEffectId): number {
   return effect === "rr-vacuum-2" ? 2 : 1;
 }

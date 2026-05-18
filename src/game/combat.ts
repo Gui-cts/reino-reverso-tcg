@@ -6,6 +6,7 @@ import {
   sanatorioPingAfterStrike,
 } from "./arena-effects";
 import { finalizeReinoReversoCombat } from "./reino-reverso";
+import { resolveEncoreBeforeAttack } from "./spells";
 
 function livingTroops(troops: TroopInstance[]): TroopInstance[] {
   return troops.filter((t) => t.currentHealth > 0);
@@ -25,6 +26,14 @@ function applyDamage(
 /** Jogador que está atacando neste golpe de combate. */
 export function getCombatAssigningPlayer(combat: CombatState): PlayerId {
   return combat.strikingPlayer;
+}
+
+export function isCombatMagicPhase(state: GameState): boolean {
+  return state.combat?.subPhase === "magic";
+}
+
+export function isCombatStrikePhase(state: GameState): boolean {
+  return state.combat?.subPhase === "strike";
 }
 
 export function hasAttackedThisStrike(combat: CombatState, troopId: string): boolean {
@@ -57,7 +66,7 @@ export function allStrikeTroopsAttacked(state: GameState, player: PlayerId): boo
 }
 
 function tryAutoEndStrike(state: GameState): GameState {
-  if (!state.combat) return state;
+  if (!state.combat || state.combat.subPhase !== "strike") return state;
   const striker = state.combat.strikingPlayer;
   if (!allStrikeTroopsAttacked(state, striker)) return state;
   return endCombatStrike({
@@ -90,7 +99,28 @@ function finishCombatWithWinner(
   return endCombat(state, message);
 }
 
-function checkCombatEndAfterDamage(
+function isSanatorioArena(state: GameState, arenaId: string): boolean {
+  return getArena(state, arenaId).effect === "ping-after-strike";
+}
+
+function combatWouldEnd(state: GameState, arenaId: string): boolean {
+  const p0 = livingTroops(getTroopsInZone(state, 0, "arena", arenaId));
+  const p1 = livingTroops(getTroopsInZone(state, 1, "arena", arenaId));
+  return p0.length === 0 || p1.length === 0;
+}
+
+function applySanatorioIfStrikeEndsCombat(
+  state: GameState,
+  arenaId: string,
+  strikingPlayer: PlayerId,
+): GameState {
+  if (!state.combat || !isSanatorioArena(state, arenaId)) return state;
+  if (!allStrikeTroopsAttacked(state, strikingPlayer)) return state;
+  if (!combatWouldEnd(state, arenaId)) return state;
+  return sanatorioPingAfterStrike(state, arenaId);
+}
+
+export function checkCombatEndAfterDamage(
   state: GameState,
   arenaId: string,
   messagePrefix: string,
@@ -117,20 +147,100 @@ function checkCombatEndAfterDamage(
   return state;
 }
 
+function beginCombatStrikePhase(state: GameState): GameState {
+  if (!state.combat) return state;
+  const combat = state.combat;
+  const arena = getArena(state, combat.arenaId);
+  const role =
+    combat.strikingPlayer === combat.declaredBy ? "atacante" : "defensor";
+
+  return {
+    ...state,
+    combat: {
+      ...combat,
+      subPhase: "strike",
+      magicPassed: [false, false],
+      attackedThisStrike: [],
+    },
+    log: appendLog(
+      state,
+      `Golpe ${combat.strike} em ${arena.name} — Jogador ${combat.strikingPlayer + 1} (${role}): um ataque por vez.`,
+    ),
+  };
+}
+
+function beginCombatMagicPhase(
+  state: GameState,
+  opts: { strike: number; strikingPlayer: PlayerId; magicWindow: number },
+): GameState {
+  if (!state.combat) return state;
+  const arena = getArena(state, opts.strike ? state.combat.arenaId : state.combat.arenaId);
+
+  return {
+    ...state,
+    combat: {
+      ...state.combat,
+      strike: opts.strike,
+      strikingPlayer: opts.strikingPlayer,
+      subPhase: "magic",
+      magicWindow: opts.magicWindow,
+      magicPassed: [false, false],
+      attackedThisStrike: [],
+    },
+    log: appendLog(
+      state,
+      `Fase de magias ${opts.magicWindow} (${arena.name}) — ambos podem lançar magias de combate/rápidas ou passar.`,
+    ),
+  };
+}
+
+/** Ambos passaram na fase de magias → inicia o golpe de ataques. */
+export function passCombatMagic(state: GameState, player: PlayerId): GameState {
+  if (!state.combat || state.combat.subPhase !== "magic") {
+    return { ...state, log: appendLog(state, "Não há fase de magias agora.") };
+  }
+
+  if (state.combat.magicPassed[player]) {
+    return {
+      ...state,
+      log: appendLog(state, `Jogador ${player + 1} já passou nesta fase de magias.`),
+    };
+  }
+
+  const magicPassed = [...state.combat.magicPassed] as [boolean, boolean];
+  magicPassed[player] = true;
+
+  let next: GameState = {
+    ...state,
+    combat: { ...state.combat, magicPassed },
+    log: appendLog(
+      state,
+      `Jogador ${player + 1} passou na fase de magias ${state.combat.magicWindow}.`,
+    ),
+  };
+
+  if (magicPassed[0] && magicPassed[1]) {
+    next = beginCombatStrikePhase(next);
+  }
+  return next;
+}
+
 function advanceToNextStrike(state: GameState): GameState {
   if (!state.combat) return state;
 
   const { arenaId, strikingPlayer, strike } = state.combat;
-  let stateAfterPing = sanatorioPingAfterStrike(state, arenaId);
+
+  let stateAfterPing = state;
+  if (isSanatorioArena(state, arenaId) && !combatWouldEnd(state, arenaId)) {
+    stateAfterPing = sanatorioPingAfterStrike(state, arenaId);
+  }
   stateAfterPing = checkCombatEndAfterDamage(
     stateAfterPing,
     arenaId,
     "Combate encerrado após efeito da arena",
   );
   if (!stateAfterPing.combat) return stateAfterPing;
-  const combat = stateAfterPing.combat;
 
-  const arena = getArena(stateAfterPing, arenaId);
   const nextStriker = opponent(strikingPlayer);
   const nextAllies = alliesInCombatArena(stateAfterPing, nextStriker);
 
@@ -143,29 +253,26 @@ function advanceToNextStrike(state: GameState): GameState {
     );
   }
 
-  const role = nextStriker === combat.declaredBy ? "atacante" : "defensor";
-  return {
-    ...stateAfterPing,
-    combat: {
-      ...combat,
-      strike: strike + 1,
-      strikingPlayer: nextStriker,
-      attackedThisStrike: [],
-    },
-    log: appendLog(
-      stateAfterPing,
-      `Golpe ${strike + 1} em ${arena.name} — Jogador ${nextStriker + 1} (${role}) ataca.`,
-    ),
-  };
+  const nextStrike = strike + 1;
+  return beginCombatMagicPhase(stateAfterPing, {
+    strike: nextStrike,
+    strikingPlayer: nextStriker,
+    magicWindow: nextStrike,
+  });
 }
 
-/** Um ataque por vez; revide só se o alvo ainda está vivo no momento do golpe. */
 export function executeCombatAttack(
   state: GameState,
   attackerId: string,
   targetId: string,
 ): GameState {
   if (!state.combat || state.turnPhase !== "combat") return state;
+  if (state.combat.subPhase !== "strike") {
+    return {
+      ...state,
+      log: appendLog(state, "Aguarde o fim da fase de magias para atacar."),
+    };
+  }
 
   const { arenaId, strikingPlayer, attackedThisStrike } = state.combat;
   const attacker = state.troops[attackerId];
@@ -206,8 +313,22 @@ export function executeCombatAttack(
     }
   }
 
-  const retaliate = target.attack;
-  let troops = { ...state.troops };
+  const encoreCheck = resolveEncoreBeforeAttack(state, attackerId, resolvedTargetId);
+  let nextAfterEncore = encoreCheck.state;
+  if (!encoreCheck.proceed) {
+    return tryAutoEndStrike(nextAfterEncore);
+  }
+
+  const targetAfterEncore = nextAfterEncore.troops[resolvedTargetId];
+  if (!targetAfterEncore || targetAfterEncore.currentHealth <= 0) {
+    return {
+      ...nextAfterEncore,
+      log: appendLog(nextAfterEncore, "Alvo inválido ou já destruído."),
+    };
+  }
+
+  const retaliate = targetAfterEncore.attack;
+  let troops = { ...nextAfterEncore.troops };
   troops = applyDamage(troops, resolvedTargetId, attacker.attack);
   troops = applyDamage(troops, attackerId, retaliate);
 
@@ -218,26 +339,29 @@ export function executeCombatAttack(
     : `${getTroopName(state, attacker)} atacou ${targetName} em ${arena.name} (troca de dano).`;
 
   let next: GameState = {
-    ...state,
+    ...nextAfterEncore,
     troops,
     combat: {
-      ...state.combat,
+      ...nextAfterEncore.combat!,
       attackedThisStrike: [...attackedThisStrike, attackerId],
     },
-    log: appendLog(state, attackLog),
+    log: appendLog(nextAfterEncore, attackLog),
   };
 
-  next = checkCombatEndAfterDamage(
-    next,
-    arenaId,
-    "Combate encerrado",
-  );
+  next = applySanatorioIfStrikeEndsCombat(next, arenaId, strikingPlayer);
+  next = checkCombatEndAfterDamage(next, arenaId, "Combate encerrado");
   if (!next.combat) return next;
   return tryAutoEndStrike(next);
 }
 
 export function endCombatStrike(state: GameState): GameState {
   if (!state.combat || state.turnPhase !== "combat") return state;
+  if (state.combat.subPhase !== "strike") {
+    return {
+      ...state,
+      log: appendLog(state, "Só é possível encerrar o golpe durante a fase de ataques."),
+    };
+  }
 
   const { strikingPlayer, strike } = state.combat;
   return advanceToNextStrike({
@@ -267,24 +391,30 @@ export function startCombat(state: GameState, arenaId: string): GameState {
   }
 
   const declaredBy = state.activePlayer;
-  let next = state;
   const combat: CombatState = {
     arenaId,
     strike: 1,
     declaredBy,
     strikingPlayer: declaredBy,
     attackedThisStrike: [],
+    subPhase: "magic",
+    magicWindow: 1,
+    magicPassed: [false, false],
   };
 
-  next = {
-    ...next,
+  let next: GameState = {
+    ...state,
     combat,
     turnPhase: "combat",
-    log: appendLog(
-      next,
-      `Combate em ${arena.name}! Golpe 1 — Jogador ${declaredBy + 1} (atacante): um ataque por vez.`,
-    ),
+    log: appendLog(state, `Combate declarado em ${arena.name}!`),
   };
 
-  return applyArenaOnCombatDeclared(next, arenaId);
+  next = applyArenaOnCombatDeclared(next, arenaId);
+  return {
+    ...next,
+    log: appendLog(
+      next,
+      `Fase de magias 1 (${arena.name}) — ambos podem lançar magias de combate/rápidas ou passar.`,
+    ),
+  };
 }

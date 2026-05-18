@@ -8,6 +8,8 @@ import type {
   PlayerState,
 } from "./types";
 import { arenasForPhase } from "./arenas";
+import { applyDeckoutLoss } from "./phase-transition";
+import { defaultTroopFields } from "./spells";
 import {
   INITIAL_HAND_SIZE,
   LEADER_MAX_HP,
@@ -29,7 +31,7 @@ function emptyPlayer(): PlayerState {
   };
 }
 
-function drawCards(
+export function drawCards(
   player: PlayerState,
   count: number,
   troops: GameState["troops"],
@@ -52,8 +54,7 @@ function drawCards(
       instanceId,
       cardId,
       owner,
-      currentHealth: def.health,
-      attack: def.attack,
+      ...defaultTroopFields(def),
       exhausted: false,
       pinned: false,
       zone: "hand",
@@ -69,7 +70,16 @@ function drawCards(
   };
 }
 
-export function createInitialGame(catalogData: CardCatalog): GameState {
+export type CreateGameOptions = {
+  /** `null` = hotseat (2 jogadores no mesmo teclado). */
+  cpuPlayer?: PlayerId | null;
+};
+
+export function createInitialGame(
+  catalogData: CardCatalog,
+  options: CreateGameOptions = {},
+): GameState {
+  const cpuPlayer = options.cpuPlayer ?? null;
   const catalog = buildCatalogMap(catalogData.cards);
   const deck0 = shuffle([...catalogData.starterDeck]);
   const deck1 = shuffle([...catalogData.starterDeck]);
@@ -101,7 +111,8 @@ export function createInitialGame(catalogData: CardCatalog): GameState {
     mulliganUsed: [false, false],
     phaseWinner: null,
     arenaSetupPicks: [],
-    cpuPlayer: 1,
+    cpuPlayer,
+    testMode: null,
   };
 
   let nextId = state.nextInstanceId;
@@ -160,6 +171,12 @@ export function drawFromDeck(
   player: PlayerId,
   count: number,
 ): GameState {
+  if (state.matchPhase === "finished" || count <= 0) return state;
+
+  if (state.players[player].deck.length < count) {
+    return applyDeckoutLoss(state, player);
+  }
+
   let next = state;
   let nextId = state.nextInstanceId;
   const pl = [...state.players] as [PlayerState, PlayerState];

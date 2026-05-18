@@ -3,6 +3,11 @@ export type DragPayload =
   | { kind: "troop"; troopId: string };
 
 const MIME = "application/x-reino-reverso";
+const DRAGGING_BODY_CLASS = "is-dragging-card";
+
+function setGlobalDragging(active: boolean): void {
+  document.body.classList.toggle(DRAGGING_BODY_CLASS, active);
+}
 
 export function setCardDraggable(
   el: HTMLElement,
@@ -22,10 +27,12 @@ export function setCardDraggable(
     dt.setData(MIME, JSON.stringify(payload));
     dt.effectAllowed = "move";
     el.classList.add("is-dragging");
+    setGlobalDragging(true);
   });
 
   el.addEventListener("dragend", () => {
     el.classList.remove("is-dragging");
+    setGlobalDragging(false);
     document.querySelectorAll(".drop-target").forEach((n) => n.classList.remove("drop-target"));
   });
 }
@@ -41,25 +48,26 @@ export type DropZoneInfo = {
 export function bindDropZone(
   el: HTMLElement,
   zone: DropZoneInfo,
-  onDrop: (payload: DragPayload, zone: DropZoneInfo) => void,
+  onCardDrop: (payload: DragPayload, zone: DropZoneInfo) => void,
 ): void {
   el.dataset.dropZone = zone.kind;
   if (zone.arenaId) el.dataset.arenaId = zone.arenaId;
   el.dataset.dropPlayer = String(zone.player);
 
-  el.addEventListener("dragover", (e) => {
+  const onDragOver = (e: DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
     el.classList.add("drop-target");
-  });
+  };
 
-  el.addEventListener("dragleave", (e) => {
-    if (e.currentTarget === e.target || !el.contains(e.relatedTarget as Node)) {
+  const onDragLeave = (e: DragEvent) => {
+    const related = e.relatedTarget as Node | null;
+    if (!related || !el.contains(related)) {
       el.classList.remove("drop-target");
     }
-  });
+  };
 
-  el.addEventListener("drop", (e) => {
+  const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     el.classList.remove("drop-target");
@@ -67,11 +75,16 @@ export function bindDropZone(
     if (!raw) return;
     try {
       const payload = JSON.parse(raw) as DragPayload;
-      onDrop(payload, zone);
+      onCardDrop(payload, zone);
     } catch {
       /* ignore */
     }
-  });
+  };
+
+  // Captura: soltar em cima de tropas/cartas filhas ainda acerta a zona (crítico no RR com arena única cheia).
+  el.addEventListener("dragover", onDragOver, true);
+  el.addEventListener("dragleave", onDragLeave, true);
+  el.addEventListener("drop", handleDrop, true);
 }
 
 export function readDragPayload(e: DragEvent): DragPayload | null {

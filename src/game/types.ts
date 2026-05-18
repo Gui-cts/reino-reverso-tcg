@@ -30,6 +30,15 @@ export type ArenaEffectId =
   | "rr-mutual-wipe-leader-damage"
   | "rr-loser-only-vacuum";
 
+export type CardKind = "troop" | "spell";
+
+/** Padrão = só no seu turno (main). Combate = main seu turno + janelas de magia no combate. Rápida = qualquer momento. */
+export type CardSpeed = "standard" | "combat" | "fast";
+
+export type SpellEffectId = "encore" | "iron-skin" | "blood-cauldron" | "gust-wind";
+
+export type CombatSubPhase = "magic" | "strike";
+
 export interface CardDefinition {
   id: string;
   name: string;
@@ -41,6 +50,11 @@ export interface CardDefinition {
   image?: string;
   /** Ficha / token — não vai no baralho inicial. */
   isToken?: boolean;
+  /** Tropas por padrão; magias usam `spellEffect`. */
+  cardKind?: CardKind;
+  spellEffect?: SpellEffectId;
+  /** Tropas = padrão; magias piloto = combate. */
+  cardSpeed?: CardSpeed;
 }
 
 export interface CardCatalog {
@@ -58,6 +72,10 @@ export interface TroopInstance {
   pinned: boolean;
   zone: "hand" | "base" | "arena" | "discard";
   arenaId: string | null;
+  /** Magia permanente na tropa (Encore, Pele de Ferro). */
+  attachedSpell: SpellEffectId | null;
+  /** Bônus de vida permanente (ex.: Pele de Ferro). */
+  healthBonus: number;
 }
 
 /** Carta no Espaço de Essência — exausta ao pagar custos, desvira na preparação. */
@@ -133,6 +151,12 @@ export interface CombatState {
   strikingPlayer: PlayerId;
   /** Tropas que já atacaram neste golpe (um ataque por vez). */
   attackedThisStrike: string[];
+  /** Fase de magias ou golpe de ataques. */
+  subPhase: CombatSubPhase;
+  /** Janela de magia (1 antes do golpe 1, 2 antes do golpe 2…). */
+  magicWindow: number;
+  /** Cada jogador passou a fase de magia atual. */
+  magicPassed: [boolean, boolean];
   /** Bar do João — magias bloqueadas neste combate. */
   noMagic?: boolean;
   /** Castelo de Pedra Rubra — magias nesta arena custam 1 a menos. */
@@ -166,6 +190,8 @@ export interface GameState {
   arenaSetupPicks: string[];
   /** Jogador controlado pela CPU (null = hotseat). */
   cpuPlayer: PlayerId | null;
+  /** Modo de teste (pula MN / setup); null em partida normal. */
+  testMode: "abismo" | "reino-reverso" | null;
 }
 
 export type GameAction =
@@ -174,6 +200,8 @@ export type GameAction =
   | { type: "SKIP_MULLIGAN"; player: PlayerId }
   | { type: "ADVANCE_TURN_PHASE" }
   | { type: "PLAY_TROOP"; troopId: string }
+  | { type: "PLAY_SPELL"; player: PlayerId; spellInstanceId: string; targetTroopId: string }
+  | { type: "PASS_COMBAT_MAGIC"; player: PlayerId }
   | { type: "SACRIFICE_ESSENCE"; troopId: string }
   | { type: "MOVE_TROOP"; troopId: string; to: "base" | "arena"; arenaId?: string }
   | { type: "DECLARE_COMBAT"; arenaId: string }

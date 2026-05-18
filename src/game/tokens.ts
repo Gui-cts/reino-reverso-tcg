@@ -26,6 +26,8 @@ export function spawnTroopInArena(
     pinned: false,
     zone: "arena",
     arenaId,
+    attachedSpell: null,
+    healthBonus: 0,
   };
 
   return {

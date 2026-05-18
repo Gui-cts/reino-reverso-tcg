@@ -37,9 +37,9 @@ export function runTurnBegin(state: GameState, player: PlayerId): GameState {
   };
 
   next = { ...next, turnPhase: "draw" };
-  const deckSize = next.players[player].deck.length;
-  if (deckSize >= CARDS_DRAW_PER_TURN) {
+  if (next.players[player].deck.length >= CARDS_DRAW_PER_TURN) {
     next = drawFromDeck(next, player, CARDS_DRAW_PER_TURN);
+    if (next.matchPhase === "finished") return next;
     next = {
       ...next,
       log: appendLog(
@@ -48,13 +48,8 @@ export function runTurnBegin(state: GameState, player: PlayerId): GameState {
       ),
     };
   } else {
-    next = {
-      ...next,
-      log: appendLog(
-        next,
-        `Jogador ${player + 1} — fase de compra (deck vazio, sem comprar).`,
-      ),
-    };
+    next = drawFromDeck(next, player, CARDS_DRAW_PER_TURN);
+    if (next.matchPhase === "finished") return next;
   }
 
   next = { ...next, turnPhase: "start" };

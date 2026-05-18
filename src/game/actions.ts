@@ -2,6 +2,7 @@ import {
   endCombatStrike,
   executeCombatAttack,
   getContestedArenaNames,
+  passCombatMagic,
   startCombat,
 } from "./combat";
 import { setConquestWatchOnEndTurn } from "./conquest";
@@ -24,6 +25,8 @@ import {
 } from "./phase-transition";
 import { drawFromDeck, finalizeArenas } from "./state";
 import { runTurnBegin } from "./turn";
+import { applyRRNonResponsePenaltyAtEndTurn } from "./reino-reverso";
+import { isSpellCard, isTroopCard, playSpell } from "./spells";
 import { buryDeadTroops } from "./troop-cleanup";
 import type { GameAction, GameState, PlayerId } from "./types";
 import { MAX_TROOPS_PER_ZONE } from "./types";
@@ -45,6 +48,11 @@ function endPlayerTurn(state: GameState): GameState {
         `Há tropas inimigas em: ${contested.join(", ")}. Declare combate antes de encerrar o turno.`,
       ),
     };
+  }
+
+  if (next.gamePhase === "reino-reverso") {
+    next = applyRRNonResponsePenaltyAtEndTurn(next, player);
+    if (next.matchPhase === "finished") return next;
   }
 
   const nextPlayer = opponent(player);
@@ -152,6 +160,13 @@ function playTroop(state: GameState, troopId: string): GameState {
   const def = state.catalog[troop.cardId];
   if (!def) return state;
 
+  if (!isTroopCard(def)) {
+    return {
+      ...state,
+      log: appendLog(state, "Magias devem ser lançadas em uma tropa — selecione a magia e clique no alvo."),
+    };
+  }
+
   if (!canAfford(state, player, def.cost)) {
     return {
       ...state,
@@ -180,6 +195,8 @@ function playTroop(state: GameState, troopId: string): GameState {
     exhausted: true,
     currentHealth: def.health,
     attack: def.attack,
+    attachedSpell: troop.attachedSpell,
+    healthBonus: troop.healthBonus,
   };
 
   next = {
@@ -215,6 +232,9 @@ function sacrificeEssence(state: GameState, troopId: string): GameState {
   }
 
   const def = state.catalog[troop.cardId];
+  if (isSpellCard(def)) {
+    return { ...state, log: appendLog(state, "Magias não podem virar Essência.") };
+  }
   if (!def?.hasEssenceSymbol) {
     return { ...state, log: appendLog(state, "Esta carta não tem símbolo de Essência.") };
   }
@@ -502,6 +522,12 @@ function applyAction(state: GameState, action: GameAction): GameState {
 
     case "PLAY_TROOP":
       return playTroop(state, action.troopId);
+
+    case "PLAY_SPELL":
+      return playSpell(state, action.player, action.spellInstanceId, action.targetTroopId);
+
+    case "PASS_COMBAT_MAGIC":
+      return passCombatMagic(state, action.player);
 
     case "SACRIFICE_ESSENCE":
       return sacrificeEssence(state, action.troopId);

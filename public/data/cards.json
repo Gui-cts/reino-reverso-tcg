@@ -81,6 +81,50 @@
       "hasEssenceSymbol": true
     },
     {
+      "id": "encore",
+      "name": "Encore",
+      "cardKind": "spell",
+      "cardSpeed": "standard",
+      "spellEffect": "encore",
+      "cost": 2,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "pele-ferro",
+      "name": "Pele de Ferro",
+      "cardKind": "spell",
+      "cardSpeed": "standard",
+      "spellEffect": "iron-skin",
+      "cost": 2,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "caldeirao-sangue",
+      "name": "Caldeirão de Sangue",
+      "cardKind": "spell",
+      "cardSpeed": "combat",
+      "spellEffect": "blood-cauldron",
+      "cost": 3,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "lufada-vento",
+      "name": "Lufada de Vento",
+      "cardKind": "spell",
+      "cardSpeed": "fast",
+      "spellEffect": "gust-wind",
+      "cost": 2,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false
+    },
+    {
       "id": "token-gargula",
       "name": "Gárgula",
       "cost": 0,
@@ -103,7 +147,6 @@
     "cinza-rastejante",
     "cinza-rastejante",
     "cinza-rastejante",
-    "cinza-rastejante",
     "fragmento-poco",
     "fragmento-poco",
     "fragmento-poco",
@@ -139,6 +182,14 @@
     "carnical-incandescente",
     "carnical-incandescente",
     "carnical-incandescente",
-    "carnical-incandescente"
+    "carnical-incandescente",
+    "encore",
+    "encore",
+    "pele-ferro",
+    "pele-ferro",
+    "caldeirao-sangue",
+    "caldeirao-sangue",
+    "lufada-vento",
+    "lufada-vento"
   ]
 }

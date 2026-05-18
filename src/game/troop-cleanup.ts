@@ -1,12 +1,17 @@
 import { arenaExilesDeadTroops } from "./arena-effects";
 import { appendLog, getTroopName } from "./helpers";
+import { isSpellCard } from "./spells";
 import type { GameState, PlayerId } from "./types";
 
-/** Remove tropas com 0 de vida e envia a carta ao descarte do dono. */
+/** Remove tropas com 0 de vida no campo (base/arena) e envia a carta ao descarte do dono. */
 export function buryDeadTroops(state: GameState): GameState {
-  const dead = Object.values(state.troops).filter(
-    (t) => t.currentHealth <= 0 && t.zone !== "discard",
-  );
+  const dead = Object.values(state.troops).filter((t) => {
+    if (t.zone !== "base" && t.zone !== "arena") return false;
+    if (t.currentHealth > 0) return false;
+    const def = state.catalog[t.cardId];
+    if (isSpellCard(def)) return false;
+    return true;
+  });
   if (dead.length === 0) return state;
 
   const troops = { ...state.troops };
