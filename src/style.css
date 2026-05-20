@@ -219,7 +219,7 @@ h1 {
   align-items: center;
   align-content: center;
   gap: 0.65rem 0.75rem;
-  min-height: 196px;
+  min-height: 236px;
   max-height: none;
   overflow-x: auto;
   overflow-y: visible;
@@ -275,7 +275,7 @@ h1 {
   flex-direction: row;
   flex-wrap: wrap;
   gap: 0.5rem;
-  min-height: 196px;
+  min-height: 236px;
   align-items: center;
   justify-content: center;
 }
@@ -1407,7 +1407,7 @@ header {
 
 /* Miniatura no tabuleiro (base / arena) — mesma info da mão, escala menor */
 .game-card--framed-mini {
-  --fc-w: 136px;
+  --fc-w: 160px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.42);
   cursor: default;
 }
@@ -1415,7 +1415,7 @@ header {
 .game-card--framed-mini .game-card__art {
   flex: 0 0 auto;
   aspect-ratio: 5 / 4;
-  min-height: 3.2em;
+  min-height: 3.4em;
 }
 
 .game-card--framed-mini .game-card__body {
@@ -1423,15 +1423,15 @@ header {
   flex: 1 1 0;
   min-height: 2em;
   margin: 0 0.32em 0.1em;
-  padding: 0.15em 0.2em;
-  font-size: 0.44em;
-  line-height: 1.22;
+  padding: 0.15em 0.22em;
+  font-size: 0.48em;
+  line-height: 1.25;
   overflow-y: auto;
   scrollbar-width: thin;
 }
 
 .game-card--framed-mini .game-card__type {
-  font-size: 0.4em;
+  font-size: 0.42em;
 }
 
 .game-card--framed-mini .game-card__kw-highlight {
