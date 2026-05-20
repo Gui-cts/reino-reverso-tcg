@@ -14,13 +14,12 @@ import {
 } from "../game";
 import { arenaBlocksNormalExit } from "../game/arena-effects";
 import {
-  canAfford,
   canPayEssenceCost,
   countTroopsInZone,
   getTroopsInZone,
   opponent,
 } from "../game/helpers";
-import { getEssenceCost } from "../game/card-meta";
+import { canAffordCardCost, getEssenceCost } from "../game/card-meta";
 import { spellRequiresTarget } from "../game/spell-stack";
 import type { ArenaDefinition, GameAction, GameState, PlayerId } from "../game/types";
 import { MAX_TROOPS_PER_ZONE } from "../game/types";
@@ -107,6 +106,7 @@ function livingInArena(state: GameState, player: PlayerId, arenaId: string) {
 function handTroopDefs(state: GameState, cpu: PlayerId) {
   const out: {
     troopId: string;
+    cardId: string;
     cost: number;
     hasEssence: boolean;
     power: number;
@@ -119,6 +119,7 @@ function handTroopDefs(state: GameState, cpu: PlayerId) {
     if (!def || isSpellCard(def)) return;
     out.push({
       troopId,
+      cardId: troop.cardId,
       cost: def.cost,
       hasEssence: Boolean(def.hasEssenceSymbol),
       power: def.attack + def.health,
@@ -239,7 +240,10 @@ function pickSacrificeForEssence(state: GameState, cpu: PlayerId): GameAction | 
   const hand = handTroopDefs(state, cpu);
   if (hand.length === 0) return null;
 
-  const canPlaySomething = hand.some((h) => canAfford(state, cpu, h.cost));
+  const canPlaySomething = hand.some((h) => {
+    const def = state.catalog[h.cardId];
+    return def ? canAffordCardCost(state, cpu, def) : false;
+  });
   const available = getAvailableEssence(state, cpu).length;
   const minCost = Math.min(...hand.map((h) => h.cost));
 
@@ -257,7 +261,10 @@ function pickPlayTroop(state: GameState, cpu: PlayerId): GameAction | null {
   if (countTroopsInZone(state, cpu, "base") >= MAX_TROOPS_PER_ZONE) return null;
 
   const affordable = handTroopDefs(state, cpu)
-    .filter((h) => canAfford(state, cpu, h.cost))
+    .filter((h) => {
+      const def = state.catalog[h.cardId];
+      return def ? canAffordCardCost(state, cpu, def) : false;
+    })
     .sort((a, b) => b.cost - a.cost || b.power - a.power);
 
   if (affordable.length === 0) return null;
