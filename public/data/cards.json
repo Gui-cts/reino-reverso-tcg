@@ -324,8 +324,8 @@
       "attack": 0,
       "health": 0,
       "hasEssenceSymbol": false,
-      "leaderMaxHp": 15,
-      "leaderAbility": "Escudo (1×/turno no combate): proteja uma tropa aliada na arena — bloqueia o próximo dano recebido.",
+      "leaderMaxHp": 10,
+      "leaderAbility": "Escudo (1×/turno no combate, 2 Essência): proteja uma tropa aliada na arena — bloqueia o próximo dano recebido.",
       "leaderAbilityId": "shield",
       "leaderFormIds": [
         "noah-vampiro-inverno",
@@ -341,7 +341,7 @@
       "attack": 0,
       "health": 0,
       "hasEssenceSymbol": false,
-      "leaderMaxHp": 15,
+      "leaderMaxHp": 10,
       "leaderAbility": "Forma evoluída (habilidade em desenvolvimento).",
       "leaderFormIds": []
     },
@@ -354,7 +354,7 @@
       "attack": 0,
       "health": 0,
       "hasEssenceSymbol": false,
-      "leaderMaxHp": 15,
+      "leaderMaxHp": 10,
       "leaderAbility": "Forma evoluída (habilidade em desenvolvimento).",
       "leaderFormIds": []
     },

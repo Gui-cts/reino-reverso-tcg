@@ -7,7 +7,7 @@ import {
   type TestMode,
 } from "../game";
 import type { GameAction, CardCatalog, GameState, PlayerId, TroopInstance } from "../game/types";
-import { LEADER_MAX_HP, LEADER_EVOLUTION_CORRUPTION_COST, MAX_CORRUPTION } from "../game/types";
+import { LEADER_MAX_HP, LEADER_EVOLUTION_CORRUPTION_COST, maxCorruptionForPhase } from "../game/types";
 import {
   getAvailableEssence,
   getCombatAssigningPlayer,
@@ -885,7 +885,7 @@ export class GameApp {
       <strong>Jogador ${player + 1}</strong><br/>
       ${leaderName}: ${p.leaderHp}/${leaderDef?.leaderMaxHp ?? LEADER_MAX_HP} HP<br/>
       Domínios: ${domLabel}<br/>
-      Corrupção: ${p.corruption}/${MAX_CORRUPTION}<br/>
+      Corrupção: ${p.corruption}/${maxCorruptionForPhase(s.gamePhase)}<br/>
       <span class="essence-badge">Essência: ${getAvailableEssence(s, player).length}/${getPlayerEssence(s, player).length} pronta(s)</span><br/>
       Deck: ${p.deck.length} · Descarte: ${p.discard.length} · Exílio: ${p.exile.length}
       ${this.discardSummaryHtml(s, player)}

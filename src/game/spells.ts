@@ -24,7 +24,7 @@ import {
   troopIsUntargetable,
   tryPayCounterCost,
 } from "./spell-stack";
-import { MAX_CORRUPTION, MAX_TROOPS_PER_ZONE } from "./types";
+import { maxCorruptionForPhase, MAX_TROOPS_PER_ZONE } from "./types";
 import type {
   CardDefinition,
   CardSpeed,
@@ -349,7 +349,7 @@ export function playSpell(
       ...state,
       log: appendLog(
         state,
-        `${spellDef.name} exige ${corruptionCost} Corrupção (você tem ${pl.corruption}/${MAX_CORRUPTION}).`,
+        `${spellDef.name} exige ${corruptionCost} Corrupção (você tem ${pl.corruption}/${maxCorruptionForPhase(state.gamePhase)}).`,
       ),
     };
   }

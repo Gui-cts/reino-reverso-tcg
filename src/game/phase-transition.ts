@@ -2,7 +2,7 @@ import { arenasForPhase } from "./arenas";
 import { appendLog, nextInstanceId, opponent } from "./helpers";
 import { shuffle } from "./cards";
 import type { ArenaState, GameState, PlayerId, TroopInstance, WorldPhase } from "./types";
-import { MAX_CORRUPTION } from "./types";
+import { maxCorruptionForPhase } from "./types";
 
 export type PhaseEndChoice = "essence" | "corruption" | "recycle";
 
@@ -132,9 +132,10 @@ export function applyPostPhaseChoiceForPlayer(
     const players = [...next.players] as GameState["players"];
     if (gain > 0) {
       const cur = players[player].corruption;
+      const cap = maxCorruptionForPhase(next.gamePhase);
       players[player] = {
         ...players[player],
-        corruption: Math.min(MAX_CORRUPTION, cur + gain),
+        corruption: Math.min(cap, cur + gain),
       };
     }
     next = {

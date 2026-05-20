@@ -52,15 +52,15 @@ flowchart LR
 
 | Constante | Valor |
 |-----------|-------|
-| Vida inicial | **15 HP** (ajustável por Líder) |
+| Vida inicial | Definida pelo Líder (Noah: **10 HP**) |
 | Custo de evolução | **5 Corrupção** |
-| Corrupção máxima | **5** |
+| Corrupção máxima | **Por fase**: MN=3, Abismo=7, RR=sem limite |
 
 #### Habilidades de Líder
 
 | Líder | Facção | Habilidade | Quando |
 |-------|--------|------------|--------|
-| **Noah — o pugilista** | Delta | **Escudo**: protege 1 tropa aliada na arena; bloqueia o próximo dano (qualquer quantidade) | Durante combate |
+| **Noah — o pugilista** (10 HP) | Delta | **Escudo** (2 Essência): protege 1 tropa aliada na arena; bloqueia o próximo dano (qualquer quantidade) | Durante combate |
 
 #### Evolução de Líder
 

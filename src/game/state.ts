@@ -88,10 +88,12 @@ export function createInitialGame(
   const deck0 = shuffle([...catalogData.starterDeck]);
   const deck1 = shuffle([...catalogData.starterDeck]);
 
-  const defaultLeaderId = catalogData.cards.find((c) => c.cardType === "leader")?.id ?? null;
+  const defaultLeader = catalogData.cards.find((c) => c.cardType === "leader");
+  const defaultLeaderId = defaultLeader?.id ?? null;
+  const leaderHp = defaultLeader?.leaderMaxHp ?? LEADER_MAX_HP;
   const players: [PlayerState, PlayerState] = [
-    { ...emptyPlayer(), deck: deck0, leaderId: defaultLeaderId },
-    { ...emptyPlayer(), deck: deck1, leaderId: defaultLeaderId },
+    { ...emptyPlayer(), deck: deck0, leaderId: defaultLeaderId, leaderHp },
+    { ...emptyPlayer(), deck: deck1, leaderId: defaultLeaderId, leaderHp },
   ];
 
   let state: GameState = {

@@ -8,8 +8,16 @@ export const CARDS_DRAW_PER_TURN = 1;
 /** @deprecated Use dominationsToWinPhase(gamePhase) */
 export const DOMINATIONS_TO_WIN_PHASE = 3;
 export const DOMINATIONS_ABISMO = 2;
-export const MAX_CORRUPTION = 5;
 export const LEADER_EVOLUTION_CORRUPTION_COST = 5;
+
+/** Corrupção máxima por fase de mundo. */
+export function maxCorruptionForPhase(phase: WorldPhase): number {
+  switch (phase) {
+    case "mundo-normal": return 3;
+    case "abismo": return 7;
+    case "reino-reverso": return 999;
+  }
+}
 export const DEFAULT_CONQUEST_TO_DOMINATE = 2;
 
 export type WorldPhase = "mundo-normal" | "abismo" | "reino-reverso";

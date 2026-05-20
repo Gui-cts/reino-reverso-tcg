@@ -22,10 +22,10 @@ Antes da partida, você escolhe um **Líder**. Ele fica fora do baralho e repres
 
 | Atributo | Valor |
 |----------|-------|
-| HP | 15 |
+| HP | 10 |
 | Facção | Delta |
 | Estilo | Tank / Proteção / Controle de terreno |
-| **Habilidade: Escudo** | Durante o combate (1×/turno): proteja uma tropa aliada na arena. O escudo bloqueia o **próximo dano** que ela receber, independente da quantidade (1 ou 50). |
+| **Habilidade: Escudo** | Durante o combate (1×/turno, custa **2 Essência**): proteja uma tropa aliada na arena. O escudo bloqueia o **próximo dano** que ela receber, independente da quantidade (1 ou 50). |
 | Evoluções | Noah — o vampiro inverno · Noah — o Delta da Empatia |
 
 ### Evolução de Líder
@@ -295,7 +295,13 @@ Corrupção é um recurso secundário usado por cartas mais poderosas. Você acu
 - **Templo das Sombras** — ao dominar esta arena, ganha +1 Corrupção.
 - **Escolha pós-fase** — ao escolher "Corrupção" no fim de uma fase, ganha +1 por tropa destruída (máx. +3).
 
-Máximo acumulável: **5 Corrupção**.
+O máximo de Corrupção depende da fase atual:
+
+| Fase | Máximo |
+|------|--------|
+| Mundo Normal | **3** |
+| Abismo | **7** |
+| Reino Reverso | Sem limite |
 
 Corrupção tem dois usos:
 - **Custo de cartas** — algumas cartas exigem Corrupção além de Essência (ex.: Omega custa 4 Essência + sacrifício de 1 + 1 Corrupção).

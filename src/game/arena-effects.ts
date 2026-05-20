@@ -2,7 +2,7 @@ import { drawFromDeck } from "./state";
 import { addCardToDeck, spawnTroopInArena } from "./tokens";
 import { appendLog, countTroopsInZone, getArena, getTroopName, getTroopsInZone } from "./helpers";
 import type { GameState, PlayerId } from "./types";
-import { MAX_CORRUPTION, MAX_TROOPS_PER_ZONE } from "./types";
+import { maxCorruptionForPhase, MAX_TROOPS_PER_ZONE } from "./types";
 
 const GARGOYLE_CARD = "token-gargula";
 const SUSEJ_CARD = "susej-arauto";
@@ -163,16 +163,17 @@ export function applyArenaOnDominate(
     case "conquest-3-corruption": {
       const players = [...next.players] as GameState["players"];
       const cur = players[player].corruption;
+      const cap = maxCorruptionForPhase(next.gamePhase);
       players[player] = {
         ...players[player],
-        corruption: Math.min(MAX_CORRUPTION, cur + 1),
+        corruption: Math.min(cap, cur + 1),
       };
       next = {
         ...next,
         players,
         log: appendLog(
           next,
-          `Templo das Sombras — Jogador ${player + 1} ganhou +1 Corrupção (${Math.min(MAX_CORRUPTION, cur + 1)}/${MAX_CORRUPTION}).`,
+          `Templo das Sombras — Jogador ${player + 1} ganhou +1 Corrupção (${Math.min(cap, cur + 1)}/${cap}).`,
         ),
       };
       break;

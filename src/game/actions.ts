@@ -614,6 +614,16 @@ function useLeaderAbility(
     if (!state.combat) {
       return { ...state, log: appendLog(state, "Escudo só pode ser usado durante o combate.") };
     }
+
+    const shieldCost = { exhaust: 2 };
+    const canPay = getAvailableEssence(state, player).length >= shieldCost.exhaust;
+    if (!canPay) {
+      return {
+        ...state,
+        log: appendLog(state, `Escudo exige ${shieldCost.exhaust} Essência pronta (tem ${getAvailableEssence(state, player).length}).`),
+      };
+    }
+
     const target = state.troops[targetTroopId];
     if (!target || target.owner !== player) {
       return { ...state, log: appendLog(state, "Alvo inválido — escolha uma tropa aliada.") };
@@ -625,19 +635,25 @@ function useLeaderAbility(
       return { ...state, log: appendLog(state, "Esta tropa já tem escudo.") };
     }
 
-    const troops = { ...state.troops };
-    troops[targetTroopId] = { ...target, shielded: true };
-    const players = [...state.players] as GameState["players"];
-    players[player] = { ...pl, leaderAbilityUsedThisTurn: true };
+    const paid = payEssenceCost(state, player, shieldCost);
+    if (!paid.ok) {
+      return { ...state, log: appendLog(state, "Não foi possível pagar o custo do Escudo.") };
+    }
+    let next = paid.state;
 
-    const troopName = state.catalog[target.cardId]?.name ?? targetTroopId;
+    const troops = { ...next.troops };
+    troops[targetTroopId] = { ...target, shielded: true };
+    const players = [...next.players] as GameState["players"];
+    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true };
+
+    const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
     return {
-      ...state,
+      ...next,
       troops,
       players,
       log: appendLog(
-        state,
-        `Jogador ${player + 1} usou Escudo do Líder em ${troopName} — próximo dano será absorvido.`,
+        next,
+        `Jogador ${player + 1} usou Escudo do Líder em ${troopName} (−2 Essência) — próximo dano será absorvido.`,
       ),
     };
   }

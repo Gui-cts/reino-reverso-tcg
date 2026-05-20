@@ -464,6 +464,7 @@ function pickLeaderAbility(state: GameState, cpu: PlayerId): GameAction | null {
   if (!leaderDef?.leaderAbilityId) return null;
 
   if (leaderDef.leaderAbilityId === "shield") {
+    if (getAvailableEssence(state, cpu).length < 2) return null;
     const arenaId = state.combat.arenaId;
     const allies = livingInArena(state, cpu, arenaId).filter((t) => !t.shielded);
     if (allies.length === 0) return null;

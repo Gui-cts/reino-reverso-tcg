@@ -6,7 +6,6 @@ import type {
   PlayerId,
   TroopInstance,
 } from "./types";
-import { MAX_CORRUPTION } from "./types";
 
 export function opponent(p: PlayerId): PlayerId {
   return p === 0 ? 1 : 0;
@@ -157,7 +156,7 @@ export function canPayCorruptionCost(
   return state.players[player].corruption >= amount;
 }
 
-/** Gasta Corrupção acumulada (máx. rastreado em {@link MAX_CORRUPTION}). */
+/** Gasta Corrupção acumulada. */
 export function payCorruptionCost(
   state: GameState,
   player: PlayerId,
