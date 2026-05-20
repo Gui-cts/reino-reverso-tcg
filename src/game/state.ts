@@ -20,6 +20,7 @@ export const ARENA_POOL: ArenaDefinition[] = arenasForPhase("mundo-normal");
 function emptyPlayer(): PlayerState {
   return {
     leaderHp: LEADER_MAX_HP,
+    leaderId: null,
     deck: [],
     hand: [],
     discard: [],
@@ -29,6 +30,7 @@ function emptyPlayer(): PlayerState {
     dominatedArenas: 0,
     sacrificedThisTurn: false,
     corruption: 0,
+    leaderAbilityUsedThisTurn: false,
   };
 }
 
@@ -86,9 +88,10 @@ export function createInitialGame(
   const deck0 = shuffle([...catalogData.starterDeck]);
   const deck1 = shuffle([...catalogData.starterDeck]);
 
+  const defaultLeaderId = catalogData.cards.find((c) => c.cardType === "leader")?.id ?? null;
   const players: [PlayerState, PlayerState] = [
-    { ...emptyPlayer(), deck: deck0 },
-    { ...emptyPlayer(), deck: deck1 },
+    { ...emptyPlayer(), deck: deck0, leaderId: defaultLeaderId },
+    { ...emptyPlayer(), deck: deck1, leaderId: defaultLeaderId },
   ];
 
   let state: GameState = {

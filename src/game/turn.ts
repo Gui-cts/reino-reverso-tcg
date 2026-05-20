@@ -31,7 +31,11 @@ function clearAttackSuppressionForPlayer(state: GameState, player: PlayerId): Ga
 
 function resetTurnFlags(state: GameState, player: PlayerId): GameState {
   const players = [...state.players] as GameState["players"];
-  players[player] = { ...players[player], sacrificedThisTurn: false };
+  players[player] = {
+    ...players[player],
+    sacrificedThisTurn: false,
+    leaderAbilityUsedThisTurn: false,
+  };
   return { ...state, players };
 }
 

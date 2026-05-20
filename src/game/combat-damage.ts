@@ -12,11 +12,17 @@ function applyDamage(
   troops: Record<string, TroopInstance>,
   troopId: string,
   damage: number,
-): Record<string, TroopInstance> {
+): { troops: Record<string, TroopInstance>; shieldBlocked: boolean } {
   const t = troops[troopId];
-  if (!t) return troops;
+  if (!t) return { troops, shieldBlocked: false };
+  if (t.shielded && damage > 0) {
+    return {
+      troops: { ...troops, [troopId]: { ...t, shielded: false } },
+      shieldBlocked: true,
+    };
+  }
   const currentHealth = Math.max(0, t.currentHealth - damage);
-  return { ...troops, [troopId]: { ...t, currentHealth } };
+  return { troops: { ...troops, [troopId]: { ...t, currentHealth } }, shieldBlocked: false };
 }
 
 export type StrikeDamageResult = {
@@ -76,7 +82,13 @@ export function applyStrikeDamage(
     }
 
     const hpBefore = target.currentHealth;
-    troops = applyDamage(troops, currentId, remaining);
+    const dmgResult = applyDamage(troops, currentId, remaining);
+    troops = dmgResult.troops;
+    if (dmgResult.shieldBlocked) {
+      hitParts.push(`${getTroopName(working, target)} (escudo absorveu)`);
+      alreadyHit.add(currentId);
+      break;
+    }
     const tAfter = troops[currentId];
     const dealt = hpBefore - (tAfter?.currentHealth ?? 0);
     remaining -= dealt;
@@ -100,24 +112,30 @@ export function applyStrikeDamage(
     working = { ...working, troops };
   }
 
+  let counterShielded = false;
   if (firstTargetTrades && firstTargetCounter > 0) {
-    troops = applyDamage(troops, attacker.instanceId, firstTargetCounter);
+    const counterResult = applyDamage(troops, attacker.instanceId, firstTargetCounter);
+    troops = counterResult.troops;
+    counterShielded = counterResult.shieldBlocked;
   }
 
   const attackerName = getTroopName(state, attacker);
   const attackerAfter = troops[attacker.instanceId];
   const counterDealt =
-    firstTargetCounter > 0 && attackerAfter
-      ? Math.max(0, attacker.currentHealth - attackerAfter.currentHealth)
-      : 0;
+    counterShielded ? 0
+      : firstTargetCounter > 0 && attackerAfter
+        ? Math.max(0, attacker.currentHealth - attackerAfter.currentHealth)
+        : 0;
   let logLine: string;
   if (hitParts.length === 0) {
     logLine = `${attackerName} não conseguiu ferir o alvo em ${arenaName}.`;
   } else if (hitParts.length === 1) {
     const tradeNote =
-      counterDealt > 0
-        ? ` Revida: ${counterDealt} em ${attackerName}.`
-        : "";
+      counterShielded
+        ? ` Revida: escudo de ${attackerName} absorveu.`
+        : counterDealt > 0
+          ? ` Revida: ${counterDealt} em ${attackerName}.`
+          : "";
     logLine = randomLabel
       ? `${attackerName} atacou ${hitParts[0]} em ${arenaName} (alvo aleatório — Cidade das Curvas).${tradeNote}`
       : `${attackerName} atacou ${hitParts[0]} em ${arenaName} (troca de dano).${tradeNote}`;

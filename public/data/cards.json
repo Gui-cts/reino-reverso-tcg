@@ -317,19 +317,46 @@
     },
     {
       "id": "noah-lider-base",
-      "name": "Noah — o básico",
+      "name": "Noah — o pugilista",
       "cardType": "leader",
-      "faction": "neutra",
+      "faction": "delta",
       "cost": 0,
       "attack": 0,
       "health": 0,
       "hasEssenceSymbol": false,
       "leaderMaxHp": 15,
-      "leaderAbility": "Reservado: habilidade de Líder (fora do baralho).",
+      "leaderAbility": "Escudo (1×/turno no combate): proteja uma tropa aliada na arena — bloqueia o próximo dano recebido.",
+      "leaderAbilityId": "shield",
       "leaderFormIds": [
         "noah-vampiro-inverno",
         "noah-delta-empatia"
       ]
+    },
+    {
+      "id": "noah-vampiro-inverno",
+      "name": "Noah — o vampiro inverno",
+      "cardType": "leader",
+      "faction": "delta",
+      "cost": 0,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "leaderMaxHp": 15,
+      "leaderAbility": "Forma evoluída (habilidade em desenvolvimento).",
+      "leaderFormIds": []
+    },
+    {
+      "id": "noah-delta-empatia",
+      "name": "Noah — o Delta da Empatia",
+      "cardType": "leader",
+      "faction": "delta",
+      "cost": 0,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "leaderMaxHp": 15,
+      "leaderAbility": "Forma evoluída (habilidade em desenvolvimento).",
+      "leaderFormIds": []
     },
     {
       "id": "servo-cinzas",

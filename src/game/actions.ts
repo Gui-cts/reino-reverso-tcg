@@ -41,8 +41,9 @@ import {
   resolveCounterPayment,
 } from "./spells";
 import { buryDeadTroops } from "./troop-cleanup";
+import { isLeaderCard } from "./card-meta";
 import type { GameAction, GameState, PlayerId } from "./types";
-import { MAX_TROOPS_PER_ZONE } from "./types";
+import { LEADER_EVOLUTION_CORRUPTION_COST, MAX_TROOPS_PER_ZONE } from "./types";
 
 function endPlayerTurn(state: GameState): GameState {
   const player = state.activePlayer;
@@ -588,6 +589,113 @@ function handlePostPhaseChoice(
   return finalizePhaseTransition(next);
 }
 
+function useLeaderAbility(
+  state: GameState,
+  player: PlayerId,
+  targetTroopId: string,
+): GameState {
+  if (state.matchPhase !== "playing") return state;
+  if (state.activePlayer !== player) {
+    return { ...state, log: appendLog(state, "Não é seu turno.") };
+  }
+  const pl = state.players[player];
+  if (pl.leaderAbilityUsedThisTurn) {
+    return { ...state, log: appendLog(state, "Habilidade do Líder já usada neste turno.") };
+  }
+  if (!pl.leaderId) {
+    return { ...state, log: appendLog(state, "Nenhum Líder selecionado.") };
+  }
+  const leaderDef = state.catalog[pl.leaderId];
+  if (!leaderDef?.leaderAbilityId) {
+    return { ...state, log: appendLog(state, "Este Líder não tem habilidade ativa.") };
+  }
+
+  if (leaderDef.leaderAbilityId === "shield") {
+    if (!state.combat) {
+      return { ...state, log: appendLog(state, "Escudo só pode ser usado durante o combate.") };
+    }
+    const target = state.troops[targetTroopId];
+    if (!target || target.owner !== player) {
+      return { ...state, log: appendLog(state, "Alvo inválido — escolha uma tropa aliada.") };
+    }
+    if (target.zone !== "arena") {
+      return { ...state, log: appendLog(state, "Alvo deve estar em uma arena.") };
+    }
+    if (target.shielded) {
+      return { ...state, log: appendLog(state, "Esta tropa já tem escudo.") };
+    }
+
+    const troops = { ...state.troops };
+    troops[targetTroopId] = { ...target, shielded: true };
+    const players = [...state.players] as GameState["players"];
+    players[player] = { ...pl, leaderAbilityUsedThisTurn: true };
+
+    const troopName = state.catalog[target.cardId]?.name ?? targetTroopId;
+    return {
+      ...state,
+      troops,
+      players,
+      log: appendLog(
+        state,
+        `Jogador ${player + 1} usou Escudo do Líder em ${troopName} — próximo dano será absorvido.`,
+      ),
+    };
+  }
+
+  return state;
+}
+
+function evolveLeader(
+  state: GameState,
+  player: PlayerId,
+  formId: string,
+): GameState {
+  if (state.matchPhase !== "playing" || state.turnPhase !== "main" || state.combat) {
+    return state;
+  }
+  if (state.activePlayer !== player) {
+    return { ...state, log: appendLog(state, "Não é seu turno.") };
+  }
+
+  const pl = state.players[player];
+  if (!pl.leaderId) {
+    return { ...state, log: appendLog(state, "Nenhum Líder selecionado.") };
+  }
+  const currentLeader = state.catalog[pl.leaderId];
+  if (!currentLeader?.leaderFormIds?.includes(formId)) {
+    return { ...state, log: appendLog(state, "Forma de evolução inválida.") };
+  }
+  const newForm = state.catalog[formId];
+  if (!newForm || !isLeaderCard(newForm)) {
+    return { ...state, log: appendLog(state, "Forma de Líder não encontrada no catálogo.") };
+  }
+  if (pl.corruption < LEADER_EVOLUTION_CORRUPTION_COST) {
+    return {
+      ...state,
+      log: appendLog(
+        state,
+        `Corrupção insuficiente para evoluir (precisa ${LEADER_EVOLUTION_CORRUPTION_COST}, tem ${pl.corruption}).`,
+      ),
+    };
+  }
+
+  const players = [...state.players] as GameState["players"];
+  players[player] = {
+    ...pl,
+    leaderId: formId,
+    corruption: pl.corruption - LEADER_EVOLUTION_CORRUPTION_COST,
+  };
+
+  return {
+    ...state,
+    players,
+    log: appendLog(
+      state,
+      `Jogador ${player + 1} evoluiu o Líder para ${newForm.name}! (−${LEADER_EVOLUTION_CORRUPTION_COST} Corrupção)`,
+    ),
+  };
+}
+
 function applyAction(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "SELECT_ARENA":
@@ -643,6 +751,12 @@ function applyAction(state: GameState, action: GameAction): GameState {
 
     case "POST_PHASE_CHOICE":
       return handlePostPhaseChoice(state, action.player, action.choice);
+
+    case "USE_LEADER_ABILITY":
+      return useLeaderAbility(state, action.player, action.targetTroopId);
+
+    case "EVOLVE_LEADER":
+      return evolveLeader(state, action.player, action.formId);
 
     default:
       return state;

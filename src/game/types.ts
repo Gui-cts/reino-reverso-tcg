@@ -8,7 +8,8 @@ export const CARDS_DRAW_PER_TURN = 1;
 /** @deprecated Use dominationsToWinPhase(gamePhase) */
 export const DOMINATIONS_TO_WIN_PHASE = 3;
 export const DOMINATIONS_ABISMO = 2;
-export const MAX_CORRUPTION = 3;
+export const MAX_CORRUPTION = 5;
+export const LEADER_EVOLUTION_CORRUPTION_COST = 5;
 export const DEFAULT_CONQUEST_TO_DOMINATE = 2;
 
 export type WorldPhase = "mundo-normal" | "abismo" | "reino-reverso";
@@ -77,6 +78,9 @@ export type KeywordId =
 /** Efeito ao morrer (`testamento`) — independente de `spellEffect`. */
 export type DeathEffectId = "draw-one" | "ping-leader-1";
 
+/** Habilidades ativas de Líder. */
+export type LeaderAbilityId = "shield";
+
 export type CombatSubPhase = "magic" | "strike";
 
 /**
@@ -112,8 +116,10 @@ export interface CardDefinition {
   requiredLeaderId?: string;
   /** Líder: vida máxima fora do baralho (substitui LEADER_MAX_HP quando ativo). */
   leaderMaxHp?: number;
-  /** Líder: nota da habilidade passiva / ativa (implementação futura). */
+  /** Líder: texto descritivo da habilidade. */
   leaderAbility?: string;
+  /** Líder: id da habilidade ativa (para o engine). */
+  leaderAbilityId?: LeaderAbilityId;
   /**
    * Líder: ids das formas evoluídas (sacrifício de Corrupção — não implementado).
    * Ex.: Noah inverno, Noah delta.
@@ -163,6 +169,8 @@ export interface TroopInstance {
   etherealThisTurn?: boolean;
   /** Constrição — não pode atacar no próximo combate em que o dono atacaria. */
   attackSuppressed?: boolean;
+  /** Escudo do Líder — bloqueia o próximo dano recebido (qualquer quantidade). */
+  shielded?: boolean;
 }
 
 /** Feitiço aguardando contramagia ou resolução. */
@@ -243,6 +251,10 @@ export interface PlayerState {
   dominatedArenas: number;
   sacrificedThisTurn: boolean;
   corruption: number;
+  /** ID da carta de Líder atual (pode mudar com evolução). */
+  leaderId: string | null;
+  /** Habilidade do Líder já usada neste turno. */
+  leaderAbilityUsedThisTurn: boolean;
 }
 
 export interface CombatState {
@@ -325,4 +337,6 @@ export type GameAction =
       type: "POST_PHASE_CHOICE";
       player: PlayerId;
       choice: "essence" | "corruption" | "recycle";
-    };
+    }
+  | { type: "USE_LEADER_ABILITY"; player: PlayerId; targetTroopId: string }
+  | { type: "EVOLVE_LEADER"; player: PlayerId; formId: string };

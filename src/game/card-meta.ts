@@ -20,6 +20,7 @@ export const CARD_TYPE_LABELS: Record<CardType, string> = {
 
 export const FACTION_LABELS: Record<string, string> = {
   neutra: "Neutra",
+  delta: "Delta",
 };
 
 export const CARD_ROLES_COMING_SOON: CardType[] = ["equipment", "artifact"];

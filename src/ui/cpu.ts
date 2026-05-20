@@ -456,6 +456,32 @@ function pickDeclareCombat(state: GameState, cpu: PlayerId): GameAction | null {
   return { type: "DECLARE_COMBAT", arenaId: best.arenaId };
 }
 
+function pickLeaderAbility(state: GameState, cpu: PlayerId): GameAction | null {
+  if (!state.combat) return null;
+  const pl = state.players[cpu];
+  if (!pl.leaderId || pl.leaderAbilityUsedThisTurn) return null;
+  const leaderDef = state.catalog[pl.leaderId];
+  if (!leaderDef?.leaderAbilityId) return null;
+
+  if (leaderDef.leaderAbilityId === "shield") {
+    const arenaId = state.combat.arenaId;
+    const allies = livingInArena(state, cpu, arenaId).filter((t) => !t.shielded);
+    if (allies.length === 0) return null;
+    const enemies = livingInArena(state, opponent(cpu), arenaId);
+    if (enemies.length === 0) return null;
+    const maxEnemyAtk = Math.max(...enemies.map((e) => e.attack));
+    const bestTarget = [...allies].sort((a, b) => {
+      const aVulnerable = a.currentHealth <= maxEnemyAtk ? 1000 : 0;
+      const bVulnerable = b.currentHealth <= maxEnemyAtk ? 1000 : 0;
+      return (bVulnerable + b.attack) - (aVulnerable + a.attack);
+    })[0];
+    if (!bestTarget) return null;
+    return { type: "USE_LEADER_ABILITY", player: cpu, targetTroopId: bestTarget.instanceId };
+  }
+
+  return null;
+}
+
 function pickBestCombatAttack(
   state: GameState,
   cpu: PlayerId,
@@ -644,6 +670,9 @@ export function pickCpuAction(state: GameState, cpuPlayer: PlayerId): GameAction
 
   const reactive = pickCpuReactiveSpell(state, cpu);
   if (reactive) return reactive;
+
+  const leaderAbility = pickLeaderAbility(state, cpu);
+  if (leaderAbility) return leaderAbility;
 
   const combatAction = pickBestCombatAttack(state, cpu);
   if (combatAction) return combatAction;

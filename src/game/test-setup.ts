@@ -50,6 +50,7 @@ const TEST_CONFIG: Record<
 function emptyPlayer(leaderHp: number): PlayerState {
   return {
     leaderHp,
+    leaderId: null,
     deck: [],
     hand: [],
     discard: [],
@@ -59,6 +60,7 @@ function emptyPlayer(leaderHp: number): PlayerState {
     dominatedArenas: 0,
     sacrificedThisTurn: false,
     corruption: 0,
+    leaderAbilityUsedThisTurn: false,
   };
 }
 

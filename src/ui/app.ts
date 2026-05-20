@@ -7,7 +7,7 @@ import {
   type TestMode,
 } from "../game";
 import type { GameAction, CardCatalog, GameState, PlayerId, TroopInstance } from "../game/types";
-import { LEADER_MAX_HP } from "../game/types";
+import { LEADER_MAX_HP, LEADER_EVOLUTION_CORRUPTION_COST, MAX_CORRUPTION } from "../game/types";
 import {
   getAvailableEssence,
   getCombatAssigningPlayer,
@@ -874,14 +874,22 @@ export class GameApp {
     const leader = document.createElement("div");
     leader.className = `leader-panel active-p${player}`;
     const p = s.players[player];
+    const leaderDef = p.leaderId ? s.catalog[p.leaderId] : null;
+    const leaderName = leaderDef?.name ?? "Líder";
+    const domGoalNum = dominationsToWinPhase(s.gamePhase);
+    const domLabel = domGoalNum !== null ? `${p.dominatedArenas}/${domGoalNum}` : `${p.dominatedArenas}`;
+    const leaderAbilityHint = leaderDef?.leaderAbility
+      ? `<br/><span style="font-size:0.75rem;color:var(--warn)">${leaderDef.leaderAbility}</span>`
+      : "";
     leader.innerHTML = `
       <strong>Jogador ${player + 1}</strong><br/>
-      Líder: ${p.leaderHp}/${LEADER_MAX_HP} HP<br/>
-      Domínios: ${p.dominatedArenas}/3<br/>
-      Corrupção: ${p.corruption}/3<br/>
+      ${leaderName}: ${p.leaderHp}/${leaderDef?.leaderMaxHp ?? LEADER_MAX_HP} HP<br/>
+      Domínios: ${domLabel}<br/>
+      Corrupção: ${p.corruption}/${MAX_CORRUPTION}<br/>
       <span class="essence-badge">Essência: ${getAvailableEssence(s, player).length}/${getPlayerEssence(s, player).length} pronta(s)</span><br/>
       Deck: ${p.deck.length} · Descarte: ${p.discard.length} · Exílio: ${p.exile.length}
       ${this.discardSummaryHtml(s, player)}
+      ${leaderAbilityHint}
     `;
 
     const base = document.createElement("div");
@@ -1167,6 +1175,48 @@ export class GameApp {
     return bar;
   }
 
+  private renderLeaderAbilityButton(s: GameState, player: PlayerId, container: HTMLElement): void {
+    const pl = s.players[player];
+    if (!pl.leaderId || pl.leaderAbilityUsedThisTurn) return;
+    const leaderDef = s.catalog[pl.leaderId];
+    if (!leaderDef?.leaderAbilityId) return;
+
+    if (leaderDef.leaderAbilityId === "shield" && s.combat) {
+      const btn = document.createElement("button");
+      btn.textContent = `Escudo do Líder — proteger aliado`;
+      btn.title = leaderDef.leaderAbility ?? "";
+      btn.onclick = () => {
+        const troopId = this.selection.troopId;
+        if (!troopId) {
+          alert("Selecione uma tropa aliada na arena primeiro (clique nela).");
+          return;
+        }
+        this.dispatchAction({ type: "USE_LEADER_ABILITY", player, targetTroopId: troopId });
+      };
+      container.appendChild(btn);
+    }
+  }
+
+  private renderLeaderEvolutionButton(s: GameState, player: PlayerId, container: HTMLElement): void {
+    const pl = s.players[player];
+    if (!pl.leaderId) return;
+    const leaderDef = s.catalog[pl.leaderId];
+    if (!leaderDef?.leaderFormIds?.length) return;
+
+    const canEvolve = pl.corruption >= LEADER_EVOLUTION_CORRUPTION_COST;
+    for (const formId of leaderDef.leaderFormIds) {
+      const formDef = s.catalog[formId];
+      if (!formDef) continue;
+      const btn = document.createElement("button");
+      btn.className = "danger";
+      btn.textContent = `Evoluir → ${formDef.name} (${LEADER_EVOLUTION_CORRUPTION_COST} Corrupção)`;
+      btn.disabled = !canEvolve;
+      btn.title = formDef.leaderAbility ?? "";
+      btn.onclick = () => this.dispatchAction({ type: "EVOLVE_LEADER", player, formId });
+      container.appendChild(btn);
+    }
+  }
+
   private renderSidebar(s: GameState): HTMLElement {
     const side = document.createElement("div");
     side.className = "sidebar";
@@ -1282,6 +1332,10 @@ export class GameApp {
           this.dispatchAction({ type: "PASS_COMBAT_MAGIC", player: p });
         btns.appendChild(passBtn);
       }
+
+      if (this.canControlPlayer(s, active)) {
+        this.renderLeaderAbilityButton(s, active, btns);
+      }
     } else if (s.combat && isCombatStrikePhase(s)) {
       const combatHint = document.createElement("p");
       combatHint.className = "mulligan-hint";
@@ -1292,6 +1346,10 @@ export class GameApp {
           ? "Combate: vez da CPU…"
           : `Combate: vez do Jogador ${striker + 1}…`;
       actions.appendChild(combatHint);
+
+      if (this.canControlPlayer(s, active)) {
+        this.renderLeaderAbilityButton(s, active, btns);
+      }
     } else if (canAct && s.turnPhase === "main" && !s.combat) {
       const essencePanel = document.createElement("div");
       essencePanel.className = "essence-panel";
@@ -1321,6 +1379,8 @@ export class GameApp {
       endBtn.textContent = "Fim de turno";
       endBtn.onclick = () => this.dispatchAction({ type: "END_TURN" });
       btns.appendChild(endBtn);
+
+      this.renderLeaderEvolutionButton(s, active, btns);
 
       if (contested.length > 0) {
         const warn = document.createElement("p");
