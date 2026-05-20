@@ -10,6 +10,30 @@ Reduza a vida do **Líder** adversário a **0 HP**. Isso acontece principalmente
 
 ---
 
+## Seu Líder
+
+Antes da partida, você escolhe um **Líder**. Ele fica fora do baralho e representa sua facção.
+
+- Cada Líder tem **pontos de vida (HP)** — se chegar a 0, você perde.
+- Cada Líder tem uma **habilidade ativa** (1 uso por turno).
+- Cada Líder pode **evoluir** durante a partida gastando **5 Corrupção**, mudando para uma forma mais poderosa.
+
+### Noah — o pugilista (facção Delta)
+
+| Atributo | Valor |
+|----------|-------|
+| HP | 15 |
+| Facção | Delta |
+| Estilo | Tank / Proteção / Controle de terreno |
+| **Habilidade: Escudo** | Durante o combate (1×/turno): proteja uma tropa aliada na arena. O escudo bloqueia o **próximo dano** que ela receber, independente da quantidade (1 ou 50). |
+| Evoluções | Noah — o vampiro inverno · Noah — o Delta da Empatia |
+
+### Evolução de Líder
+
+Na **fase principal** do seu turno (sem combate ativo), se você tiver **5 Corrupção**, pode evoluí-lo para uma forma disponível. A evolução é **irreversível** na partida.
+
+---
+
 ## Montando seu baralho
 
 | Regra | Valor |
@@ -17,8 +41,8 @@ Reduza a vida do **Líder** adversário a **0 HP**. Isso acontece principalmente
 | Tamanho mínimo | **40 cartas** (sem máximo) |
 | Cópias por carta | No máximo **4** |
 | Líder | Fica **fora** do baralho |
-
-Seu Líder começa com **15 pontos de vida (HP)**.
+| Cartas de facção | Só com o Líder da facção correspondente |
+| Cartas neutras | Entram em qualquer baralho |
 
 ---
 
@@ -271,9 +295,11 @@ Corrupção é um recurso secundário usado por cartas mais poderosas. Você acu
 - **Templo das Sombras** — ao dominar esta arena, ganha +1 Corrupção.
 - **Escolha pós-fase** — ao escolher "Corrupção" no fim de uma fase, ganha +1 por tropa destruída (máx. +3).
 
-Máximo acumulável: **3 Corrupção**.
+Máximo acumulável: **5 Corrupção**.
 
-Algumas cartas exigem Corrupção além de Essência para serem jogadas (ex.: Omega custa 4 Essência + sacrifício de 1 Essência + 1 Corrupção).
+Corrupção tem dois usos:
+- **Custo de cartas** — algumas cartas exigem Corrupção além de Essência (ex.: Omega custa 4 Essência + sacrifício de 1 + 1 Corrupção).
+- **Evolução do Líder** — gaste 5 Corrupção para evoluir seu Líder para uma forma mais poderosa.
 
 ---
 

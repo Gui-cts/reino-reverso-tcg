@@ -45,13 +45,27 @@ flowchart LR
 ### 3.1 Líder
 
 - Carta **fora do campo** (não é tropa em zona).
-- Tem **habilidade** própria (fora do v1).
+- Tem **habilidade ativa** própria (1× por turno).
 - Define quais cartas de **facção** podem ir no baralho.
 - Sofre dano conforme regras de cada fase (ver seção 7).
+- Pode **evoluir** gastando **5 Corrupção** (fase principal, sem combate ativo).
 
-| Constante | Valor (protótipo v1) | Valor (jogo completo — sugestão) |
-|-----------|----------------------|----------------------------------|
-| Vida inicial | **15 HP** (protótipo — loop MN → Abismo → RR) | Ajustável por modo de jogo |
+| Constante | Valor |
+|-----------|-------|
+| Vida inicial | **15 HP** (ajustável por Líder) |
+| Custo de evolução | **5 Corrupção** |
+| Corrupção máxima | **5** |
+
+#### Habilidades de Líder
+
+| Líder | Facção | Habilidade | Quando |
+|-------|--------|------------|--------|
+| **Noah — o pugilista** | Delta | **Escudo**: protege 1 tropa aliada na arena; bloqueia o próximo dano (qualquer quantidade) | Durante combate |
+
+#### Evolução de Líder
+
+Na fase principal (sem combate), gastar **5 Corrupção** → evoluir para uma forma disponível.
+Formas do Noah: pugilista (base) → vampiro inverno ou Delta da Empatia.
 
 ### 3.2 Baralho
 
@@ -353,12 +367,16 @@ Checklist do que o código atual cobre:
 - [x] Reino Reverso: dano ao Líder ao vencer combate, tropas à base, vácuo
 - [x] Magias piloto (Encore, Pele de Ferro, Caldeirão de Sangue)
 - [x] Gasto de Corrupção em cartas
+- [x] Líder com habilidade ativa (Escudo do Noah)
+- [x] Evolução de Líder (5 Corrupção → nova forma)
+- [x] 3 formas do Noah (pugilista, vampiro inverno, Delta da Empatia)
+- [x] Facção Delta
 
 Fora do protótipo atual:
 
-- [ ] Magias, artefatos, equipamentos
-- [ ] CPU / multiplayer online
-- [ ] Validação estrita de baralho por Líder
+- [ ] Artefatos, equipamentos
+- [ ] Multiplayer online
+- [ ] Validação estrita de baralho por Líder (UI de deckbuilder)
 
 ### Como rodar
 
