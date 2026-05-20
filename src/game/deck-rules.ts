@@ -11,6 +11,7 @@ export type DeckValidationResult = {
   errors: DeckValidationError[];
 };
 
+const DEFAULT_MIN_DECK_SIZE = 40;
 const DEFAULT_MAX_COPIES = 4;
 const CAPTAIN_MAX_COPIES = 1;
 
@@ -20,15 +21,16 @@ function catalogMap(cards: CardDefinition[]): Record<string, CardDefinition> {
 
 /**
  * Valida um baralho para o deckbuilder / partida.
- * `leaderId` deve ser a carta de Líder escolhida (fora das 50 cartas jogáveis).
+ * Mínimo de {@link DEFAULT_MIN_DECK_SIZE} cartas, sem máximo.
+ * `leaderId` deve ser a carta de Líder escolhida (fora do baralho jogável).
  */
 export function validateDeck(
   deck: DeckDefinition,
   catalog: Record<string, CardDefinition>,
-  options?: { deckSize?: number; maxCopies?: number },
+  options?: { minDeckSize?: number; maxCopies?: number },
 ): DeckValidationResult {
   const errors: DeckValidationError[] = [];
-  const deckSize = options?.deckSize ?? 50;
+  const minDeckSize = options?.minDeckSize ?? DEFAULT_MIN_DECK_SIZE;
   const maxCopies = options?.maxCopies ?? DEFAULT_MAX_COPIES;
   const counts = new Map<string, number>();
 
@@ -51,10 +53,10 @@ export function validateDeck(
     counts.set(id, (counts.get(id) ?? 0) + 1);
   }
 
-  if (deck.cardIds.length !== deckSize) {
+  if (deck.cardIds.length < minDeckSize) {
     errors.push({
       code: "deck_size",
-      message: `O baralho precisa de exatamente ${deckSize} cartas (atual: ${deck.cardIds.length}).`,
+      message: `O baralho precisa de no mínimo ${minDeckSize} cartas (atual: ${deck.cardIds.length}).`,
     });
   }
 
@@ -110,6 +112,5 @@ export function validateStarterDeck(catalogData: CardCatalog): DeckValidationRes
   return validateDeck(
     { leaderId: null, cardIds: catalogData.starterDeck },
     catalog,
-    { deckSize: catalogData.starterDeck.length },
   );
 }
