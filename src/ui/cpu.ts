@@ -3,6 +3,7 @@ import {
   canAffordSpellCost,
   canPlaySpellNow,
   canTargetSpell,
+  cardHasKeyword,
   getAvailableEssence,
   getCombatAssigningPlayer,
   getContestedArenaNames,
@@ -21,7 +22,15 @@ import {
 } from "../game/helpers";
 import { canAffordCardCost, getEssenceCost } from "../game/card-meta";
 import { spellRequiresTarget } from "../game/spell-stack";
-import type { ArenaDefinition, GameAction, GameState, PlayerId } from "../game/types";
+import type {
+  ArenaDefinition,
+  CardDefinition,
+  GameAction,
+  GameState,
+  PlayerId,
+  SpellEffectId,
+  TroopInstance,
+} from "../game/types";
 import { MAX_TROOPS_PER_ZONE } from "../game/types";
 
 function pickRandom<T>(arr: T[]): T | undefined {
@@ -141,7 +150,57 @@ function pickCpuMulligan(state: GameState, cpu: PlayerId): GameAction {
   return { type: "SKIP_MULLIGAN", player: cpu };
 }
 
+function scoreSpellTarget(
+  _state: GameState,
+  cpu: PlayerId,
+  effect: SpellEffectId,
+  target: TroopInstance,
+): number {
+  const inArena = target.zone === "arena";
+  const isAlly = target.owner === cpu;
+  const power = target.attack + target.currentHealth;
+
+  switch (effect) {
+    case "iron-skin":
+      return (isAlly ? 100 : -1000) + (inArena ? 50 : 0) + power;
+    case "encore":
+      return (isAlly ? 100 : -1000) + (inArena ? 60 : 0) + target.attack * 2;
+    case "blood-cauldron":
+      return (!isAlly ? 100 : -1000) + (200 - target.currentHealth);
+    case "gust-wind":
+      return (!isAlly ? 100 : -200) + (inArena ? power * 2 : 0);
+    case "omega":
+      return (!isAlly ? 100 : -1000) + power * 3;
+    case "constriction":
+      return (!isAlly ? 100 : -1000) + target.attack * 2 + (inArena ? 50 : 0);
+    case "ethereal":
+      return (isAlly ? 100 : -1000) + (inArena ? 80 : 0) + power;
+    default:
+      return isAlly ? power : -power;
+  }
+}
+
+function scoreSpellAction(
+  _state: GameState,
+  _cpu: PlayerId,
+  def: CardDefinition,
+  bestTargetScore: number,
+): number {
+  const effect = def.spellEffect!;
+  let base = bestTargetScore;
+  if (effect === "draw-two" || effect === "troop-tutor" || effect === "spell-tutor") {
+    base = 80;
+  }
+  if (effect === "omega") base += 40;
+  if (effect === "counterspell") base -= 200;
+  base -= def.cost * 5;
+  return base;
+}
+
 function pickPlaySpell(state: GameState, cpu: PlayerId): GameAction | null {
+  type Candidate = { spellId: string; targetId?: string; score: number };
+  const candidates: Candidate[] = [];
+
   for (const spellId of state.players[cpu].hand) {
     const spellInst = state.troops[spellId];
     if (!spellInst || spellInst.owner !== cpu) continue;
@@ -151,8 +210,13 @@ function pickPlaySpell(state: GameState, cpu: PlayerId): GameAction | null {
     if (!canAffordSpellCost(state, cpu, spellDef)) continue;
 
     const effect = spellDef.spellEffect;
+
     if (!spellRequiresTarget(effect)) {
-      return { type: "PLAY_SPELL", player: cpu, spellInstanceId: spellId };
+      candidates.push({
+        spellId,
+        score: scoreSpellAction(state, cpu, spellDef, 80),
+      });
+      continue;
     }
 
     const targets = Object.values(state.troops).filter((t) =>
@@ -160,41 +224,35 @@ function pickPlaySpell(state: GameState, cpu: PlayerId): GameAction | null {
     );
     if (targets.length === 0) continue;
 
-    if (spellDef.spellEffect === "gust-wind") {
-      const enemies = targets
-        .filter((t) => t.owner !== cpu)
-        .sort((a, b) => b.attack + b.currentHealth - (a.attack + a.currentHealth));
-      const pick = enemies[0] ?? targets[0]!;
-      return {
-        type: "PLAY_SPELL",
-        player: cpu,
-        spellInstanceId: spellId,
-        targetTroopId: pick.instanceId,
-      };
-    }
+    const scored = targets
+      .map((t) => ({
+        t,
+        s: scoreSpellTarget(state, cpu, effect, t),
+      }))
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s);
 
-    if (spellDef.spellEffect === "blood-cauldron") {
-      const enemy = targets.sort((a, b) => a.currentHealth - b.currentHealth)[0]!;
-      return {
-        type: "PLAY_SPELL",
-        player: cpu,
-        spellInstanceId: spellId,
-        targetTroopId: enemy.instanceId,
-      };
-    }
+    if (scored.length === 0) continue;
 
-    const ally = targets
-      .filter((t) => t.owner === cpu)
-      .sort((a, b) => b.attack + b.currentHealth - (a.attack + a.currentHealth));
-    const pick = ally[0] ?? targets[0]!;
-    return {
-      type: "PLAY_SPELL",
-      player: cpu,
-      spellInstanceId: spellId,
-      targetTroopId: pick.instanceId,
-    };
+    candidates.push({
+      spellId,
+      targetId: scored[0]!.t.instanceId,
+      score: scoreSpellAction(state, cpu, spellDef, scored[0]!.s),
+    });
   }
-  return null;
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  const best = candidates[0]!;
+
+  if (best.score <= 0) return null;
+
+  return {
+    type: "PLAY_SPELL",
+    player: cpu,
+    spellInstanceId: best.spellId,
+    ...(best.targetId ? { targetTroopId: best.targetId } : {}),
+  };
 }
 
 function cpuHasPlayableSpell(state: GameState, cpu: PlayerId): boolean {
@@ -240,21 +298,28 @@ function pickSacrificeForEssence(state: GameState, cpu: PlayerId): GameAction | 
   const hand = handTroopDefs(state, cpu);
   if (hand.length === 0) return null;
 
-  const canPlaySomething = hand.some((h) => {
-    const def = state.catalog[h.cardId];
-    return def ? canAffordCardCost(state, cpu, def) : false;
-  });
-  const available = getAvailableEssence(state, cpu).length;
-  const minCost = Math.min(...hand.map((h) => h.cost));
-
-  if (canPlaySomething && available >= minCost) return null;
-
   const sacrificable = [...hand]
     .filter((h) => h.hasEssence)
     .sort((a, b) => a.power - b.power);
   if (sacrificable.length === 0) return null;
 
-  return { type: "SACRIFICE_ESSENCE", troopId: sacrificable[0]!.troopId };
+  const available = getAvailableEssence(state, cpu).length;
+  const maxCostInHand = Math.max(...hand.map((h) => h.cost));
+
+  const canPlaySomething = hand.some((h) => {
+    const def = state.catalog[h.cardId];
+    return def ? canAffordCardCost(state, cpu, def) : false;
+  });
+
+  if (!canPlaySomething) {
+    return { type: "SACRIFICE_ESSENCE", troopId: sacrificable[0]!.troopId };
+  }
+
+  if (available < maxCostInHand && hand.length >= 3) {
+    return { type: "SACRIFICE_ESSENCE", troopId: sacrificable[0]!.troopId };
+  }
+
+  return null;
 }
 
 function pickPlayTroop(state: GameState, cpu: PlayerId): GameAction | null {
@@ -413,13 +478,26 @@ function pickBestCombatAttack(
       ? [pickRandom(allEnemies)!]
       : getLegalCombatTargets(state, cpu, arenaId);
 
+    const attackerDef = state.catalog[attacker.cardId];
+    const hasFatiar = attackerDef ? cardHasKeyword(attackerDef, "fatiar") : false;
+
     for (const target of candidates) {
       const lethal = target.currentHealth <= attacker.attack;
-      const score =
-        (lethal ? 1000 : 0) +
-        (100 - target.currentHealth) +
-        attacker.attack -
-        (attacker.currentHealth <= target.attack ? target.attack : 0) * 0.3;
+      const overkill = attacker.attack - target.currentHealth;
+      const tradeDies = attacker.currentHealth <= target.attack;
+
+      let score = 0;
+      score += lethal ? 1000 : 0;
+      if (hasFatiar && lethal && overkill > 0 && allEnemies.length > 1) {
+        score += 500 + overkill * 50;
+      }
+      score += 100 - target.currentHealth;
+      score += attacker.attack;
+      score -= tradeDies ? Math.round(target.attack * 0.3) : 0;
+      if (!lethal && !tradeDies) {
+        score += attacker.currentHealth > target.attack ? 20 : 0;
+      }
+
       if (!best || score > best.score) {
         best = {
           attackerId: attacker.instanceId,
@@ -518,9 +596,18 @@ export function pickCpuAction(state: GameState, cpuPlayer: PlayerId): GameAction
   if (pendingAct) return pendingAct;
   const cpu = cpuPlayer;
 
+  if (state.matchPhase === "setup_arenas_p0" && cpu === 0) {
+    if (state.selectedArenaIds[0].length < 2) return pickArenaSetup(state, 0);
+    return null;
+  }
+
   if (state.matchPhase === "setup_arenas_p1" && cpu === 1) {
     if (state.selectedArenaIds[1].length < 2) return pickArenaSetup(state, 1);
     return null;
+  }
+
+  if (state.matchPhase === "mulligan_p0" && cpu === 0) {
+    return pickCpuMulligan(state, 0);
   }
 
   if (state.matchPhase === "mulligan_p1" && cpu === 1) {
@@ -567,7 +654,9 @@ export function pickCpuAction(state: GameState, cpuPlayer: PlayerId): GameAction
 export function cpuControlsPhase(state: GameState, cpuPlayer: PlayerId): boolean {
   if (state.matchPhase === "finished") return false;
 
+  if (state.matchPhase === "setup_arenas_p0" && cpuPlayer === 0) return true;
   if (state.matchPhase === "setup_arenas_p1" && cpuPlayer === 1) return true;
+  if (state.matchPhase === "mulligan_p0" && cpuPlayer === 0) return true;
   if (state.matchPhase === "mulligan_p1" && cpuPlayer === 1) return true;
   if (state.matchPhase === "phase_end_choice_p0" && cpuPlayer === 0) return true;
   if (state.matchPhase === "phase_end_choice_p1" && cpuPlayer === 1) return true;
