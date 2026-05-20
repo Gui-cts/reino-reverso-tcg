@@ -336,7 +336,7 @@ Checklist do que o código atual cobre:
 - [x] 2 jogadores local (hotseat)
 - [x] Setup: escolha de 2 arenas + neutra
 - [x] Mulligan parcial
-- [x] Mão 5, deck 40, cópias no JSON
+- [x] Mão 5, deck mín. 40 (starter: 60), cópias no JSON
 - [x] Turno: Preparação → Compra → Início → Jogo
 - [x] Essência: converter ✦ (1×/turno), exaurir ao pagar, desvirar na preparação
 - [x] Tropas: convocar na base, mover base↔arena, exaustão

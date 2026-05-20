@@ -86,9 +86,9 @@ O sacrifício pode ser uma das fichas **recém-exauridas**.
 
 `validateDeck({ leaderId, cardIds }, catalog)` em `src/game/deck-rules.ts`:
 
-- Tamanho do deck (50 no piloto)  
-- Máx. 4 cópias (1 para capitãs)  
-- Líder não pode estar nas 50 cartas  
+- Mínimo de **40** cartas (sem máximo)  
+- Máx. **4** cópias por carta (1 para capitãs)  
+- Líder não pode estar no baralho jogável  
 - Capitã exige Líder compatível  
 
 O `starterDeck` é validado ao carregar `cards.json` (avisos no console se algo quebrar).

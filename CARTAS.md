@@ -1,7 +1,7 @@
 # Catálogo de cartas — Reino Reverso TCG
 
 Referência das cartas definidas em [`public/data/cards.json`](public/data/cards.json).  
-Atualizado conforme o protótipo em jogo (deck inicial: **50 cartas**).
+Atualizado conforme o protótipo em jogo (deck inicial: **60 cartas**).
 
 **Metadados de deck:** tipo (`cardType`), facção (`faction`), líder, capitã e custos avançados — ver [`DECKBUILDING.md`](DECKBUILDING.md).
 
@@ -13,13 +13,13 @@ Atualizado conforme o protótipo em jogo (deck inicial: **50 cartas**).
 
 | Tipo | Quantidade no catálogo | No deck inicial (50) |
 |------|------------------------|----------------------|
-| Tropas neutras | 40 | 42* |
-| Feitiços neutros | 11 | 8* |
+| Tropas neutras | 40 | 52 |
+| Feitiços neutros | 11 | 8 |
 | Token (não no deck) | 1 | — |
 | Lenda / especial | 1 | — |
 | Líder (fora do deck) | 1 | — |
 
-\* O `starterDeck` ainda usa só o pool piloto original (50 cartas). As 27 cartas novas estão no catálogo para testes/deckbuilder.
+O `starterDeck` tem **60** cartas (mínimo do jogo: 40, sem máximo). As cartas novas do catálogo estão disponíveis para testes/deckbuilder.
 
 ---
 
@@ -156,7 +156,7 @@ Atualizado conforme o protótipo em jogo (deck inicial: **50 cartas**).
 | Muralha de Ossos | 1 |
 | Ceifador Laminar | 2 |
 | Falcão do Abismo | 2 |
-| **Total** | **50** |
+| **Total** | **60** |
 
 ---
 
