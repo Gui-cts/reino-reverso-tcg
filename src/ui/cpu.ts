@@ -1,15 +1,27 @@
 import {
   arenaUsesRandomCombatTargets,
+  canAffordSpellCost,
   canPlaySpellNow,
   canTargetSpell,
   getAvailableEssence,
   getCombatAssigningPlayer,
   getContestedArenaNames,
+  getLegalCombatTargets,
   getRRUnansweredArenaNames,
   hasAttackedThisStrike,
   isSpellCard,
+  troopCanFlyBetweenArenas,
 } from "../game";
-import { canAfford, countTroopsInZone, getTroopsInZone, opponent } from "../game/helpers";
+import { arenaBlocksNormalExit } from "../game/arena-effects";
+import {
+  canAfford,
+  canPayEssenceCost,
+  countTroopsInZone,
+  getTroopsInZone,
+  opponent,
+} from "../game/helpers";
+import { getEssenceCost } from "../game/card-meta";
+import { spellRequiresTarget } from "../game/spell-stack";
 import type { ArenaDefinition, GameAction, GameState, PlayerId } from "../game/types";
 import { MAX_TROOPS_PER_ZONE } from "../game/types";
 
@@ -135,7 +147,12 @@ function pickPlaySpell(state: GameState, cpu: PlayerId): GameAction | null {
     const spellDef = state.catalog[spellInst.cardId];
     if (!spellDef || !isSpellCard(spellDef) || !spellDef.spellEffect) continue;
     if (!canPlaySpellNow(state, cpu, spellDef)) continue;
-    if (!canAfford(state, cpu, spellDef.cost)) continue;
+    if (!canAffordSpellCost(state, cpu, spellDef)) continue;
+
+    const effect = spellDef.spellEffect;
+    if (!spellRequiresTarget(effect)) {
+      return { type: "PLAY_SPELL", player: cpu, spellInstanceId: spellId };
+    }
 
     const targets = Object.values(state.troops).filter((t) =>
       canTargetSpell(state, cpu, spellDef, t),
@@ -297,7 +314,41 @@ function findArenaForMove(state: GameState, cpu: PlayerId): { arenaId: string } 
   return { arenaId: bestArena.id };
 }
 
+function pickFlyingMove(state: GameState, cpu: PlayerId): GameAction | null {
+  const flyers = Object.values(state.troops).filter(
+    (t) =>
+      t.owner === cpu &&
+      t.zone === "arena" &&
+      t.arenaId &&
+      !t.exhausted &&
+      !t.pinned &&
+      troopCanFlyBetweenArenas(state, t),
+  );
+  if (flyers.length === 0) return null;
+
+  const target = findArenaForMove(state, cpu);
+  if (!target) return null;
+
+  const troop =
+    flyers.find((t) => t.arenaId !== target.arenaId) ??
+    [...flyers].sort(
+      (a, b) => b.attack + b.currentHealth - (a.attack + a.currentHealth),
+    )[0];
+  if (!troop?.arenaId || troop.arenaId === target.arenaId) return null;
+  if (troop.arenaId && arenaBlocksNormalExit(state, troop.arenaId)) return null;
+
+  return {
+    type: "MOVE_TROOP",
+    troopId: troop.instanceId,
+    to: "arena",
+    arenaId: target.arenaId,
+  };
+}
+
 function pickMoveTroop(state: GameState, cpu: PlayerId): GameAction | null {
+  const fly = pickFlyingMove(state, cpu);
+  if (fly) return fly;
+
   const baseTroops = getTroopsInZone(state, cpu, "base").filter(
     (t) => !t.exhausted && !t.pinned,
   );
@@ -345,15 +396,15 @@ function pickBestCombatAttack(
   const allies = livingInArena(state, cpu, arenaId).filter(
     (t) => !hasAttackedThisStrike(combat, t.instanceId),
   );
-  const enemies = livingInArena(state, opponent(cpu), arenaId);
-  if (allies.length === 0 || enemies.length === 0) return null;
+  const allEnemies = livingInArena(state, opponent(cpu), arenaId);
+  if (allies.length === 0 || allEnemies.length === 0) return null;
 
   let best: { attackerId: string; targetId: string; score: number } | null = null;
 
   for (const attacker of allies) {
     const candidates = arenaUsesRandomCombatTargets(state, arenaId)
-      ? [pickRandom(enemies)!]
-      : enemies;
+      ? [pickRandom(allEnemies)!]
+      : getLegalCombatTargets(state, cpu, arenaId);
 
     for (const target of candidates) {
       const lethal = target.currentHealth <= attacker.attack;
@@ -427,7 +478,37 @@ function pickMainTurnAction(state: GameState, cpu: PlayerId): GameAction | null 
   return { type: "END_TURN" };
 }
 
+function pickPendingSpellAction(state: GameState, cpuPlayer: PlayerId): GameAction | null {
+  const pending = state.pendingSpell;
+  if (!pending) return null;
+
+  if (pending.awaitingCounterPayment && pending.caster === cpuPlayer) {
+    const pay = canPayEssenceCost(state, cpuPlayer, { exhaust: 2 });
+    return {
+      type: "RESOLVE_COUNTER_PAYMENT",
+      player: cpuPlayer,
+      payTwoEssence: pay,
+    };
+  }
+
+  if (pending.counterWindowOpen && opponent(pending.caster) === cpuPlayer) {
+    for (const spellId of state.players[cpuPlayer].hand) {
+      const def = state.catalog[state.troops[spellId]?.cardId ?? ""];
+      if (def?.spellEffect === "counterspell" && canPlaySpellNow(state, cpuPlayer, def)) {
+        if (canPayEssenceCost(state, cpuPlayer, getEssenceCost(def))) {
+          return { type: "PLAY_SPELL", player: cpuPlayer, spellInstanceId: spellId };
+        }
+      }
+    }
+    return { type: "PASS_SPELL_COUNTER", player: cpuPlayer };
+  }
+
+  return null;
+}
+
 export function pickCpuAction(state: GameState, cpuPlayer: PlayerId): GameAction | null {
+  const pendingAct = pickPendingSpellAction(state, cpuPlayer);
+  if (pendingAct) return pendingAct;
   const cpu = cpuPlayer;
 
   if (state.matchPhase === "setup_arenas_p1" && cpu === 1) {
@@ -496,6 +577,10 @@ export function cpuControlsPhase(state: GameState, cpuPlayer: PlayerId): boolean
   if (state.matchPhase === "setup_rr_winner" && state.phaseWinner === cpuPlayer) {
     return true;
   }
+
+  const pending = state.pendingSpell;
+  if (pending?.awaitingCounterPayment && pending.caster === cpuPlayer) return true;
+  if (pending?.counterWindowOpen && opponent(pending.caster) === cpuPlayer) return true;
 
   if (state.combat) {
     if (state.combat.subPhase === "magic") {

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 80" fill="none" aria-hidden="true">
+  <ellipse cx="32" cy="14" rx="11" ry="12" fill="#8a9aaa"/>
+  <path d="M18 28c0-8 6-12 14-12s14 4 14 12v6H18v-6z" fill="#7a8a9a"/>
+  <path d="M14 36h36v38c0 4-3 6-8 6H22c-5 0-8-2-8-6V36z" fill="#6a7a8a"/>
+  <path d="M8 38h10v28c0 3-2 5-5 5s-5-2-5-5V38z" fill="#5a6a7a"/>
+  <path d="M46 38h10v28c0 3-2 5-5 5s-5-2-5-5V38z" fill="#5a6a7a"/>
+</svg>

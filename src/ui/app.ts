@@ -17,23 +17,29 @@ import {
   hasAttackedThisStrike,
   isCombatMagicPhase,
   isCombatStrikePhase,
+  isLegalCombatTarget,
 } from "../game";
+import { formatKeywordsLine } from "../game/keywords";
 import { describeArenaEffect } from "../game/arenas";
 import {
   arenaUsesRandomCombatTargets,
   dominationsToWinPhase,
   phaseDisplayName,
 } from "../game";
-import { opponent } from "../game/helpers";
 import {
+  canAffordSpellCost,
   canPlaySpellNow,
   canTargetSpell,
+  formatCardCost,
   describeSpellEffect,
   getCardSpeed,
   isSpellCard,
   spellEffectLabel,
+  spellRequiresTarget,
 } from "../game";
+import { opponent } from "../game/helpers";
 import { pickCpuAction, cpuControlsPhase } from "./cpu";
+import { attachCardHoverPreview } from "./card-hover-preview";
 import { cardFromDef, createCardEl, createEssenceTokenEl, createHiddenCardEl } from "./card-view";
 import {
   bindDropZone,
@@ -160,15 +166,18 @@ export class GameApp {
   }
 
   private canDragTroopsOnField(s: GameState, troop: TroopInstance): boolean {
-    return (
-      s.matchPhase === "playing" &&
-      s.turnPhase === "main" &&
-      !s.combat &&
-      s.activePlayer === troop.owner &&
-      !troop.pinned &&
-      !troop.exhausted &&
-      this.canControlPlayer(s, troop.owner)
-    );
+    if (
+      s.matchPhase !== "playing" ||
+      s.turnPhase !== "main" ||
+      s.combat ||
+      s.activePlayer !== troop.owner ||
+      troop.pinned ||
+      troop.exhausted ||
+      !this.canControlPlayer(s, troop.owner)
+    ) {
+      return false;
+    }
+    return troop.zone === "base" || troop.zone === "arena";
   }
 
   private update(next: GameState): void {
@@ -317,14 +326,25 @@ export class GameApp {
     const troop = s.troops[payload.troopId];
     if (!troop || troop.owner !== active) return;
 
-    if (zone.kind === "arena" && zone.arenaId && troop.zone === "base") {
-      this.dispatchAction({
-        type: "MOVE_TROOP",
-        troopId: payload.troopId,
-        to: "arena",
-        arenaId: zone.arenaId,
-      });
-      return;
+    if (zone.kind === "arena" && zone.arenaId) {
+      if (troop.zone === "base") {
+        this.dispatchAction({
+          type: "MOVE_TROOP",
+          troopId: payload.troopId,
+          to: "arena",
+          arenaId: zone.arenaId,
+        });
+        return;
+      }
+      if (troop.zone === "arena" && troop.arenaId !== zone.arenaId) {
+        this.dispatchAction({
+          type: "MOVE_TROOP",
+          troopId: payload.troopId,
+          to: "arena",
+          arenaId: zone.arenaId,
+        });
+        return;
+      }
     }
     if (zone.kind === "base" && zone.player === active && troop.zone === "arena") {
       this.dispatchAction({ type: "MOVE_TROOP", troopId: payload.troopId, to: "base" });
@@ -891,7 +911,13 @@ export class GameApp {
 
     const essencePanel = document.createElement("div");
     essencePanel.className = "essence-zone-panel";
-    essencePanel.innerHTML = `<strong>Espaço de Essência</strong><br/><span class="zone-hint">Arraste cartas ✦ aqui</span>`;
+    const essReady = getAvailableEssence(s, player).length;
+    const essTotal = getPlayerEssence(s, player).length;
+    const essHint =
+      essTotal > essReady
+        ? `<br/><span class="zone-hint">${essReady}/${essTotal} prontas — exausta desvira no seu próximo turno</span>`
+        : `<br/><span class="zone-hint">Arraste cartas ✦ aqui para converter</span>`;
+    essencePanel.innerHTML = `<strong>Espaço de Essência</strong>${essHint}`;
     const essSlots = document.createElement("div");
     essSlots.className = "troop-slots";
     const essCards = getPlayerEssence(s, player);
@@ -953,6 +979,14 @@ export class GameApp {
       field.className = "arena-field";
 
       for (const player of [1, 0] as PlayerId[]) {
+        const rowWrap = document.createElement("div");
+        rowWrap.className = `arena-player-row arena-player-row--p${player}`;
+
+        const rowLabel = document.createElement("div");
+        rowLabel.className = "arena-row-label";
+        rowLabel.textContent = `J${player + 1}`;
+        rowWrap.appendChild(rowLabel);
+
         const troopRow = document.createElement("div");
         troopRow.className = `arena-row arena-row--p${player}`;
         const troops = this.troopsInArena(s, player, arena.id);
@@ -960,12 +994,13 @@ export class GameApp {
           troopRow.classList.add("arena-row--empty");
           const empty = document.createElement("span");
           empty.className = "arena-row-empty";
-          empty.textContent = "—";
+          empty.textContent = "vazio";
           troopRow.appendChild(empty);
         } else {
           for (const t of troops) troopRow.appendChild(this.troopChip(s, t));
         }
-        field.appendChild(troopRow);
+        rowWrap.appendChild(troopRow);
+        field.appendChild(rowWrap);
       }
 
       el.appendChild(field);
@@ -1027,13 +1062,31 @@ export class GameApp {
     if (canInteractHand && (!this.isCpuPlayer(s, player) || this.canControlPlayer(s, player))) {
       const tip = document.createElement("p");
       tip.className = "mulligan-hint";
-      tip.textContent = this.selection.spellInstanceId
-        ? "Magia selecionada — clique em uma tropa válida no campo."
-        : isCombatMagicPhase(s)
-          ? "Fase de magias: Padrão/Combate/Rápidas — clique na MAGIA e no alvo, ou Passe."
-          : pl.sacrificedThisTurn
-            ? "Arraste tropas → base · MAGIA (Padrão no turno; Rápida a qualquer hora)."
-            : "Arraste tropas → base · MAGIA: clique na carta e no alvo · ✦ no poço.";
+      if (this.selection.spellInstanceId) {
+        const sel = s.troops[this.selection.spellInstanceId];
+        const selDef = sel ? s.catalog[sel.cardId] : undefined;
+        if (selDef && isSpellCard(selDef) && !canAffordSpellCost(s, player, selDef)) {
+          tip.textContent = `Recursos insuficientes para ${selDef.name} (${formatCardCost(selDef)}).`;
+        } else {
+          tip.textContent = "Magia selecionada — clique em uma tropa válida no campo.";
+        }
+      } else if (isCombatMagicPhase(s)) {
+        tip.textContent =
+          "Fase de magias: Padrão/Combate/Rápidas — clique na MAGIA e no alvo, ou Passe.";
+      } else if (pl.sacrificedThisTurn) {
+        tip.textContent = "Arraste tropas → base · MAGIA (Padrão no turno; Rápida a qualquer hora).";
+      } else {
+        tip.textContent =
+          "Arraste tropas → base · MAGIA: clique na carta e no alvo · ✦ no poço.";
+      }
+      const baseFull = this.troopsInBase(s, player).length >= 3;
+      const exhaustedBase = this.troopsInBase(s, player).some((t) => t.exhausted && !t.pinned);
+      if (isActive && s.turnPhase === "main" && !s.combat && exhaustedBase) {
+        tip.textContent +=
+          " Tropas na base exaustas não podem ir à arena neste turno — use Fim de turno.";
+      } else if (isActive && s.turnPhase === "main" && !s.combat && baseFull) {
+        tip.textContent += " Base cheia (3) — não dá para jogar mais tropas da mão.";
+      }
       bar.appendChild(tip);
     }
 
@@ -1054,7 +1107,8 @@ export class GameApp {
         isSpell &&
         canInteractHand &&
         !this.isCpuPlayer(s, player) &&
-        canPlaySpellNow(s, player, def!);
+        canPlaySpellNow(s, player, def!) &&
+        canAffordSpellCost(s, player, def!);
       const chip = hiddenHand
         ? createHiddenCardEl(false)
         : cardFromDef(def!, {
@@ -1065,6 +1119,20 @@ export class GameApp {
             selected: this.selection.spellInstanceId === troopId,
             onClick: canSelectSpell
               ? () => {
+                  const effect = def!.spellEffect;
+                  if (
+                    this.selection.spellInstanceId === troopId &&
+                    effect &&
+                    !spellRequiresTarget(effect)
+                  ) {
+                    this.dispatchAction({
+                      type: "PLAY_SPELL",
+                      player,
+                      spellInstanceId: troopId,
+                    });
+                    this.selection.spellInstanceId = null;
+                    return;
+                  }
                   this.selection.spellInstanceId =
                     this.selection.spellInstanceId === troopId ? null : troopId;
                   this.selection.troopId = null;
@@ -1114,14 +1182,62 @@ export class GameApp {
     const canAct =
       s.matchPhase === "playing" && this.canControlPlayer(s, active);
 
+    const pending = s.pendingSpell;
+    if (pending) {
+      const pendingName = s.catalog[pending.spellCardId]?.name ?? "Feitiço";
+      const pendHint = document.createElement("p");
+      pendHint.className = "mulligan-hint";
+      pendHint.style.color = "#f0c878";
+      if (pending.awaitingCounterPayment) {
+        pendHint.textContent = `Contramagia vs ${pendingName}. Lançador (J${pending.caster + 1}): pagar 2 essências exauridas?`;
+        actions.appendChild(pendHint);
+        if (this.canControlPlayer(s, pending.caster)) {
+          const payBtn = document.createElement("button");
+          payBtn.textContent = "Pagar 2 essências — feitiço resolve";
+          payBtn.onclick = () =>
+            this.dispatchAction({
+              type: "RESOLVE_COUNTER_PAYMENT",
+              player: pending.caster,
+              payTwoEssence: true,
+            });
+          btns.appendChild(payBtn);
+          const cancelBtn = document.createElement("button");
+          cancelBtn.className = "secondary";
+          cancelBtn.textContent = "Não pagar — feitiço anulado";
+          cancelBtn.onclick = () =>
+            this.dispatchAction({
+              type: "RESOLVE_COUNTER_PAYMENT",
+              player: pending.caster,
+              payTwoEssence: false,
+            });
+          btns.appendChild(cancelBtn);
+        }
+      } else if (pending.counterWindowOpen) {
+        pendHint.textContent = `${pendingName} pendente — J${opponent(pending.caster) + 1} pode Contramagia ou passar.`;
+        actions.appendChild(pendHint);
+        const opp = opponent(pending.caster);
+        if (this.canControlPlayer(s, opp)) {
+          const passBtn = document.createElement("button");
+          passBtn.className = "secondary";
+          passBtn.textContent = "Passar (resolver feitiço)";
+          passBtn.onclick = () =>
+            this.dispatchAction({ type: "PASS_SPELL_COUNTER", player: opp });
+          btns.appendChild(passBtn);
+        }
+      }
+    }
+
     if (this.selection.spellInstanceId && s.matchPhase === "playing") {
       const spellInst = s.troops[this.selection.spellInstanceId];
       const spellDef = spellInst ? s.catalog[spellInst.cardId] : undefined;
       if (spellInst?.owner === human && spellDef?.spellEffect) {
+        const needsTarget = spellRequiresTarget(spellDef.spellEffect);
         const spellHint = document.createElement("p");
         spellHint.className = "mulligan-hint";
         spellHint.style.color = "#c4b5fd";
-        spellHint.textContent = `${spellDef.name}: ${describeSpellEffect(spellDef.spellEffect)} — clique no alvo.`;
+        spellHint.textContent = needsTarget
+          ? `${spellDef.name}: ${describeSpellEffect(spellDef.spellEffect)} — clique no alvo.`
+          : `${spellDef.name}: ${describeSpellEffect(spellDef.spellEffect)} — clique de novo na carta para lançar.`;
         actions.appendChild(spellHint);
 
         const cancelSpell = document.createElement("button");
@@ -1224,7 +1340,7 @@ export class GameApp {
     const hint = document.createElement("p");
     hint.className = "mulligan-hint";
     hint.textContent = s.combat
-      ? "Um ataque por vez; alvo morto não revida."
+      ? "Um ataque por vez; troca de dano no mesmo instante com o alvo."
       : s.gamePhase === "reino-reverso"
         ? "RR: tropas inimigas na arena sem resposta = 1 de dano no Líder ao fim do turno; ambos presentes = declare combate."
         : "Arraste cartas/tropas · arena contestada = declare combate antes do fim de turno.";
@@ -1322,10 +1438,12 @@ export class GameApp {
       } else if (!randomTargets && this.canControlPlayer(s, assigningPlayer)) {
         const attackerId = this.selection.troopId;
         const attacker = attackerId ? s.troops[attackerId] : null;
+        const legalTarget = isLegalCombatTarget(s, assigningPlayer, combat.arenaId, troop);
         if (
           attacker?.owner === assigningPlayer &&
           attacker.zone === "arena" &&
-          !hasAttackedThisStrike(combat, attacker.instanceId)
+          !hasAttackedThisStrike(combat, attacker.instanceId) &&
+          legalTarget
         ) {
           onClick = (e) => {
             e.stopPropagation();
@@ -1335,6 +1453,13 @@ export class GameApp {
               targetId: troop.instanceId,
             });
           };
+          subLabel = subLabel ? `${subLabel} · alvo` : "clique — alvo do ataque";
+        } else if (
+          attacker?.owner === assigningPlayer &&
+          !legalTarget &&
+          troop.owner !== assigningPlayer
+        ) {
+          subLabel = "bloqueado — ataque Protetores primeiro";
         }
       }
     } else {
@@ -1345,6 +1470,13 @@ export class GameApp {
 
     if (troop.attachedSpell && !subLabel) {
       subLabel = spellEffectLabel(troop.attachedSpell);
+    }
+    if (!subLabel && def) {
+      const kw = formatKeywordsLine(def);
+      if (kw) subLabel = kw;
+    }
+    if (troop.movementLocked) {
+      subLabel = subLabel ? `${subLabel} · vinculada` : "vinculada — não move";
     }
 
     const spellTargeting =
@@ -1372,43 +1504,61 @@ export class GameApp {
       }
     }
 
-    const chip = def
-      ? cardFromDef(def, {
-          attack: troop.attack,
-          health: troop.currentHealth,
-          ownerLabel: `J${troop.owner + 1}`,
-          compact: true,
-          exhausted: troop.exhausted,
-          pinned: troop.pinned,
-          selected:
-            selected ||
-            Boolean(
-              spellTargeting &&
-                this.selection.spellInstanceId &&
-                (() => {
-                  const si = s.troops[this.selection.spellInstanceId!];
-                  const sd = si ? s.catalog[si.cardId] : undefined;
-                  return (
-                    !!si &&
-                    !!sd &&
-                    canPlaySpellNow(s, si.owner, sd) &&
-                    canTargetSpell(s, si.owner, sd, troop)
-                  );
-                })(),
-            ),
-          subLabel,
-          onClick,
-        })
-      : createCardEl("?", { compact: true });
+    const boardOpts = {
+      attack: troop.attack,
+      health: troop.currentHealth,
+      exhausted: troop.exhausted,
+      pinned: troop.pinned,
+      selected:
+        selected ||
+        Boolean(
+          spellTargeting &&
+            this.selection.spellInstanceId &&
+            (() => {
+              const si = s.troops[this.selection.spellInstanceId!];
+              const sd = si ? s.catalog[si.cardId] : undefined;
+              return (
+                !!si &&
+                !!sd &&
+                canPlaySpellNow(s, si.owner, sd) &&
+                canTargetSpell(s, si.owner, sd, troop)
+              );
+            })(),
+        ),
+      subLabel,
+      onClick,
+    };
+
+    let chip: HTMLElement;
+    if (def) {
+      const mini = cardFromDef(def, { ...boardOpts, miniature: true });
+      const wrap = document.createElement("div");
+      wrap.className = "board-card-wrap";
+      wrap.appendChild(mini);
+      attachCardHoverPreview(wrap, () =>
+        cardFromDef(def, {
+          ...boardOpts,
+          exhausted: false,
+          selected: false,
+          onClick: undefined,
+          miniature: false,
+        }),
+      );
+      chip = wrap;
+    } else {
+      chip = createCardEl("?", { compact: true });
+    }
+
+    const cardEl = chip.querySelector(".game-card") ?? chip;
 
     if (inCombatArena && combat) {
       const alreadyAttacked = hasAttackedThisStrike(combat, troop.instanceId);
       if (!alreadyAttacked) {
-        chip.classList.add(
+        cardEl.classList.add(
           troop.owner === 0 ? "combat-highlight-p0" : "combat-highlight-p1",
         );
       } else {
-        chip.classList.add("combat-attacked");
+        cardEl.classList.add("combat-attacked");
       }
     }
 

@@ -1,5 +1,6 @@
 import { arenaExilesDeadTroops } from "./arena-effects";
 import { appendLog, getTroopName } from "./helpers";
+import { applyTroopDeathTriggers } from "./keywords";
 import { isSpellCard } from "./spells";
 import type { GameState, PlayerId } from "./types";
 
@@ -14,8 +15,14 @@ export function buryDeadTroops(state: GameState): GameState {
   });
   if (dead.length === 0) return state;
 
-  const troops = { ...state.troops };
-  const players = [...state.players] as GameState["players"];
+  let next = state;
+  for (const t of dead) {
+    next = applyTroopDeathTriggers(next, t);
+    if (next.matchPhase === "finished") return next;
+  }
+
+  const troops = { ...next.troops };
+  const players = [...next.players] as GameState["players"];
   const buriedNames: string[] = [];
   const exiledNames: string[] = [];
 
@@ -23,7 +30,7 @@ export function buryDeadTroops(state: GameState): GameState {
     const p = t.owner as PlayerId;
     const pl = { ...players[p] };
     pl.hand = pl.hand.filter((id) => id !== t.instanceId);
-    const name = getTroopName(state, t);
+    const name = getTroopName(next, t);
     const exiled =
       t.arenaId !== null && arenaExilesDeadTroops(state, t.arenaId);
     if (exiled) {
@@ -37,7 +44,7 @@ export function buryDeadTroops(state: GameState): GameState {
     delete troops[t.instanceId];
   }
 
-  let next: GameState = { ...state, troops, players };
+  next = { ...next, troops, players };
   if (buriedNames.length === 1) {
     next = {
       ...next,

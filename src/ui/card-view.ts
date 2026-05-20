@@ -1,6 +1,12 @@
+import {
+  describeKeywordRule,
+  formatKeywordsLine,
+  keywordLabel,
+} from "../game/keywords";
 import { describeSpellEffect, getCardSpeed, isSpellCard, speedLabel } from "../game/spells";
-import type { CardDefinition } from "../game/types";
+import type { CardDefinition, KeywordId } from "../game/types";
 import { getCardArtUrl } from "../game/card-art";
+import { createFramedCardEl } from "./framed-card";
 
 export type CardViewOptions = {
   cost?: number;
@@ -17,6 +23,10 @@ export type CardViewOptions = {
   mulliganPick?: boolean;
   sacrificeTarget?: boolean;
   compact?: boolean;
+  /** Carta na arena — menor, com badges de palavra-chave. */
+  field?: boolean;
+  /** Miniatura no tabuleiro (mesma moldura da mão, menor). */
+  miniature?: boolean;
   /** Carta no Espaço de Essência — só a estrela ✦ central. */
   essenceToken?: boolean;
   onClick?: (ev: MouseEvent) => void;
@@ -67,6 +77,54 @@ function appendCardArt(parent: HTMLElement, imageUrl: string, alt: string): void
   parent.appendChild(wrap);
 }
 
+const KEYWORD_BADGE_SHORT: Partial<Record<KeywordId, string>> = {
+  protetor: "Prot",
+  investida: "Inv",
+  testamento: "Test",
+  eco: "Eco",
+  vincular: "Vin",
+  silencio: "Sil",
+  fatiar: "Fat",
+  voar: "Voo",
+};
+
+function appendKeywordBadges(
+  parent: HTMLElement,
+  keywords: KeywordId[] | undefined,
+  compact: boolean,
+): void {
+  if (!keywords?.length) return;
+  const row = document.createElement("div");
+  row.className = "game-card__kw-badges";
+  for (const kw of keywords) {
+    const badge = document.createElement("span");
+    badge.className = `game-card__kw game-card__kw--${kw}`;
+    badge.textContent = compact
+      ? (KEYWORD_BADGE_SHORT[kw] ?? keywordLabel(kw).slice(0, 4))
+      : keywordLabel(kw);
+    badge.title = describeKeywordRule(kw);
+    row.appendChild(badge);
+  }
+  parent.appendChild(row);
+}
+
+function buildCardTooltip(
+  name: string,
+  def: CardDefinition | undefined,
+  subLabel?: string,
+): string {
+  const lines = [name];
+  if (def) {
+    const kw = formatKeywordsLine(def);
+    if (kw) lines.push(kw);
+    if (def.deathEffect) {
+      lines.push(describeKeywordRule("testamento"));
+    }
+  }
+  if (subLabel) lines.push(subLabel);
+  return lines.join("\n");
+}
+
 export function createCardEl(name: string, opts: CardViewOptions = {}): HTMLElement {
   if (opts.essenceToken) {
     return createEssenceTokenEl(opts.exhausted ?? false);
@@ -75,6 +133,7 @@ export function createCardEl(name: string, opts: CardViewOptions = {}): HTMLElem
   const el = document.createElement("div");
   el.className = "game-card";
   if (opts.compact) el.classList.add("game-card--compact");
+  if (opts.field) el.classList.add("game-card--field");
   if (opts.exhausted) el.classList.add("exhausted");
   if (opts.pinned) el.classList.add("pinned");
   if (opts.hasEssenceSymbol) el.classList.add("has-essence");
@@ -194,6 +253,41 @@ function createSpellCardEl(def: CardDefinition, opts: CardViewOptions = {}): HTM
 }
 
 export function cardFromDef(def: CardDefinition, opts: CardViewOptions = {}): HTMLElement {
+  if (opts.miniature) {
+    const kwLine = formatKeywordsLine(def);
+    const extraSub =
+      opts.subLabel && opts.subLabel !== kwLine ? opts.subLabel : undefined;
+    const el = createFramedCardEl(def, {
+      attack: opts.attack ?? def.attack,
+      health: opts.health ?? def.health,
+      hasEssenceSymbol: def.hasEssenceSymbol,
+      imageUrl: getCardArtUrl(def),
+      ...opts,
+      miniature: true,
+      subLabel: extraSub,
+    });
+    el.title = buildCardTooltip(def.name, def, opts.subLabel ?? (kwLine || undefined));
+    return el;
+  }
+
+  const useFramedHand = !opts.field && !opts.compact && !opts.essenceToken;
+
+  if (useFramedHand) {
+    const kwLine = formatKeywordsLine(def);
+    const extraSub =
+      opts.subLabel && opts.subLabel !== kwLine ? opts.subLabel : undefined;
+    const el = createFramedCardEl(def, {
+      attack: opts.attack ?? def.attack,
+      health: opts.health ?? def.health,
+      hasEssenceSymbol: def.hasEssenceSymbol,
+      imageUrl: getCardArtUrl(def),
+      ...opts,
+      subLabel: extraSub,
+    });
+    el.title = buildCardTooltip(def.name, def, opts.subLabel ?? (kwLine || undefined));
+    return el;
+  }
+
   if (isSpellCard(def)) {
     return createSpellCardEl(def, {
       cost: def.cost,
@@ -201,12 +295,18 @@ export function cardFromDef(def: CardDefinition, opts: CardViewOptions = {}): HT
       ...opts,
     });
   }
-  return createCardEl(def.name, {
+  const kwLine = formatKeywordsLine(def);
+  const subLabel = opts.subLabel ?? (kwLine || undefined);
+  const el = createCardEl(def.name, {
     cost: def.cost,
     attack: def.attack,
     health: def.health,
     hasEssenceSymbol: def.hasEssenceSymbol,
     imageUrl: getCardArtUrl(def),
     ...opts,
+    subLabel,
   });
+  appendKeywordBadges(el, def.keywords, Boolean(opts.field || opts.compact));
+  el.title = buildCardTooltip(def.name, def, subLabel);
+  return el;
 }

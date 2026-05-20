@@ -6,7 +6,10 @@
       "cost": 1,
       "attack": 1,
       "health": 1,
-      "hasEssenceSymbol": true
+      "hasEssenceSymbol": true,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "fragmento-poco",
@@ -14,7 +17,10 @@
       "cost": 1,
       "attack": 1,
       "health": 2,
-      "hasEssenceSymbol": true
+      "hasEssenceSymbol": true,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "vigia-reverso",
@@ -22,7 +28,10 @@
       "cost": 2,
       "attack": 1,
       "health": 3,
-      "hasEssenceSymbol": false
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "eco-banshee",
@@ -30,7 +39,10 @@
       "cost": 2,
       "attack": 2,
       "health": 2,
-      "hasEssenceSymbol": true
+      "hasEssenceSymbol": true,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "lamina-pacto",
@@ -38,7 +50,10 @@
       "cost": 3,
       "attack": 3,
       "health": 2,
-      "hasEssenceSymbol": false
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "guardiao-estandarte",
@@ -46,7 +61,10 @@
       "cost": 3,
       "attack": 2,
       "health": 4,
-      "hasEssenceSymbol": false
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "flagelo-cobre",
@@ -54,7 +72,10 @@
       "cost": 4,
       "attack": 4,
       "health": 3,
-      "hasEssenceSymbol": false
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "sombra-erudito",
@@ -62,7 +83,10 @@
       "cost": 4,
       "attack": 3,
       "health": 4,
-      "hasEssenceSymbol": true
+      "hasEssenceSymbol": true,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "colosso-abismo",
@@ -70,7 +94,10 @@
       "cost": 5,
       "attack": 5,
       "health": 5,
-      "hasEssenceSymbol": false
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "carnical-incandescente",
@@ -78,7 +105,10 @@
       "cost": 2,
       "attack": 2,
       "health": 1,
-      "hasEssenceSymbol": true
+      "hasEssenceSymbol": true,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "encore",
@@ -89,7 +119,9 @@
       "cost": 2,
       "attack": 0,
       "health": 0,
-      "hasEssenceSymbol": false
+      "hasEssenceSymbol": false,
+      "cardType": "spell",
+      "faction": "neutra"
     },
     {
       "id": "pele-ferro",
@@ -100,7 +132,9 @@
       "cost": 2,
       "attack": 0,
       "health": 0,
-      "hasEssenceSymbol": false
+      "hasEssenceSymbol": false,
+      "cardType": "spell",
+      "faction": "neutra"
     },
     {
       "id": "caldeirao-sangue",
@@ -111,7 +145,9 @@
       "cost": 3,
       "attack": 0,
       "health": 0,
-      "hasEssenceSymbol": false
+      "hasEssenceSymbol": false,
+      "cardType": "spell",
+      "faction": "neutra"
     },
     {
       "id": "lufada-vento",
@@ -122,7 +158,9 @@
       "cost": 2,
       "attack": 0,
       "health": 0,
-      "hasEssenceSymbol": false
+      "hasEssenceSymbol": false,
+      "cardType": "spell",
+      "faction": "neutra"
     },
     {
       "id": "token-gargula",
@@ -131,7 +169,10 @@
       "attack": 1,
       "health": 1,
       "hasEssenceSymbol": false,
-      "isToken": true
+      "isToken": true,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
     },
     {
       "id": "susej-arauto",
@@ -140,7 +181,480 @@
       "attack": 2,
       "health": 3,
       "hasEssenceSymbol": false,
-      "isToken": false
+      "isToken": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "escudeiro-pacto",
+      "name": "Escudeiro do Pacto",
+      "cost": 2,
+      "attack": 1,
+      "health": 3,
+      "hasEssenceSymbol": false,
+      "keywords": [
+        "protetor"
+      ],
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "mensageiro-alado",
+      "name": "Mensageiro Alado",
+      "cost": 2,
+      "attack": 2,
+      "health": 2,
+      "hasEssenceSymbol": true,
+      "keywords": [
+        "investida"
+      ],
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "ultimo-suspiro",
+      "name": "Último Suspiro",
+      "cost": 2,
+      "attack": 2,
+      "health": 1,
+      "hasEssenceSymbol": false,
+      "keywords": [
+        "testamento"
+      ],
+      "deathEffect": "draw-one",
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "eco-persistente",
+      "name": "Eco Persistente",
+      "cost": 3,
+      "attack": 2,
+      "health": 2,
+      "hasEssenceSymbol": false,
+      "keywords": [
+        "eco"
+      ],
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "corrente-eterea",
+      "name": "Corrente Etérea",
+      "cost": 3,
+      "attack": 3,
+      "health": 2,
+      "hasEssenceSymbol": false,
+      "keywords": [
+        "vincular"
+      ],
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "vazio-antimagia",
+      "name": "Vazio Antimágia",
+      "cost": 2,
+      "attack": 1,
+      "health": 4,
+      "hasEssenceSymbol": false,
+      "keywords": [
+        "silencio"
+      ],
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "muralha-ossos",
+      "name": "Muralha de Ossos",
+      "cost": 3,
+      "attack": 1,
+      "health": 5,
+      "hasEssenceSymbol": false,
+      "keywords": [
+        "protetor",
+        "testamento"
+      ],
+      "deathEffect": "ping-leader-1",
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "ceifador-laminar",
+      "name": "Ceifador Laminar",
+      "cost": 3,
+      "attack": 3,
+      "health": 2,
+      "hasEssenceSymbol": false,
+      "keywords": [
+        "fatiar"
+      ],
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "falcao-abismo",
+      "name": "Falcão do Abismo",
+      "cost": 2,
+      "attack": 2,
+      "health": 2,
+      "hasEssenceSymbol": true,
+      "keywords": [
+        "voar"
+      ],
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "noah-lider-base",
+      "name": "Noah — o básico",
+      "cardType": "leader",
+      "faction": "neutra",
+      "cost": 0,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "leaderMaxHp": 15,
+      "leaderAbility": "Reservado: habilidade de Líder (fora do baralho).",
+      "leaderFormIds": [
+        "noah-vampiro-inverno",
+        "noah-delta-empatia"
+      ]
+    },
+    {
+      "id": "servo-cinzas",
+      "name": "Servo das Cinzas",
+      "cost": 1,
+      "attack": 1,
+      "health": 2,
+      "hasEssenceSymbol": true,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "militante-bosque",
+      "name": "Militante do Bosque",
+      "cost": 1,
+      "attack": 2,
+      "health": 1,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal",
+      "keywords": ["investida"]
+    },
+    {
+      "id": "sentinela-calha",
+      "name": "Sentinela da Calha",
+      "cost": 2,
+      "attack": 1,
+      "health": 3,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal",
+      "keywords": ["protetor"]
+    },
+    {
+      "id": "arruaceiro-noturno",
+      "name": "Arruaceiro Noturno",
+      "cost": 2,
+      "attack": 3,
+      "health": 1,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "curandeiro-errante",
+      "name": "Curandeiro Errante",
+      "cost": 2,
+      "attack": 1,
+      "health": 4,
+      "hasEssenceSymbol": true,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal",
+      "keywords": ["testamento"],
+      "deathEffect": "draw-one"
+    },
+    {
+      "id": "bruto-patio",
+      "name": "Bruto do Pátio",
+      "cost": 2,
+      "attack": 2,
+      "health": 3,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "arqueiro-torre",
+      "name": "Arqueiro da Torre",
+      "cost": 3,
+      "attack": 3,
+      "health": 2,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "devorador-ecos",
+      "name": "Devorador de Ecos",
+      "cost": 3,
+      "attack": 4,
+      "health": 2,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal",
+      "keywords": ["fatiar"]
+    },
+    {
+      "id": "guarda-penhasco",
+      "name": "Guarda do Penhasco",
+      "cost": 3,
+      "attack": 2,
+      "health": 5,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "sacerdotisa-neutra",
+      "name": "Sacerdotisa Neutra",
+      "cost": 3,
+      "attack": 2,
+      "health": 4,
+      "hasEssenceSymbol": true,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "demolidor-ruinas",
+      "name": "Demolidor das Ruínas",
+      "cost": 4,
+      "attack": 4,
+      "health": 3,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal",
+      "keywords": ["vincular"]
+    },
+    {
+      "id": "espectro-menor",
+      "name": "Espectro Menor",
+      "cost": 4,
+      "attack": 3,
+      "health": 4,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal",
+      "keywords": ["eco"]
+    },
+    {
+      "id": "cavaleiro-desgastado",
+      "name": "Cavaleiro Desgastado",
+      "cost": 4,
+      "attack": 5,
+      "health": 2,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "matriarca-silenciosa",
+      "name": "Matriarca Silenciosa",
+      "cost": 4,
+      "attack": 1,
+      "health": 6,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal",
+      "keywords": ["silencio"]
+    },
+    {
+      "id": "abominacao-lenta",
+      "name": "Abominação Lenta",
+      "cost": 5,
+      "attack": 5,
+      "health": 4,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "tita-partido",
+      "name": "Titã Partido",
+      "cost": 5,
+      "attack": 6,
+      "health": 3,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "filho-bruma",
+      "name": "Filho da Bruma",
+      "cost": 1,
+      "attack": 2,
+      "health": 2,
+      "hasEssenceSymbol": true,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal",
+      "keywords": ["voar"]
+    },
+    {
+      "id": "fera-estalar",
+      "name": "Fera de Estalar",
+      "cost": 3,
+      "attack": 3,
+      "health": 3,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "vigia-crepusculo",
+      "name": "Vigia do Crepúsculo",
+      "cost": 2,
+      "attack": 2,
+      "health": 3,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "colosso-rachado",
+      "name": "Colosso Rachado",
+      "cost": 4,
+      "attack": 4,
+      "health": 4,
+      "hasEssenceSymbol": false,
+      "cardType": "troop",
+      "faction": "neutra",
+      "cardRole": "normal"
+    },
+    {
+      "id": "compendio-vazio",
+      "name": "Compêndio do Vazio",
+      "cardType": "spell",
+      "cardKind": "spell",
+      "cardSpeed": "turn",
+      "spellEffect": "draw-two",
+      "cost": 2,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "faction": "neutra"
+    },
+    {
+      "id": "chamado-tropas",
+      "name": "Chamado das Tropas",
+      "cardType": "spell",
+      "cardKind": "spell",
+      "cardSpeed": "turn",
+      "spellEffect": "troop-tutor",
+      "cost": 3,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "faction": "neutra"
+    },
+    {
+      "id": "contramagia",
+      "name": "Contramagia",
+      "cardType": "spell",
+      "cardKind": "spell",
+      "cardSpeed": "fast",
+      "spellEffect": "counterspell",
+      "cost": 3,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "faction": "neutra"
+    },
+    {
+      "id": "revelacao-erudito",
+      "name": "Revelação do Erudito",
+      "cardType": "spell",
+      "cardKind": "spell",
+      "cardSpeed": "turn",
+      "spellEffect": "spell-tutor",
+      "cost": 2,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "faction": "neutra"
+    },
+    {
+      "id": "constricao",
+      "name": "Constrição",
+      "cardType": "spell",
+      "cardKind": "spell",
+      "cardSpeed": "combat",
+      "spellEffect": "constriction",
+      "cost": 2,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "faction": "neutra"
+    },
+    {
+      "id": "eterealidade",
+      "name": "Eterealidade",
+      "cardType": "spell",
+      "cardKind": "spell",
+      "cardSpeed": "combat",
+      "spellEffect": "ethereal",
+      "cost": 3,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "faction": "neutra"
+    },
+    {
+      "id": "omega",
+      "name": "Omega",
+      "cardType": "spell",
+      "cardKind": "spell",
+      "cardSpeed": "combat",
+      "spellEffect": "omega",
+      "cost": 4,
+      "essenceCost": {
+        "exhaust": 4,
+        "sacrifice": 1
+      },
+      "corruptionCost": 1,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "faction": "neutra"
     }
   ],
   "starterDeck": [
@@ -190,6 +704,19 @@
     "caldeirao-sangue",
     "caldeirao-sangue",
     "lufada-vento",
-    "lufada-vento"
+    "lufada-vento",
+    "escudeiro-pacto",
+    "escudeiro-pacto",
+    "mensageiro-alado",
+    "mensageiro-alado",
+    "ultimo-suspiro",
+    "eco-persistente",
+    "corrente-eterea",
+    "vazio-antimagia",
+    "muralha-ossos",
+    "ceifador-laminar",
+    "ceifador-laminar",
+    "falcao-abismo",
+    "falcao-abismo"
   ]
 }

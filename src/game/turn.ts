@@ -1,4 +1,5 @@
 import { processStartPhase } from "./conquest";
+import { clearMovementLocksForPlayer } from "./keywords";
 import { appendLog, sanitizePlayerHands, untapEssence } from "./helpers";
 import { drawFromDeck } from "./state";
 import type { GameState, PlayerId } from "./types";
@@ -8,7 +9,21 @@ function untapPlayer(state: GameState, player: PlayerId): GameState {
   const troops = { ...state.troops };
   for (const t of Object.values(troops)) {
     if (t.owner === player && (t.zone === "base" || t.zone === "arena")) {
-      troops[t.instanceId] = { ...t, exhausted: false };
+      troops[t.instanceId] = {
+        ...t,
+        exhausted: false,
+        etherealThisTurn: false,
+      };
+    }
+  }
+  return { ...state, troops };
+}
+
+function clearAttackSuppressionForPlayer(state: GameState, player: PlayerId): GameState {
+  const troops = { ...state.troops };
+  for (const t of Object.values(troops)) {
+    if (t.owner === player && t.attackSuppressed) {
+      troops[t.instanceId] = { ...t, attackSuppressed: false };
     }
   }
   return { ...state, troops };
@@ -30,6 +45,8 @@ export function runTurnBegin(state: GameState, player: PlayerId): GameState {
 
   next = untapPlayer(next, player);
   next = untapEssence(next, player);
+  next = clearMovementLocksForPlayer(next, player);
+  next = clearAttackSuppressionForPlayer(next, player);
   next = resetTurnFlags(next, player);
   next = {
     ...next,

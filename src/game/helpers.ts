@@ -1,3 +1,4 @@
+import type { EssenceCost } from "./types";
 import type {
   ArenaState,
   EssenceInstance,
@@ -5,6 +6,7 @@ import type {
   PlayerId,
   TroopInstance,
 } from "./types";
+import { MAX_CORRUPTION } from "./types";
 
 export function opponent(p: PlayerId): PlayerId {
   return p === 0 ? 1 : 0;
@@ -47,7 +49,7 @@ export function getPlayerEssence(
 ): EssenceInstance[] {
   return state.players[player].essenceIds
     .map((id) => state.essencePool[id])
-    .filter((e): e is EssenceInstance => Boolean(e));
+    .filter((e): e is EssenceInstance => Boolean(e) && e.owner === player);
 }
 
 export function getAvailableEssence(
@@ -72,7 +74,19 @@ export function getTroopName(state: GameState, troop: TroopInstance): string {
 }
 
 export function canAfford(state: GameState, player: PlayerId, cost: number): boolean {
-  return getAvailableEssence(state, player).length >= cost;
+  return canPayEssenceCost(state, player, { exhaust: cost });
+}
+
+export function canPayEssenceCost(
+  state: GameState,
+  player: PlayerId,
+  payment: EssenceCost,
+): boolean {
+  const pool = getPlayerEssence(state, player);
+  const sacrifice = payment.sacrifice ?? 0;
+  if (pool.length < payment.exhaust) return false;
+  if (sacrifice > payment.exhaust) return false;
+  return pool.length >= payment.exhaust;
 }
 
 /** Exausta cartas de Essência (não descarta). */
@@ -81,16 +95,84 @@ export function exhaustEssence(
   player: PlayerId,
   cost: number,
 ): GameState {
-  const available = getAvailableEssence(state, player);
-  if (available.length < cost) return state;
+  return payEssenceCost(state, player, { exhaust: cost }).state;
+}
 
-  const essencePool = { ...state.essencePool };
-  for (let i = 0; i < cost; i++) {
-    const card = available[i];
-    essencePool[card.instanceId] = { ...card, exhausted: true };
+/**
+ * Paga custo em Essência: exaurte N fichas; opcionalmente sacrifique M
+ * (vão para `essenceDiscard` do jogador, removidas do pool).
+ */
+export function payEssenceCost(
+  state: GameState,
+  player: PlayerId,
+  payment: EssenceCost,
+): { state: GameState; ok: boolean } {
+  const sacrifice = payment.sacrifice ?? 0;
+  const pool = getPlayerEssence(state, player);
+  if (pool.length < payment.exhaust || sacrifice > payment.exhaust) {
+    return { state, ok: false };
   }
 
-  return { ...state, essencePool };
+  let next = state;
+  const exhaustedIds: string[] = [];
+
+  for (let i = 0; i < payment.exhaust; i++) {
+    const available = getAvailableEssence(next, player);
+    const pick = available[0] ?? getPlayerEssence(next, player).find((e) => !exhaustedIds.includes(e.instanceId));
+    if (!pick) return { state, ok: false };
+    const essencePool = { ...next.essencePool };
+    essencePool[pick.instanceId] = { ...pick, exhausted: true };
+    exhaustedIds.push(pick.instanceId);
+    next = { ...next, essencePool };
+  }
+
+  if (sacrifice > 0) {
+    const toSacrifice = exhaustedIds.slice(0, sacrifice);
+    let essencePool = { ...next.essencePool };
+    let essenceIds = [...next.players[player].essenceIds];
+    let essenceDiscard = [...next.players[player].essenceDiscard];
+    const players = [...next.players] as GameState["players"];
+
+    for (const id of toSacrifice) {
+      const inst = essencePool[id];
+      if (!inst) continue;
+      essenceDiscard.push(inst.cardId);
+      delete essencePool[id];
+      essenceIds = essenceIds.filter((eid) => eid !== id);
+    }
+
+    players[player] = { ...players[player], essenceIds, essenceDiscard };
+    next = { ...next, players, essencePool };
+  }
+
+  return { state: next, ok: true };
+}
+
+export function canPayCorruptionCost(
+  state: GameState,
+  player: PlayerId,
+  amount: number,
+): boolean {
+  if (amount <= 0) return true;
+  return state.players[player].corruption >= amount;
+}
+
+/** Gasta Corrupção acumulada (máx. rastreado em {@link MAX_CORRUPTION}). */
+export function payCorruptionCost(
+  state: GameState,
+  player: PlayerId,
+  amount: number,
+): { state: GameState; ok: boolean } {
+  if (amount <= 0) return { state, ok: true };
+  if (!canPayCorruptionCost(state, player, amount)) {
+    return { state, ok: false };
+  }
+  const players = [...state.players] as GameState["players"];
+  players[player] = {
+    ...players[player],
+    corruption: players[player].corruption - amount,
+  };
+  return { state: { ...state, players }, ok: true };
 }
 
 /** Garante que cada mão só referencia tropas do próprio dono. */

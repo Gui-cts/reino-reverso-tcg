@@ -1,15 +1,30 @@
 import { isMagicAllowedInCombat, spellCostReductionInCombat } from "./arena-effects";
-import { checkCombatEndAfterDamage } from "./combat";
 import {
   appendLog,
-  canAfford,
+  canPayCorruptionCost,
+  canPayEssenceCost,
   countTroopsInZone,
-  exhaustEssence,
+  payCorruptionCost,
+  payEssenceCost,
   getTroopName,
   opponent,
-  sanitizePlayerHands,
 } from "./helpers";
-import { MAX_TROOPS_PER_ZONE } from "./types";
+import {
+  canAffordCardCost,
+  getCorruptionCost,
+  getEssenceCost,
+} from "./card-meta";
+import { troopBlocksEnchantments } from "./keywords";
+import {
+  canRespondWithCounter,
+  cancelPendingSpell,
+  openPendingSpell,
+  resolvePendingSpell,
+  spellRequiresTarget,
+  troopIsUntargetable,
+  tryPayCounterCost,
+} from "./spell-stack";
+import { MAX_CORRUPTION, MAX_TROOPS_PER_ZONE } from "./types";
 import type {
   CardDefinition,
   CardSpeed,
@@ -21,11 +36,14 @@ import type {
 
 export function isSpellCard(def: CardDefinition | undefined): boolean {
   if (!def) return false;
+  if (def.cardType === "spell") return true;
+  if (def.cardType && def.cardType !== "troop") return false;
   return def.cardKind === "spell" || Boolean(def.spellEffect);
 }
 
 export function isTroopCard(def: CardDefinition | undefined): boolean {
   if (!def) return false;
+  if (def.cardType === "troop" || def.isToken) return true;
   return !isSpellCard(def) && !def.isToken;
 }
 
@@ -45,6 +63,8 @@ export function speedLabel(speed: CardSpeed): string {
       return "Rápida";
     case "combat":
       return "Combate";
+    case "turn":
+      return "Turno";
     default:
       return "Padrão";
   }
@@ -52,15 +72,25 @@ export function speedLabel(speed: CardSpeed): string {
 
 export function defaultTroopFields(
   def: CardDefinition,
-): Pick<TroopInstance, "attack" | "currentHealth" | "attachedSpell" | "healthBonus"> {
+): Pick<
+  TroopInstance,
+  "attack" | "currentHealth" | "attachedSpell" | "healthBonus" | "movementLocked"
+> {
   if (isSpellCard(def)) {
-    return { attack: 0, currentHealth: 1, attachedSpell: null, healthBonus: 0 };
+    return {
+      attack: 0,
+      currentHealth: 1,
+      attachedSpell: null,
+      healthBonus: 0,
+      movementLocked: false,
+    };
   }
   return {
     attack: def.attack,
     currentHealth: def.health,
     attachedSpell: null,
     healthBonus: 0,
+    movementLocked: false,
   };
 }
 
@@ -78,6 +108,20 @@ export function describeSpellEffect(effect: SpellEffectId): string {
       return "Tropa inimiga na arena: 1d6 — par = 2 de dano.";
     case "gust-wind":
       return "Tropa na arena (aliada ou inimiga) volta à base do dono, exausta.";
+    case "draw-two":
+      return "Compre 2 cartas.";
+    case "troop-tutor":
+      return "Revele uma tropa do deck e coloque na mão.";
+    case "counterspell":
+      return "Anula feitiço oponente: ele paga 2 essências exauridas ou o efeito é cancelado.";
+    case "spell-tutor":
+      return "Revele um feitiço do deck e coloque na mão.";
+    case "constriction":
+      return "Prende tropa inimiga; no próximo combate do dono dela, não pode atacar.";
+    case "ethereal":
+      return "Tropa aliada não pode ser alvo de ataques nem feitiços pontuais neste turno.";
+    case "omega":
+      return "Destrói instantaneamente uma tropa inimiga no campo (custa 1 Corrupção).";
     default:
       return "";
   }
@@ -93,6 +137,20 @@ export function spellEffectLabel(effect: SpellEffectId): string {
       return "Caldeirão";
     case "gust-wind":
       return "Lufada";
+    case "draw-two":
+      return "Compêndio";
+    case "troop-tutor":
+      return "Chamado";
+    case "counterspell":
+      return "Contramagia";
+    case "spell-tutor":
+      return "Revelação";
+    case "constriction":
+      return "Constrição";
+    case "ethereal":
+      return "Etereal";
+    case "omega":
+      return "Omega";
     default:
       return "";
   }
@@ -104,6 +162,17 @@ function effectiveSpellCost(state: GameState, def: CardDefinition): number {
     cost = Math.max(0, cost - spellCostReductionInCombat(state));
   }
   return cost;
+}
+
+/** Essência (com redução de arena) + Corrupção, se houver. */
+export function canAffordSpellCost(
+  state: GameState,
+  player: PlayerId,
+  spellDef: CardDefinition,
+): boolean {
+  const reduced = effectiveSpellCost(state, spellDef);
+  const payment = { ...getEssenceCost(spellDef), exhaust: Math.max(0, reduced) };
+  return canAffordCardCost(state, player, spellDef, payment);
 }
 
 function isFieldTroop(t: TroopInstance): boolean {
@@ -125,8 +194,16 @@ export function canPlaySpellNow(
     return state.turnPhase === "main" || state.turnPhase === "combat";
   }
 
+  if (speed === "turn") {
+    return state.turnPhase === "main" && state.activePlayer === player && !state.combat;
+  }
+
   if (speed === "combat") {
     return isCombatMagicWindow(state);
+  }
+
+  if (spellDef.spellEffect === "counterspell" && canRespondWithCounter(state, player, spellDef)) {
+    return true;
   }
 
   if (speed === "standard") {
@@ -147,13 +224,29 @@ export function canTargetSpell(
   target: TroopInstance,
 ): boolean {
   if (!spellDef.spellEffect || !isFieldTroop(target)) return false;
+  if (troopIsUntargetable(target)) return false;
 
   const inCombat = state.combat !== null;
   const combatArenaId = state.combat?.arenaId;
 
   switch (spellDef.spellEffect) {
+    case "constriction":
+      if (target.owner === caster) return false;
+      if (target.zone !== "base" && target.zone !== "arena") return false;
+      if (inCombat && combatArenaId && target.arenaId !== combatArenaId) return false;
+      return true;
+    case "ethereal":
+      if (target.owner !== caster) return false;
+      if (target.zone !== "base" && target.zone !== "arena") return false;
+      if (inCombat && combatArenaId && target.arenaId !== combatArenaId) return false;
+      return true;
+    case "omega":
+      if (target.owner === caster) return false;
+      if (target.zone !== "base" && target.zone !== "arena") return false;
+      return true;
     case "encore":
     case "iron-skin":
+      if (troopBlocksEnchantments(state, target)) return false;
       if (target.owner !== caster || target.attachedSpell !== null) return false;
       if (inCombat && target.zone === "base") return false;
       if (inCombat && combatArenaId && target.arenaId !== combatArenaId) return false;
@@ -179,7 +272,7 @@ export function playSpell(
   state: GameState,
   caster: PlayerId,
   spellInstanceId: string,
-  targetTroopId: string,
+  targetTroopId?: string | null,
 ): GameState {
   const pl = state.players[caster];
   if (!pl.hand.includes(spellInstanceId)) {
@@ -194,6 +287,17 @@ export function playSpell(
     return { ...state, log: appendLog(state, "Esta carta não é uma magia.") };
   }
 
+  const effect = spellDef.spellEffect;
+
+  if (effect === "counterspell") {
+    const pending = state.pendingSpell;
+    if (!pending?.counterWindowOpen || caster !== opponent(pending.caster)) {
+      return { ...state, log: appendLog(state, "Contramagia só após um feitiço oponente.") };
+    }
+  } else if (state.pendingSpell) {
+    return { ...state, log: appendLog(state, "Resolva o feitiço pendente antes de lançar outro.") };
+  }
+
   if (!canPlaySpellNow(state, caster, spellDef)) {
     return {
       ...state,
@@ -204,33 +308,67 @@ export function playSpell(
     };
   }
 
-  const target = state.troops[targetTroopId];
-  if (!target) {
-    return { ...state, log: appendLog(state, "Alvo inválido.") };
+  const needsTarget = spellRequiresTarget(effect);
+  const targetId = targetTroopId ?? null;
+  if (needsTarget) {
+    if (!targetId) {
+      return { ...state, log: appendLog(state, "Esta magia precisa de um alvo.") };
+    }
+    const target = state.troops[targetId];
+    if (!target) {
+      return { ...state, log: appendLog(state, "Alvo inválido.") };
+    }
+    if (!canTargetSpell(state, caster, spellDef, target)) {
+      return {
+        ...state,
+        log: appendLog(
+          state,
+          "Alvo inválido para esta magia (zona, arena ou já encantada).",
+        ),
+      };
+    }
   }
 
-  if (!canTargetSpell(state, caster, spellDef, target)) {
+  const baseCost = getEssenceCost(spellDef);
+  const reduced = effectiveSpellCost(state, spellDef);
+  const payment = { ...baseCost, exhaust: Math.max(0, reduced) };
+  const corruptionCost = getCorruptionCost(spellDef);
+
+  if (!canPayEssenceCost(state, caster, payment)) {
     return {
       ...state,
       log: appendLog(
         state,
-        "Alvo inválido para esta magia (zona, arena ou já encantada).",
+        `Essência insuficiente para ${spellDef.name} (precisa ${payment.exhaust}).`,
       ),
     };
   }
 
-  const cost = effectiveSpellCost(state, spellDef);
-  if (!canAfford(state, caster, cost)) {
+  if (!canPayCorruptionCost(state, caster, corruptionCost)) {
     return {
       ...state,
       log: appendLog(
         state,
-        `Essência insuficiente para ${spellDef.name} (precisa ${cost}).`,
+        `${spellDef.name} exige ${corruptionCost} Corrupção (você tem ${pl.corruption}/${MAX_CORRUPTION}).`,
       ),
     };
   }
 
-  let next = exhaustEssence(state, caster, cost);
+  const paid = payEssenceCost(state, caster, payment);
+  if (!paid.ok) {
+    return { ...state, log: appendLog(state, "Não foi possível pagar o custo em Essência.") };
+  }
+  let next = paid.state;
+
+  const paidCorruption = payCorruptionCost(next, caster, corruptionCost);
+  if (!paidCorruption.ok) {
+    return {
+      ...state,
+      log: appendLog(state, "Não foi possível pagar o custo em Corrupção."),
+    };
+  }
+  next = paidCorruption.state;
+
   const players = [...next.players] as GameState["players"];
   const hand = players[caster].hand.filter((id) => id !== spellInstanceId);
   players[caster] = {
@@ -238,97 +376,57 @@ export function playSpell(
     hand,
     discard: [...players[caster].discard, spellInst.cardId],
   };
-
   const troops = { ...next.troops };
   delete troops[spellInstanceId];
+  next = { ...next, players, troops };
 
-  const effect = spellDef.spellEffect;
-  const arenaId = state.combat?.arenaId;
-
-  if (effect === "blood-cauldron") {
-    const roll = rollD6();
-    const even = roll % 2 === 0;
-    let logMsg = `${spellDef.name} em ${getTroopName(next, target)} — 1d6: ${roll}. `;
-    if (even) {
-      const t = troops[targetTroopId]!;
-      const hp = Math.max(0, t.currentHealth - 2);
-      troops[targetTroopId] = { ...t, currentHealth: hp };
-      logMsg += "Par — 2 de dano!";
-    } else {
-      logMsg += "Ímpar — sem dano.";
-    }
-    next = {
-      ...next,
-      players,
-      troops,
-      log: appendLog(next, logMsg),
-    };
-    next = sanitizePlayerHands(next);
-    if (arenaId && next.combat) {
-      return checkCombatEndAfterDamage(next, arenaId, "Combate encerrado após magia");
-    }
-    return next;
+  if (effect === "counterspell") {
+    const pending = state.pendingSpell!;
+    return openPendingSpell(
+      next,
+      { ...pending, counterWindowOpen: false, awaitingCounterPayment: true },
+      `${spellDef.name} — Jogador ${pending.caster + 1} pode exaurir 2 essências para o feitiço resolver.`,
+    );
   }
 
-  const t = troops[targetTroopId]!;
-  if (effect === "iron-skin") {
-    troops[targetTroopId] = {
-      ...t,
-      healthBonus: t.healthBonus + 2,
-      currentHealth: t.currentHealth + 2,
-      attachedSpell: "iron-skin",
-    };
-    next = {
-      ...next,
-      players,
-      troops,
-      log: appendLog(
-        next,
-        `${spellDef.name} em ${getTroopName(next, t)} — +2 de vida permanente.`,
-      ),
-    };
-    return sanitizePlayerHands(next);
-  }
+  return openPendingSpell(
+    next,
+    {
+      caster,
+      spellCardId: spellInst.cardId,
+      effect,
+      targetTroopId: targetId,
+      counterWindowOpen: true,
+      awaitingCounterPayment: false,
+    },
+    `${spellDef.name} lançado — oponente pode jogar Contramagia ou passar.`,
+  );
+}
 
-  if (effect === "encore") {
-    troops[targetTroopId] = { ...t, attachedSpell: "encore" };
-    next = {
-      ...next,
-      players,
-      troops,
-      log: appendLog(
-        next,
-        `${spellDef.name} em ${getTroopName(next, t)} — ataques contra ela podem errar (1d6 ímpar).`,
-      ),
-    };
-    return sanitizePlayerHands(next);
+export function passSpellCounter(state: GameState, player: PlayerId): GameState {
+  const pending = state.pendingSpell;
+  if (!pending?.counterWindowOpen) return state;
+  if (player !== opponent(pending.caster)) {
+    return { ...state, log: appendLog(state, "Só o oponente do lançador pode passar.") };
   }
+  let next = resolvePendingSpell({ ...state, pendingSpell: { ...pending, counterWindowOpen: false } });
+  return { ...next, log: appendLog(next, "Feitiço resolvido.") };
+}
 
-  if (effect === "gust-wind") {
-    const owner = t.owner;
-    troops[targetTroopId] = {
-      ...t,
-      zone: "base",
-      arenaId: null,
-      exhausted: true,
-    };
-    next = {
-      ...next,
-      players,
-      troops,
-      log: appendLog(
-        next,
-        `${spellDef.name} — ${getTroopName(next, t)} voltou à base do Jogador ${owner + 1} (exausta).`,
-      ),
-    };
-    next = sanitizePlayerHands(next);
-    if (arenaId && next.combat) {
-      return checkCombatEndAfterDamage(next, arenaId, "Combate encerrado após magia");
-    }
-    return next;
+export function resolveCounterPayment(
+  state: GameState,
+  player: PlayerId,
+  payTwoEssence: boolean,
+): GameState {
+  const pending = state.pendingSpell;
+  if (!pending?.awaitingCounterPayment) return state;
+  if (player !== pending.caster) {
+    return { ...state, log: appendLog(state, "Só o lançador do feitiço responde à Contramagia.") };
   }
-
-  return state;
+  if (!payTwoEssence) {
+    return cancelPendingSpell(state, "Jogador optou por não pagar.");
+  }
+  return tryPayCounterCost(state, player);
 }
 
 /** Encore: antes do dano, 1d6 ímpar = ataque erra (ainda conta como ataque). */

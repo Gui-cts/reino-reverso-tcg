@@ -23,6 +23,7 @@ function emptyPlayer(): PlayerState {
     deck: [],
     hand: [],
     discard: [],
+    essenceDiscard: [],
     exile: [],
     essenceIds: [],
     dominatedArenas: 0,
@@ -57,6 +58,7 @@ export function drawCards(
       ...defaultTroopFields(def),
       exhausted: false,
       pinned: false,
+      movementLocked: false,
       zone: "hand",
       arenaId: null,
     };
@@ -113,6 +115,7 @@ export function createInitialGame(
     arenaSetupPicks: [],
     cpuPlayer,
     testMode: null,
+    pendingSpell: null,
   };
 
   let nextId = state.nextInstanceId;

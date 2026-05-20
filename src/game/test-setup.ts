@@ -53,6 +53,7 @@ function emptyPlayer(leaderHp: number): PlayerState {
     deck: [],
     hand: [],
     discard: [],
+    essenceDiscard: [],
     exile: [],
     essenceIds: [],
     dominatedArenas: 0,
@@ -132,9 +133,9 @@ export function createTestGame(
     arenaSetupPicks: [],
     cpuPlayer,
     testMode,
+    pendingSpell: null,
   };
 
-  let nextId = state.nextInstanceId;
   for (const p of [0, 1] as PlayerId[]) {
     const drawn = drawCards(
       state.players[p],
@@ -142,12 +143,11 @@ export function createTestGame(
       state.troops,
       catalog,
       p,
-      nextId,
+      state.nextInstanceId,
     );
     const pl = [...state.players] as [PlayerState, PlayerState];
     pl[p] = drawn.player;
-    nextId = drawn.nextId;
-    state = { ...state, players: pl, troops: drawn.troops, nextInstanceId: nextId };
+    state = { ...state, players: pl, troops: drawn.troops, nextInstanceId: drawn.nextId };
     state = addEssenceTokens(state, p, cfg.essenceCount, essenceCardId);
   }
 

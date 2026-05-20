@@ -28,6 +28,7 @@ export function spawnTroopInArena(
     arenaId,
     attachedSpell: null,
     healthBonus: 0,
+    movementLocked: false,
   };
 
   return {

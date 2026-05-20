@@ -30,14 +30,64 @@ export type ArenaEffectId =
   | "rr-mutual-wipe-leader-damage"
   | "rr-loser-only-vacuum";
 
+/** @deprecated Preferir `cardType`. Mantido para JSON legado. */
 export type CardKind = "troop" | "spell";
 
-/** Padrão = só no seu turno (main). Combate = main seu turno + janelas de magia no combate. Rápida = qualquer momento. */
-export type CardSpeed = "standard" | "combat" | "fast";
+/** Tipo da carta no baralho / catálogo. */
+export type CardType = "troop" | "spell" | "equipment" | "artifact" | "leader";
 
-export type SpellEffectId = "encore" | "iron-skin" | "blood-cauldron" | "gust-wind";
+/** Papéis extras (tropas). */
+export type CardRole = "normal" | "captain";
+
+/** Facções — todas as cartas piloto usam `neutra`. */
+export type FactionId = "neutra" | (string & {});
+
+/**
+ * Padrão = seu turno + janelas de magia no combate.
+ * Turno = só main do seu turno (não no combate).
+ * Combate = janelas de magia no combate.
+ * Rápida = main ou combate (ex.: contramagia).
+ */
+export type CardSpeed = "standard" | "combat" | "fast" | "turn";
+
+export type SpellEffectId =
+  | "encore"
+  | "iron-skin"
+  | "blood-cauldron"
+  | "gust-wind"
+  | "draw-two"
+  | "troop-tutor"
+  | "counterspell"
+  | "spell-tutor"
+  | "constriction"
+  | "ethereal"
+  | "omega";
+
+/** Palavras-chave de tropa (não são magias). */
+export type KeywordId =
+  | "protetor"
+  | "investida"
+  | "testamento"
+  | "eco"
+  | "vincular"
+  | "silencio"
+  | "fatiar"
+  | "voar";
+
+/** Efeito ao morrer (`testamento`) — independente de `spellEffect`. */
+export type DeathEffectId = "draw-one" | "ping-leader-1";
 
 export type CombatSubPhase = "magic" | "strike";
+
+/**
+ * Custo em Essência: exaurte N fichas (viram 90°) e, opcionalmente, sacrifique M
+ * para o descarte de Essência (não é o descarte de cartas do baralho).
+ * O sacrifício pode ser uma das fichas recém-exauridas.
+ */
+export interface EssenceCost {
+  exhaust: number;
+  sacrifice?: number;
+}
 
 export interface CardDefinition {
   id: string;
@@ -50,11 +100,42 @@ export interface CardDefinition {
   image?: string;
   /** Ficha / token — não vai no baralho inicial. */
   isToken?: boolean;
-  /** Tropas por padrão; magias usam `spellEffect`. */
+  /** Tipo da carta (feitiço, tropa, equipamento, artefato, líder). */
+  cardType?: CardType;
+  /** @deprecated Use `cardType`. */
   cardKind?: CardKind;
+  /** Facção da carta (sinergias de deck). */
+  faction?: FactionId;
+  /** Tropas: normal ou capitã (máx. 1 cópia; exige `requiredLeaderId`). */
+  cardRole?: CardRole;
+  /** Capitã: id da carta de Líder que permite esta tropa no deck. */
+  requiredLeaderId?: string;
+  /** Líder: vida máxima fora do baralho (substitui LEADER_MAX_HP quando ativo). */
+  leaderMaxHp?: number;
+  /** Líder: nota da habilidade passiva / ativa (implementação futura). */
+  leaderAbility?: string;
+  /**
+   * Líder: ids das formas evoluídas (sacrifício de Corrupção — não implementado).
+   * Ex.: Noah inverno, Noah delta.
+   */
+  leaderFormIds?: string[];
+  /** Custo avançado; se omitido, equivale a `{ exhaust: cost }`. */
+  essenceCost?: EssenceCost;
+  /** Custo em Corrupção (bolinha roxa). */
+  corruptionCost?: number;
   spellEffect?: SpellEffectId;
   /** Tropas = padrão; magias piloto = combate. */
   cardSpeed?: CardSpeed;
+  /** Palavras-chave da tropa. */
+  keywords?: KeywordId[];
+  /** Com `testamento` — efeito ao morrer (não bloqueado por Bar do João). */
+  deathEffect?: DeathEffectId;
+}
+
+/** Baralho + metadados para validação (deckbuilder / partida). */
+export interface DeckDefinition {
+  leaderId: string | null;
+  cardIds: string[];
 }
 
 export interface CardCatalog {
@@ -76,6 +157,24 @@ export interface TroopInstance {
   attachedSpell: SpellEffectId | null;
   /** Bônus de vida permanente (ex.: Pele de Ferro). */
   healthBonus: number;
+  /** Vincular — não pode mover até a preparação do dono. */
+  movementLocked: boolean;
+  /** Eterealidade — não pode ser alvo de ataques/feitiços pontuais neste turno. */
+  etherealThisTurn?: boolean;
+  /** Constrição — não pode atacar no próximo combate em que o dono atacaria. */
+  attackSuppressed?: boolean;
+}
+
+/** Feitiço aguardando contramagia ou resolução. */
+export interface PendingSpellState {
+  caster: PlayerId;
+  spellCardId: string;
+  effect: SpellEffectId;
+  targetTroopId: string | null;
+  /** Oponente pode responder com Contramagia. */
+  counterWindowOpen: boolean;
+  /** Contramagia foi jogada; o lançador original decide pagar 2 essências. */
+  awaitingCounterPayment: boolean;
 }
 
 /** Carta no Espaço de Essência — exausta ao pagar custos, desvira na preparação. */
@@ -132,6 +231,11 @@ export interface PlayerState {
   deck: string[];
   hand: string[];
   discard: string[];
+  /**
+   * Essências sacrificadas como custo (cardIds da carta convertida).
+   * Separado do descarte — cartas que “voltam do descarte” não recuperam isto.
+   */
+  essenceDiscard: string[];
   /** Cartas exiladas (fora do jogo). */
   exile: string[];
   /** IDs no mapa `essencePool` do GameState. */
@@ -192,6 +296,8 @@ export interface GameState {
   cpuPlayer: PlayerId | null;
   /** Modo de teste (pula MN / setup); null em partida normal. */
   testMode: "abismo" | "reino-reverso" | null;
+  /** Pilha de feitiço (contramagia / resolução). */
+  pendingSpell: PendingSpellState | null;
 }
 
 export type GameAction =
@@ -200,7 +306,14 @@ export type GameAction =
   | { type: "SKIP_MULLIGAN"; player: PlayerId }
   | { type: "ADVANCE_TURN_PHASE" }
   | { type: "PLAY_TROOP"; troopId: string }
-  | { type: "PLAY_SPELL"; player: PlayerId; spellInstanceId: string; targetTroopId: string }
+  | {
+      type: "PLAY_SPELL";
+      player: PlayerId;
+      spellInstanceId: string;
+      targetTroopId?: string | null;
+    }
+  | { type: "PASS_SPELL_COUNTER"; player: PlayerId }
+  | { type: "RESOLVE_COUNTER_PAYMENT"; player: PlayerId; payTwoEssence: boolean }
   | { type: "PASS_COMBAT_MAGIC"; player: PlayerId }
   | { type: "SACRIFICE_ESSENCE"; troopId: string }
   | { type: "MOVE_TROOP"; troopId: string; to: "base" | "arena"; arenaId?: string }

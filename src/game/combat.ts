@@ -6,21 +6,12 @@ import {
   sanatorioPingAfterStrike,
 } from "./arena-effects";
 import { finalizeReinoReversoCombat } from "./reino-reverso";
+import { applyStrikeDamage } from "./combat-damage";
+import { isLegalCombatTarget } from "./keywords";
 import { resolveEncoreBeforeAttack } from "./spells";
 
 function livingTroops(troops: TroopInstance[]): TroopInstance[] {
   return troops.filter((t) => t.currentHealth > 0);
-}
-
-function applyDamage(
-  troops: Record<string, TroopInstance>,
-  troopId: string,
-  damage: number,
-): Record<string, TroopInstance> {
-  const t = troops[troopId];
-  if (!t) return troops;
-  const currentHealth = Math.max(0, t.currentHealth - damage);
-  return { ...troops, [troopId]: { ...t, currentHealth } };
 }
 
 /** Jogador que está atacando neste golpe de combate. */
@@ -287,6 +278,12 @@ export function executeCombatAttack(
       log: appendLog(state, "Esta tropa já atacou neste golpe."),
     };
   }
+  if (attacker.attackSuppressed) {
+    return {
+      ...state,
+      log: appendLog(state, `${getTroopName(state, attacker)} não pode atacar (Constrição).`),
+    };
+  }
   if (attacker.zone !== "arena" || attacker.arenaId !== arenaId || attacker.currentHealth <= 0) {
     return state;
   }
@@ -311,6 +308,15 @@ export function executeCombatAttack(
     if (target.zone !== "arena" || target.arenaId !== arenaId || target.currentHealth <= 0) {
       return { ...state, log: appendLog(state, "Alvo inválido ou já destruído.") };
     }
+    if (!isLegalCombatTarget(state, strikingPlayer, arenaId, target)) {
+      return {
+        ...state,
+        log: appendLog(
+          state,
+          "Há Protetores inimigos — ataque um Protetor antes das outras tropas.",
+        ),
+      };
+    }
   }
 
   const encoreCheck = resolveEncoreBeforeAttack(state, attackerId, resolvedTargetId);
@@ -327,25 +333,25 @@ export function executeCombatAttack(
     };
   }
 
-  const retaliate = targetAfterEncore.attack;
-  let troops = { ...nextAfterEncore.troops };
-  troops = applyDamage(troops, resolvedTargetId, attacker.attack);
-  troops = applyDamage(troops, attackerId, retaliate);
-
   const arena = getArena(state, arenaId);
-  const targetName = getTroopName(state, target);
-  const attackLog = arenaUsesRandomCombatTargets(state, arenaId)
-    ? `${getTroopName(state, attacker)} atacou ${targetName} em ${arena.name} (alvo aleatório — Cidade das Curvas).`
-    : `${getTroopName(state, attacker)} atacou ${targetName} em ${arena.name} (troca de dano).`;
+  const strike = applyStrikeDamage(
+    nextAfterEncore,
+    attacker,
+    arenaId,
+    strikingPlayer,
+    resolvedTargetId,
+    arena.name,
+    arenaUsesRandomCombatTargets(state, arenaId),
+  );
 
   let next: GameState = {
-    ...nextAfterEncore,
-    troops,
+    ...strike.state,
+    troops: strike.troops,
     combat: {
       ...nextAfterEncore.combat!,
       attackedThisStrike: [...attackedThisStrike, attackerId],
     },
-    log: appendLog(nextAfterEncore, attackLog),
+    log: appendLog(nextAfterEncore, strike.logLine),
   };
 
   next = applySanatorioIfStrikeEndsCombat(next, arenaId, strikingPlayer);

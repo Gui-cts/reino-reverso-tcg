@@ -8,10 +8,10 @@ import {
 import { setConquestWatchOnEndTurn } from "./conquest";
 import {
   appendLog,
-  canAfford,
   countTroopsInZone,
-  exhaustEssence,
   getAvailableEssence,
+  payCorruptionCost,
+  payEssenceCost,
   getTroopName,
   nextInstanceId,
   opponent,
@@ -26,7 +26,20 @@ import {
 import { drawFromDeck, finalizeArenas } from "./state";
 import { runTurnBegin } from "./turn";
 import { applyRRNonResponsePenaltyAtEndTurn } from "./reino-reverso";
-import { isSpellCard, isTroopCard, playSpell } from "./spells";
+import {
+  canAffordCardCost,
+  formatCardCost,
+  getCorruptionCost,
+  getEssenceCost,
+} from "./card-meta";
+import { troopCanFlyBetweenArenas, troopEntersReadyOnDeploy } from "./keywords";
+import {
+  isSpellCard,
+  isTroopCard,
+  passSpellCounter,
+  playSpell,
+  resolveCounterPayment,
+} from "./spells";
 import { buryDeadTroops } from "./troop-cleanup";
 import type { GameAction, GameState, PlayerId } from "./types";
 import { MAX_TROOPS_PER_ZONE } from "./types";
@@ -167,12 +180,20 @@ function playTroop(state: GameState, troopId: string): GameState {
     };
   }
 
-  if (!canAfford(state, player, def.cost)) {
+  const payment = getEssenceCost(def);
+  const corruptionCost = getCorruptionCost(def);
+
+  if (!canAffordCardCost(state, player, def, payment)) {
+    const pl = state.players[player];
+    const corMsg =
+      corruptionCost > 0 && pl.corruption < corruptionCost
+        ? ` Corrupção: precisa ${corruptionCost}, tem ${pl.corruption}.`
+        : "";
     return {
       ...state,
       log: appendLog(
         state,
-        `Essência insuficiente (precisa ${def.cost}, disponível ${getAvailableEssence(state, player).length}).`,
+        `Recursos insuficientes (${formatCardCost(def)}; essência pronta: ${getAvailableEssence(state, player).length}).${corMsg}`,
       ),
     };
   }
@@ -181,18 +202,29 @@ function playTroop(state: GameState, troopId: string): GameState {
     return { ...state, log: appendLog(state, "Base cheia (máx. 3 tropas).") };
   }
 
-  let next = exhaustEssence(state, player, def.cost);
+  const paid = payEssenceCost(state, player, payment);
+  if (!paid.ok) {
+    return { ...state, log: appendLog(state, "Não foi possível pagar o custo em Essência.") };
+  }
+  let next = paid.state;
+
+  const paidCorruption = payCorruptionCost(next, player, corruptionCost);
+  if (!paidCorruption.ok) {
+    return { ...state, log: appendLog(next, "Não foi possível pagar o custo em Corrupção.") };
+  }
+  next = paidCorruption.state;
   const hand = next.players[player].hand.filter((id) => id !== troopId);
   const players = [...next.players] as GameState["players"];
   players[player] = { ...next.players[player], hand };
 
+  const entersReady = troopEntersReadyOnDeploy(def);
   const troops = { ...next.troops };
   troops[troopId] = {
     ...troop,
     owner: player,
     zone: "base",
     arenaId: null,
-    exhausted: true,
+    exhausted: !entersReady,
     currentHealth: def.health,
     attack: def.attack,
     attachedSpell: troop.attachedSpell,
@@ -205,7 +237,7 @@ function playTroop(state: GameState, troopId: string): GameState {
     troops,
     log: appendLog(
       next,
-      `Jogador ${player + 1} convocou ${def.name} na base (exausta). Essência exausta: ${def.cost}.`,
+      `Jogador ${player + 1} convocou ${def.name} na base (${entersReady ? "Investida — pronta" : "exausta"}). Custo: ${formatCardCost(def)}.`,
     ),
   };
   return sanitizePlayerHands(next);
@@ -287,8 +319,26 @@ function moveTroop(
 
   const troop = state.troops[troopId];
   if (!troop || troop.owner !== state.activePlayer) return state;
-  if (troop.exhausted || troop.pinned) {
-    return { ...state, log: appendLog(state, "Tropa exausta ou presa — não pode mover.") };
+  if (troop.pinned) {
+    return { ...state, log: appendLog(state, "Tropa presa — não pode mover.") };
+  }
+  if (troop.movementLocked) {
+    return {
+      ...state,
+      log: appendLog(
+        state,
+        `${getTroopName(state, troop)} está vinculada — não pode se mover neste turno.`,
+      ),
+    };
+  }
+  if (troop.exhausted) {
+    return {
+      ...state,
+      log: appendLog(
+        state,
+        `${getTroopName(state, troop)} está exausta — passe o turno para desvirar (preparação).`,
+      ),
+    };
   }
 
   const player = state.activePlayer;
@@ -329,6 +379,42 @@ function moveTroop(
       ),
     };
   }
+  if (troop.zone === "arena" && troop.arenaId === arenaId) {
+    return { ...state, log: appendLog(state, "A tropa já está nesta arena.") };
+  }
+
+  if (troop.zone === "arena" && troop.arenaId !== arenaId) {
+    if (!troopCanFlyBetweenArenas(state, troop)) {
+      return {
+        ...state,
+        log: appendLog(state, "Só tropas com Voar podem mudar de arena diretamente."),
+      };
+    }
+    if (troop.arenaId && arenaBlocksNormalExit(state, troop.arenaId)) {
+      const from = state.arenas.find((a) => a.id === troop.arenaId);
+      return {
+        ...state,
+        log: appendLog(
+          state,
+          `${from?.name ?? "Arena"} — tropas não podem sair pelo movimento normal.`,
+        ),
+      };
+    }
+    if (countTroopsInZone(state, player, "arena", arenaId) >= MAX_TROOPS_PER_ZONE) {
+      return { ...state, log: appendLog(state, "Arena de destino cheia.") };
+    }
+    const troops = { ...state.troops };
+    troops[troopId] = { ...troop, zone: "arena", arenaId, exhausted: true };
+    return {
+      ...state,
+      troops,
+      log: appendLog(
+        state,
+        `${getTroopName(state, troop)} voou para ${arena.name} (exausta).`,
+      ),
+    };
+  }
+
   if (troop.zone !== "base") return state;
   if (countTroopsInZone(state, player, "arena", arenaId) >= MAX_TROOPS_PER_ZONE) {
     return { ...state, log: appendLog(state, "Arena cheia.") };
@@ -525,6 +611,12 @@ function applyAction(state: GameState, action: GameAction): GameState {
 
     case "PLAY_SPELL":
       return playSpell(state, action.player, action.spellInstanceId, action.targetTroopId);
+
+    case "PASS_SPELL_COUNTER":
+      return passSpellCounter(state, action.player);
+
+    case "RESOLVE_COUNTER_PAYMENT":
+      return resolveCounterPayment(state, action.player, action.payTwoEssence);
 
     case "PASS_COMBAT_MAGIC":
       return passCombatMagic(state, action.player);

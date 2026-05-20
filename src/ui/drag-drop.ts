@@ -1,3 +1,5 @@
+import { dismissCardHoverPreview } from "./card-hover-preview";
+
 export type DragPayload =
   | { kind: "hand"; troopId: string }
   | { kind: "troop"; troopId: string };
@@ -28,6 +30,7 @@ export function setCardDraggable(
     dt.effectAllowed = "move";
     el.classList.add("is-dragging");
     setGlobalDragging(true);
+    dismissCardHoverPreview();
   });
 
   el.addEventListener("dragend", () => {

@@ -310,6 +310,23 @@ Recursos planejados além de Essência: **Corrupção** (cartas mais agressivas)
 - Lufada exige espaço na base do dono da tropa (máx. 3).
 - Bar do João bloqueia magias na arena durante todo o combate.
 
+### 11.4 Palavras-chave (tropas)
+
+Efeitos ao morrer usam `deathEffect` — **não** são `spellEffect` (Bar do João não bloqueia).
+
+| Palavra | Efeito |
+|---------|--------|
+| **Protetor** | Inimigos devem atacar Protetores na arena antes das outras tropas (só ataques; magias ignoram). Cidade das Curvas: alvo aleatório entre **todas** as tropas inimigas. |
+| **Investida** | Entra na base **pronta** (pode mover no mesmo turno; ainda não ataca no combate no turno em que entrou, salvo regra futura). |
+| **Testamento** | Dispara `deathEffect` ao morrer (ex.: comprar 1, 1 de dano no Líder inimigo). |
+| **Eco** | Ao morrer: uma tropa aliada na **base** fica pronta. |
+| **Vincular** | Ao causar dano em combate: alvo **não pode se mover** até a preparação do dono dele. |
+| **Silêncio** | Não pode receber Encore, Pele de Ferro ou outras magias presas. |
+| **Fatiar** | Dano excedente ao eliminar um inimigo continua em outro inimigo **legal** na mesma arena, no mesmo ataque (respeita Protetor). |
+| **Voar** | Pode mover diretamente entre arenas (não só base ↔ arena); ao voar, fica exausta. Regras de “não sair” da arena ainda se aplicam. |
+
+Cartas piloto no JSON: Escudeiro do Pacto, Mensageiro Alado, Último Suspiro, Eco Persistente, Corrente Etérea, Vazio Antimágia, Muralha de Ossos, **Ceifador Laminar** (Fatiar), **Falcão do Abismo** (Voar).
+
 ---
 
 ## 12. Protótipo v1 — escopo implementado
@@ -335,7 +352,7 @@ Checklist do que o código atual cobre:
 - [x] Draft de arenas do Abismo (vencedor 2 + perdedor 1) e RR (vencedor 1)
 - [x] Reino Reverso: dano ao Líder ao vencer combate, tropas à base, vácuo
 - [x] Magias piloto (Encore, Pele de Ferro, Caldeirão de Sangue)
-- [ ] Gasto de Corrupção em cartas
+- [x] Gasto de Corrupção em cartas
 
 Fora do protótipo atual:
 
