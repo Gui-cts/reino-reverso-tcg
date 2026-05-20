@@ -66,8 +66,13 @@ export function isCaptainCard(def: CardDefinition | undefined): boolean {
 
 export function isDeckableCard(def: CardDefinition | undefined): boolean {
   if (!def || def.isToken) return false;
+  if (def.leaderFormOf) return true;
   const type = getCardType(def);
   return type === "troop" || type === "spell";
+}
+
+export function isLeaderFormCard(def: CardDefinition | undefined): boolean {
+  return Boolean(def?.leaderFormOf);
 }
 
 export function getEssenceCost(def: CardDefinition): EssenceCost {

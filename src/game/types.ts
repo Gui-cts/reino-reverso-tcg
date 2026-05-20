@@ -129,10 +129,14 @@ export interface CardDefinition {
   /** Líder: id da habilidade ativa (para o engine). */
   leaderAbilityId?: LeaderAbilityId;
   /**
-   * Líder: ids das formas evoluídas (sacrifício de Corrupção — não implementado).
+   * Líder base: ids das formas evoluídas.
    * Ex.: Noah inverno, Noah delta.
    */
   leaderFormIds?: string[];
+  /** Forma de Líder: id do Líder base a que pertence. Cartas com este campo vão no deck. */
+  leaderFormOf?: string;
+  /** Recompensa ao sacrificar no Espaço de Essência (substitui o padrão de 1 essência). */
+  sacrificeReward?: { essence: number; corruption: number };
   /** Custo avançado; se omitido, equivale a `{ exhaust: cost }`. */
   essenceCost?: EssenceCost;
   /** Custo em Corrupção (bolinha roxa). */
@@ -347,4 +351,4 @@ export type GameAction =
       choice: "essence" | "corruption" | "recycle";
     }
   | { type: "USE_LEADER_ABILITY"; player: PlayerId; targetTroopId: string }
-  | { type: "EVOLVE_LEADER"; player: PlayerId; formId: string };
+  | { type: "EVOLVE_LEADER"; player: PlayerId; formId: string; formInstanceId: string };

@@ -20,7 +20,7 @@ import {
   getTroopsInZone,
   opponent,
 } from "../game/helpers";
-import { canAffordCardCost, getEssenceCost } from "../game/card-meta";
+import { canAffordCardCost, getEssenceCost, isLeaderFormCard } from "../game/card-meta";
 import { spellRequiresTarget } from "../game/spell-stack";
 import type {
   ArenaDefinition,
@@ -125,7 +125,7 @@ function handTroopDefs(state: GameState, cpu: PlayerId) {
     const troop = state.troops[troopId];
     if (!troop || troop.owner !== cpu) return;
     const def = state.catalog[troop.cardId];
-    if (!def || isSpellCard(def)) return;
+    if (!def || isSpellCard(def) || isLeaderFormCard(def)) return;
     out.push({
       troopId,
       cardId: troop.cardId,

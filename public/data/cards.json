@@ -340,9 +340,11 @@
       "cost": 0,
       "attack": 0,
       "health": 0,
-      "hasEssenceSymbol": false,
+      "hasEssenceSymbol": true,
       "leaderMaxHp": 10,
       "leaderAbility": "Forma evoluída (habilidade em desenvolvimento).",
+      "leaderFormOf": "noah-lider-base",
+      "sacrificeReward": { "essence": 1, "corruption": 1 },
       "leaderFormIds": []
     },
     {
@@ -353,9 +355,11 @@
       "cost": 0,
       "attack": 0,
       "health": 0,
-      "hasEssenceSymbol": false,
+      "hasEssenceSymbol": true,
       "leaderMaxHp": 10,
       "leaderAbility": "Forma evoluída (habilidade em desenvolvimento).",
+      "leaderFormOf": "noah-lider-base",
+      "sacrificeReward": { "essence": 2, "corruption": 0 },
       "leaderFormIds": []
     },
     {
@@ -744,6 +748,8 @@
     "ceifador-laminar",
     "ceifador-laminar",
     "falcao-abismo",
-    "falcao-abismo"
+    "falcao-abismo",
+    "noah-vampiro-inverno",
+    "noah-delta-empatia"
   ]
 }

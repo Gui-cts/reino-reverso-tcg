@@ -1204,7 +1204,16 @@ export class GameApp {
     if (!leaderDef?.leaderFormIds?.length) return;
 
     const canEvolve = pl.corruption >= LEADER_EVOLUTION_CORRUPTION_COST;
+    const hasFormInHand = pl.hand.some((id) => {
+      const t = s.troops[id];
+      return t && leaderDef.leaderFormIds!.includes(t.cardId);
+    });
+
+    if (!hasFormInHand) return;
+
     for (const formId of leaderDef.leaderFormIds) {
+      const formInstanceId = pl.hand.find((id) => s.troops[id]?.cardId === formId);
+      if (!formInstanceId) continue;
       const formDef = s.catalog[formId];
       if (!formDef) continue;
       const btn = document.createElement("button");
@@ -1212,7 +1221,12 @@ export class GameApp {
       btn.textContent = `Evoluir → ${formDef.name} (${LEADER_EVOLUTION_CORRUPTION_COST} Corrupção)`;
       btn.disabled = !canEvolve;
       btn.title = formDef.leaderAbility ?? "";
-      btn.onclick = () => this.dispatchAction({ type: "EVOLVE_LEADER", player, formId });
+      btn.onclick = () => this.dispatchAction({
+        type: "EVOLVE_LEADER",
+        player,
+        formId,
+        formInstanceId,
+      });
       container.appendChild(btn);
     }
   }

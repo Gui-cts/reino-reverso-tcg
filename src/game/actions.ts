@@ -13,7 +13,6 @@ import {
   payCorruptionCost,
   payEssenceCost,
   getTroopName,
-  nextInstanceId,
   opponent,
   sanitizePlayerHands,
 } from "./helpers";
@@ -41,9 +40,9 @@ import {
   resolveCounterPayment,
 } from "./spells";
 import { buryDeadTroops } from "./troop-cleanup";
-import { isLeaderCard } from "./card-meta";
+import { isLeaderFormCard } from "./card-meta";
 import type { GameAction, GameState, PlayerId } from "./types";
-import { LEADER_EVOLUTION_CORRUPTION_COST, MAX_TROOPS_PER_ZONE } from "./types";
+import { LEADER_EVOLUTION_CORRUPTION_COST, MAX_TROOPS_PER_ZONE, maxCorruptionForPhase } from "./types";
 
 function endPlayerTurn(state: GameState): GameState {
   const player = state.activePlayer;
@@ -174,6 +173,13 @@ function playTroop(state: GameState, troopId: string): GameState {
   const def = state.catalog[troop.cardId];
   if (!def) return state;
 
+  if (isLeaderFormCard(def)) {
+    return {
+      ...state,
+      log: appendLog(state, `${def.name} é uma forma do Líder — sacrifique (✦) para recursos ou use para evoluir (5 Corrupção).`),
+    };
+  }
+
   if (!isTroopCard(def)) {
     return {
       ...state,
@@ -272,40 +278,52 @@ function sacrificeEssence(state: GameState, troopId: string): GameState {
     return { ...state, log: appendLog(state, "Esta carta não tem símbolo de Essência.") };
   }
 
-  const [idNum, nextId] = nextInstanceId(state);
-  const essenceId = `essence-${idNum}`;
+  const reward = def.sacrificeReward ?? { essence: 1, corruption: 0 };
+  let idCounter = state.nextInstanceId;
+  const newEssenceIds: string[] = [];
+  let essencePool = { ...state.essencePool };
+
+  for (let i = 0; i < reward.essence; i++) {
+    const essenceId = `essence-${idCounter++}`;
+    essencePool[essenceId] = {
+      instanceId: essenceId,
+      cardId: troop.cardId,
+      owner: player,
+      exhausted: false,
+    };
+    newEssenceIds.push(essenceId);
+  }
+
+  const cap = maxCorruptionForPhase(state.gamePhase);
+  const corruptionGain = Math.min(reward.corruption, cap - pl.corruption);
 
   const hand = pl.hand.filter((hid) => hid !== troopId);
   const players = [...state.players] as GameState["players"];
   players[player] = {
     ...pl,
     hand,
-    essenceIds: [...pl.essenceIds, essenceId],
+    essenceIds: [...pl.essenceIds, ...newEssenceIds],
     sacrificedThisTurn: true,
+    corruption: pl.corruption + corruptionGain,
   };
 
   const troops = { ...state.troops };
   delete troops[troopId];
 
-  const essencePool = {
-    ...state.essencePool,
-    [essenceId]: {
-      instanceId: essenceId,
-      cardId: troop.cardId,
-      owner: player,
-      exhausted: false,
-    },
-  };
+  const parts: string[] = [];
+  if (reward.essence > 0) parts.push(`${reward.essence} Essência`);
+  if (corruptionGain > 0) parts.push(`${corruptionGain} Corrupção`);
+  const rewardLabel = parts.join(" + ") || "Essência";
 
   return sanitizePlayerHands({
     ...state,
     players,
     troops,
     essencePool,
-    nextInstanceId: nextId,
+    nextInstanceId: idCounter,
     log: appendLog(
       state,
-      `Jogador ${player + 1} converteu ${def.name} em Essência (Espaço de Essência).`,
+      `Jogador ${player + 1} sacrificou ${def.name} → ${rewardLabel}.`,
     ),
   });
 }
@@ -665,6 +683,7 @@ function evolveLeader(
   state: GameState,
   player: PlayerId,
   formId: string,
+  formInstanceId: string,
 ): GameState {
   if (state.matchPhase !== "playing" || state.turnPhase !== "main" || state.combat) {
     return state;
@@ -681,8 +700,17 @@ function evolveLeader(
   if (!currentLeader?.leaderFormIds?.includes(formId)) {
     return { ...state, log: appendLog(state, "Forma de evolução inválida.") };
   }
+
+  if (!pl.hand.includes(formInstanceId)) {
+    return { ...state, log: appendLog(state, "Você precisa ter a carta da forma na mão.") };
+  }
+  const formInstance = state.troops[formInstanceId];
+  if (!formInstance || formInstance.cardId !== formId) {
+    return { ...state, log: appendLog(state, "Carta inválida para evolução.") };
+  }
+
   const newForm = state.catalog[formId];
-  if (!newForm || !isLeaderCard(newForm)) {
+  if (!newForm) {
     return { ...state, log: appendLog(state, "Forma de Líder não encontrada no catálogo.") };
   }
   if (pl.corruption < LEADER_EVOLUTION_CORRUPTION_COST) {
@@ -695,21 +723,27 @@ function evolveLeader(
     };
   }
 
+  const hand = pl.hand.filter((id) => id !== formInstanceId);
+  const troops = { ...state.troops };
+  delete troops[formInstanceId];
+
   const players = [...state.players] as GameState["players"];
   players[player] = {
     ...pl,
+    hand,
     leaderId: formId,
     corruption: pl.corruption - LEADER_EVOLUTION_CORRUPTION_COST,
   };
 
-  return {
+  return sanitizePlayerHands({
     ...state,
     players,
+    troops,
     log: appendLog(
       state,
-      `Jogador ${player + 1} evoluiu o Líder para ${newForm.name}! (−${LEADER_EVOLUTION_CORRUPTION_COST} Corrupção)`,
+      `Jogador ${player + 1} evoluiu o Líder para ${newForm.name}! (carta consumida, −${LEADER_EVOLUTION_CORRUPTION_COST} Corrupção)`,
     ),
-  };
+  });
 }
 
 function applyAction(state: GameState, action: GameAction): GameState {
@@ -772,7 +806,7 @@ function applyAction(state: GameState, action: GameAction): GameState {
       return useLeaderAbility(state, action.player, action.targetTroopId);
 
     case "EVOLVE_LEADER":
-      return evolveLeader(state, action.player, action.formId);
+      return evolveLeader(state, action.player, action.formId, action.formInstanceId);
 
     default:
       return state;
