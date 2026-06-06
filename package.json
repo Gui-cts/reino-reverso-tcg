@@ -5,12 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:online": "vercel dev",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "cards:placeholders": "node scripts/generate-card-placeholders.mjs"
   },
   "devDependencies": {
+    "@vercel/node": "^5.8.12",
     "typescript": "~5.7.2",
     "vite": "^6.2.0"
+  },
+  "dependencies": {
+    "@vercel/kv": "^3.0.0"
   }
 }

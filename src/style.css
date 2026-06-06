@@ -429,11 +429,12 @@ h1 {
 .game-card--draggable,
 .game-card--draggable.game-card--interactive {
   cursor: grab;
+  touch-action: none;
 }
 
-.game-card--draggable .game-card__shell,
-.game-card--draggable .game-card__shell * {
-  pointer-events: none;
+/* Filhos não roubam o mousedown — arraste sempre no elemento com draggable=true */
+.game-card--draggable * {
+  pointer-events: none !important;
 }
 
 .game-card--draggable:active,

@@ -6,9 +6,18 @@ export type DragPayload =
 
 const MIME = "application/x-reino-reverso";
 const DRAGGING_BODY_CLASS = "is-dragging-card";
+const DRAG_BOUND_ATTR = "data-drag-bound";
 
 function setGlobalDragging(active: boolean): void {
   document.body.classList.toggle(DRAGGING_BODY_CLASS, active);
+}
+
+function writeDragPayload(dt: DataTransfer, payload: DragPayload): void {
+  const json = JSON.stringify(payload);
+  dt.setData(MIME, json);
+  // Alguns browsers só iniciam drag se houver text/plain.
+  dt.setData("text/plain", json);
+  dt.effectAllowed = "move";
 }
 
 export function setCardDraggable(
@@ -18,16 +27,20 @@ export function setCardDraggable(
 ): void {
   if (!enabled) {
     el.draggable = false;
+    el.classList.remove("game-card--draggable");
     return;
   }
+
   el.draggable = true;
   el.classList.add("game-card--draggable");
+
+  if (el.hasAttribute(DRAG_BOUND_ATTR)) return;
+  el.setAttribute(DRAG_BOUND_ATTR, "1");
 
   el.addEventListener("dragstart", (e) => {
     const dt = e.dataTransfer;
     if (!dt) return;
-    dt.setData(MIME, JSON.stringify(payload));
-    dt.effectAllowed = "move";
+    writeDragPayload(dt, payload);
     el.classList.add("is-dragging");
     setGlobalDragging(true);
     dismissCardHoverPreview();
@@ -74,7 +87,8 @@ export function bindDropZone(
     e.preventDefault();
     e.stopPropagation();
     el.classList.remove("drop-target");
-    const raw = e.dataTransfer?.getData(MIME);
+    const raw =
+      e.dataTransfer?.getData(MIME) || e.dataTransfer?.getData("text/plain");
     if (!raw) return;
     try {
       const payload = JSON.parse(raw) as DragPayload;
@@ -91,7 +105,7 @@ export function bindDropZone(
 }
 
 export function readDragPayload(e: DragEvent): DragPayload | null {
-  const raw = e.dataTransfer?.getData(MIME);
+  const raw = e.dataTransfer?.getData(MIME) || e.dataTransfer?.getData("text/plain");
   if (!raw) return null;
   try {
     return JSON.parse(raw) as DragPayload;

@@ -37,7 +37,15 @@ import {
   spellEffectLabel,
   spellRequiresTarget,
 } from "../game";
+import { canControlPlayer as gameCanControlPlayer } from "../game/permissions";
 import { opponent } from "../game/helpers";
+import {
+  apiCreateRoom,
+  apiFetchRoom,
+  apiJoinRoom,
+  apiSendAction,
+} from "../net/room-client";
+import type { PlayerViewPayload } from "../net/player-view";
 import { pickCpuAction, cpuControlsPhase } from "./cpu";
 import { attachCardHoverPreview } from "./card-hover-preview";
 import { cardFromDef, createCardEl, createEssenceTokenEl, createHiddenCardEl } from "./card-view";
@@ -59,7 +67,7 @@ type UiSelection = {
   artifactTargetingId: string | null;
 };
 
-type AppScreen = "menu" | "game";
+type AppScreen = "menu" | "game" | "online-wait";
 
 export class GameApp {
   private catalog: CardCatalog | null = null;
@@ -84,11 +92,22 @@ export class GameApp {
   /** Resolve pendente — humano precisa confirmar "Passar" antes da CPU continuar. */
   private humanPassResolve: (() => void) | null = null;
 
+  private onlineRoomId: string | null = null;
+  private onlineToken: string | null = null;
+  private onlineSeat: PlayerId | null = null;
+  private stateVersion = 0;
+  private onlineHandCounts: [number, number] = [0, 0];
+  private onlineDeckCounts: [number, number] = [0, 0];
+  private pollTimer: number | null = null;
+  private onlineStatus = "";
+  private onlineBusy = false;
+
   constructor(root: HTMLElement) {
     this.root = root;
   }
 
   private humanPlayer(s: GameState): PlayerId {
+    if (this.onlineSeat !== null) return this.onlineSeat;
     if (s.cpuPlayer === null) return 0;
     return s.cpuPlayer === 0 ? 1 : 0;
   }
@@ -97,45 +116,32 @@ export class GameApp {
     return s.cpuPlayer !== null && s.cpuPlayer === player;
   }
 
+  private isHandHidden(s: GameState, player: PlayerId): boolean {
+    if (this.onlineSeat !== null) return player !== this.onlineSeat;
+    return this.isCpuPlayer(s, player);
+  }
+
+  private isLocalHumanSeat(s: GameState, player: PlayerId): boolean {
+    if (this.onlineSeat !== null) return player === this.onlineSeat;
+    return !this.isCpuPlayer(s, player);
+  }
+
   /** Jogador que pode usar mouse/teclado neste momento. */
   private canControlPlayer(s: GameState, player: PlayerId): boolean {
+    if (this.onlineSeat !== null && player !== this.onlineSeat) return false;
     if (this.isCpuPlayer(s, player)) return false;
-
-    if (s.pendingSpell) {
-      if (s.pendingSpell.counterWindowOpen && player === opponent(s.pendingSpell.caster)) return true;
-      if (s.pendingSpell.awaitingCounterPayment && player === s.pendingSpell.caster) return true;
-    }
-
-    if (s.matchPhase === "setup_arenas_p0") return player === 0;
-    if (s.matchPhase === "setup_arenas_p1") return player === 1;
-    if (s.matchPhase === "mulligan_p0") return player === 0;
-    if (s.matchPhase === "mulligan_p1") return player === 1;
-    if (s.matchPhase === "phase_end_choice_p0") return player === 0;
-    if (s.matchPhase === "phase_end_choice_p1") return player === 1;
-
-    const setup = this.arenaSetupContext(s);
-    if (setup) return player === setup.player;
-
-    if (s.matchPhase === "playing") {
-      if (s.combat) {
-        if (s.combat.subPhase === "magic" && !s.combat.magicPassed[player]) {
-          return true;
-        }
-        if (s.combat.subPhase === "strike") {
-          return player === getCombatAssigningPlayer(s.combat);
-        }
-        return false;
-      }
-      return player === s.activePlayer;
-    }
-
-    return false;
+    return gameCanControlPlayer(s, player);
   }
 
   async init(): Promise<void> {
     this.catalog = await loadCardCatalog();
     this.screen = "menu";
     this.render();
+
+    const roomFromUrl = new URLSearchParams(window.location.search).get("room");
+    if (roomFromUrl) {
+      void this.joinOnlineRoom(roomFromUrl.trim().toUpperCase());
+    }
   }
 
   private lastLeaderId: string | null = null;
@@ -162,10 +168,124 @@ export class GameApp {
   }
 
   private returnToMenu(): void {
+    this.stopOnlinePolling();
+    this.onlineRoomId = null;
+    this.onlineToken = null;
+    this.onlineSeat = null;
+    this.stateVersion = 0;
+    this.onlineStatus = "";
     this.screen = "menu";
     this.state = null;
     this.cpuRunning = false;
     this.render();
+  }
+
+  private stopOnlinePolling(): void {
+    if (this.pollTimer !== null) {
+      window.clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
+  private startOnlinePolling(): void {
+    this.stopOnlinePolling();
+    this.pollTimer = window.setInterval(() => void this.pollOnlineRoom(), 1500);
+  }
+
+  private applyOnlineView(view: PlayerViewPayload): void {
+    if (!this.catalog) return;
+    this.stateVersion = view.version;
+    this.state = view.state;
+    this.onlineHandCounts = view.handCounts;
+    this.onlineDeckCounts = view.deckCounts;
+    this.selection.troopId = null;
+    this.selection.arenaId = null;
+    this.selection.spellInstanceId = null;
+    this.selection.mulliganIndices = new Set();
+    this.selection.leaderAbilityTargeting = false;
+    this.selection.artifactTargetingId = null;
+    this.cpuLoopGeneration++;
+    this.render();
+  }
+
+  private async pollOnlineRoom(): Promise<void> {
+    if (!this.onlineRoomId || !this.onlineToken || this.onlineBusy) return;
+    try {
+      const view = await apiFetchRoom(this.onlineRoomId, this.onlineToken);
+      if (view.version > this.stateVersion) {
+        this.applyOnlineView(view);
+      }
+      if (this.screen === "online-wait" && view.bothConnected) {
+        this.screen = "game";
+        this.onlineStatus = "";
+        this.render();
+      }
+    } catch {
+      /* rede instável — próximo poll */
+    }
+  }
+
+  private async createOnlineRoom(): Promise<void> {
+    if (this.onlineBusy) return;
+    this.onlineBusy = true;
+    this.onlineStatus = "Criando sala…";
+    this.render();
+    try {
+      const result = await apiCreateRoom();
+      this.onlineRoomId = result.roomId;
+      this.onlineToken = result.token;
+      this.onlineSeat = result.seat;
+      this.applyOnlineView(result.view);
+      this.screen = "online-wait";
+      this.onlineStatus = "Aguardando oponente…";
+      this.startOnlinePolling();
+      const url = new URL(window.location.href);
+      url.searchParams.set("room", result.roomId);
+      window.history.replaceState({}, "", url);
+      this.render();
+    } catch (err) {
+      this.onlineStatus = err instanceof Error ? err.message : "Erro ao criar sala";
+      this.screen = "menu";
+      this.render();
+    } finally {
+      this.onlineBusy = false;
+    }
+  }
+
+  private async joinOnlineRoom(roomId: string): Promise<void> {
+    if (this.onlineBusy) return;
+    const code = roomId.trim().toUpperCase();
+    if (!code) return;
+
+    this.onlineBusy = true;
+    this.onlineStatus = "Entrando na sala…";
+    this.screen = "menu";
+    this.render();
+    try {
+      const result = await apiJoinRoom(code);
+      this.onlineRoomId = code;
+      this.onlineToken = result.token;
+      this.onlineSeat = result.seat;
+      this.applyOnlineView(result.view);
+      this.screen = "game";
+      this.onlineStatus = "";
+      this.startOnlinePolling();
+      const url = new URL(window.location.href);
+      url.searchParams.set("room", code);
+      window.history.replaceState({}, "", url);
+      this.render();
+    } catch (err) {
+      this.onlineStatus = err instanceof Error ? err.message : "Erro ao entrar na sala";
+      this.screen = "menu";
+      this.render();
+    } finally {
+      this.onlineBusy = false;
+    }
+  }
+
+  private promptJoinOnlineRoom(): void {
+    const code = window.prompt("Código da sala (6 caracteres):");
+    if (code) void this.joinOnlineRoom(code);
   }
 
   private getState(): GameState {
@@ -343,7 +463,29 @@ export class GameApp {
 
   /** Sempre usa o estado atual — evita sobrescrever ações com estado antigo. */
   private dispatchAction(action: GameAction): void {
+    if (this.onlineRoomId && this.onlineToken) {
+      void this.dispatchOnlineAction(action);
+      return;
+    }
     this.update(dispatch(this.getState(), action));
+  }
+
+  private async dispatchOnlineAction(action: GameAction): Promise<void> {
+    if (!this.onlineRoomId || !this.onlineToken || this.onlineBusy) return;
+    this.onlineBusy = true;
+    try {
+      const result = await apiSendAction(this.onlineRoomId, this.onlineToken, action);
+      if (result.view) this.applyOnlineView(result.view);
+      if (!result.ok && result.error) {
+        this.onlineStatus = result.error;
+        this.render();
+      }
+    } catch (err) {
+      this.onlineStatus = err instanceof Error ? err.message : "Erro de rede";
+      this.render();
+    } finally {
+      this.onlineBusy = false;
+    }
   }
 
   private tryCastSelectedSpell(targetTroopId: string): void {
@@ -425,6 +567,11 @@ export class GameApp {
       return;
     }
 
+    if (this.screen === "online-wait") {
+      this.renderOnlineWait();
+      return;
+    }
+
     const s = this.getState();
 
     if (s.matchPhase === "finished") {
@@ -438,9 +585,10 @@ export class GameApp {
       domGoal !== null
         ? `${domGoal} domínios para vencer a fase`
         : "Combate final — derrote o Líder inimigo";
+    const statusLine = this.onlineStatus ? ` · ${this.onlineStatus}` : "";
     header.innerHTML = `
       <h1>Reino Reverso TCG</h1>
-      <p class="subtitle">${phaseDisplayName(s.gamePhase)} · ${this.modeLabel(s)} · Líderes J1 ${s.players[0].leaderHp}/${this.getLeaderMaxHp(s, 0)} · J2 ${s.players[1].leaderHp}/${this.getLeaderMaxHp(s, 1)} · ${phaseMeta}</p>
+      <p class="subtitle">${phaseDisplayName(s.gamePhase)} · ${this.modeLabel(s)} · Líderes J1 ${s.players[0].leaderHp}/${this.getLeaderMaxHp(s, 0)} · J2 ${s.players[1].leaderHp}/${this.getLeaderMaxHp(s, 1)} · ${phaseMeta}${statusLine}</p>
     `;
     this.root.appendChild(header);
 
@@ -479,12 +627,50 @@ export class GameApp {
   }
 
   private modeLabel(s: GameState): string {
+    if (this.onlineSeat !== null) {
+      return `Online · você = J${this.onlineSeat + 1}${this.onlineRoomId ? ` · sala ${this.onlineRoomId}` : ""}`;
+    }
     const base =
       s.cpuPlayer === null
         ? "2 jogadores local"
         : `Você = J${this.humanPlayer(s) + 1} · CPU = J${s.cpuPlayer + 1}`;
     if (s.testMode) return `${testModeLabel(s.testMode)} · ${base}`;
     return base;
+  }
+
+  private renderOnlineWait(): void {
+    const screen = document.createElement("div");
+    screen.className = "menu-screen";
+
+    const card = document.createElement("div");
+    card.className = "menu-card panel";
+    const link = `${window.location.origin}${window.location.pathname}?room=${this.onlineRoomId ?? ""}`;
+    card.innerHTML = `
+      <h1>Sala ${this.onlineRoomId ?? "—"}</h1>
+      <p class="menu-tagline">Envie o link ou código para seu amigo entrar.</p>
+      <p class="online-room-link"><code>${link}</code></p>
+      <p class="menu-tagline">${this.onlineStatus || "Aguardando oponente…"}</p>
+    `;
+
+    const actions = document.createElement("div");
+    actions.className = "menu-actions";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.textContent = "Copiar link";
+    copyBtn.onclick = () => void navigator.clipboard.writeText(link);
+    actions.appendChild(copyBtn);
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "secondary";
+    cancelBtn.textContent = "Cancelar";
+    cancelBtn.onclick = () => this.returnToMenu();
+    actions.appendChild(cancelBtn);
+
+    card.appendChild(actions);
+    screen.appendChild(card);
+    this.root.appendChild(screen);
   }
 
   private renderMainMenu(): void {
@@ -496,10 +682,38 @@ export class GameApp {
     card.innerHTML = `
       <h1>Reino Reverso TCG</h1>
       <p class="menu-tagline">Protótipo v1.1 — fantasia urbana, arenas e domínio territorial</p>
+      ${this.onlineStatus ? `<p class="menu-tagline" style="color:var(--warn)">${this.onlineStatus}</p>` : ""}
     `;
 
     const actions = document.createElement("div");
     actions.className = "menu-actions";
+
+    const onlinePanel = document.createElement("div");
+    onlinePanel.className = "menu-test panel";
+    onlinePanel.innerHTML = `
+      <h2 class="menu-test__title">1v1 online</h2>
+      <p class="menu-tagline">Crie uma sala e compartilhe o link — ideal para testar na Vercel com um amigo.</p>
+    `;
+    const onlineActions = document.createElement("div");
+    onlineActions.className = "menu-actions";
+
+    const createOnline = document.createElement("button");
+    createOnline.type = "button";
+    createOnline.textContent = "Criar sala online";
+    createOnline.disabled = this.onlineBusy;
+    createOnline.onclick = () => void this.createOnlineRoom();
+    onlineActions.appendChild(createOnline);
+
+    const joinOnline = document.createElement("button");
+    joinOnline.type = "button";
+    joinOnline.className = "secondary";
+    joinOnline.textContent = "Entrar com código";
+    joinOnline.disabled = this.onlineBusy;
+    joinOnline.onclick = () => this.promptJoinOnlineRoom();
+    onlineActions.appendChild(joinOnline);
+
+    onlinePanel.appendChild(onlineActions);
+    card.appendChild(onlinePanel);
 
     const leaderChoices = this.catalog
       ? this.catalog.cards.filter((c) => c.cardType === "leader" && !c.leaderFormOf)
@@ -646,6 +860,9 @@ export class GameApp {
 
   private winnerHeadline(s: GameState): string {
     if (s.winner === null) return "Partida encerrada";
+    if (this.onlineSeat !== null) {
+      return s.winner === this.onlineSeat ? "Você venceu!" : "Você perdeu.";
+    }
     if (s.cpuPlayer === null) return `Jogador ${s.winner + 1} venceu!`;
     const human = this.humanPlayer(s);
     return s.winner === human ? "Você venceu!" : "CPU venceu!";
@@ -963,12 +1180,12 @@ export class GameApp {
       Domínios: ${domLabel}<br/>
       Corrupção: ${p.corruption}/${maxCorruptionForPhase(s.gamePhase)}<br/>
       <span class="essence-badge">Essência: ${getAvailableEssence(s, player).length}/${getPlayerEssence(s, player).length} pronta(s)</span><br/>
-      Deck: ${p.deck.length} · Descarte: ${p.discard.length} · Exílio: ${p.exile.length}
+      Deck: ${this.isHandHidden(s, player) ? this.onlineDeckCounts[player] : p.deck.length} · Descarte: ${p.discard.length} · Exílio: ${p.exile.length}
       ${this.discardSummaryHtml(s, player)}
       ${leaderAbilityHint}
     `;
 
-    if (!this.isCpuPlayer(s, player)) {
+    if (this.isLocalHumanSeat(s, player)) {
       this.renderLeaderAbilityInPanel(s, player, leader);
     }
 
@@ -1130,7 +1347,7 @@ export class GameApp {
   private renderHand(s: GameState, player: PlayerId): HTMLElement {
     const bar = document.createElement("div");
     bar.className = "hand-bar";
-    const hiddenHand = this.isCpuPlayer(s, player);
+    const hiddenHand = this.isHandHidden(s, player);
     const isActive = s.activePlayer === player && s.matchPhase === "playing";
     const pl = s.players[player];
     const canInteractHand =
@@ -1138,18 +1355,24 @@ export class GameApp {
       s.matchPhase === "playing" &&
       (s.turnPhase === "main" || s.turnPhase === "combat");
 
-    const handCount = pl.hand.length;
+    const handCount = hiddenHand
+      ? this.onlineSeat !== null
+        ? this.onlineHandCounts[player]
+        : pl.hand.length
+      : pl.hand.length;
     const turnTag =
       isActive && this.canControlPlayer(s, player)
         ? " ◀ SUA VEZ"
         : isActive && hiddenHand
-          ? " ◀ vez da CPU"
+          ? this.onlineSeat !== null
+            ? " ◀ vez do oponente"
+            : " ◀ vez da CPU"
           : isActive
             ? ` ◀ vez do J${player + 1}`
             : "";
     bar.innerHTML = `<strong>Mão — Jogador ${player + 1}${hiddenHand ? ` (${handCount} cartas ocultas)` : ""}</strong>${turnTag}`;
 
-    if (canInteractHand && (!this.isCpuPlayer(s, player) || this.canControlPlayer(s, player))) {
+    if (canInteractHand && (this.isLocalHumanSeat(s, player) || this.canControlPlayer(s, player))) {
       const tip = document.createElement("p");
       tip.className = "mulligan-hint";
       if (this.selection.spellInstanceId) {
@@ -1183,25 +1406,35 @@ export class GameApp {
     const cards = document.createElement("div");
     cards.className = "hand-cards";
 
-    s.players[player].hand.forEach((troopId) => {
+    const handIds = hiddenHand
+      ? Array.from({ length: handCount }, (_, i) => `hidden-${player}-${i}`)
+      : pl.hand;
+
+    handIds.forEach((troopId) => {
+      if (hiddenHand) {
+        const wrap = document.createElement("div");
+        wrap.className = "hand-card";
+        wrap.appendChild(createHiddenCardEl(false));
+        cards.appendChild(wrap);
+        return;
+      }
+
       const troop = s.troops[troopId];
       if (!troop || troop.owner !== player) return;
       const def = s.catalog[troop.cardId];
       const wrap = document.createElement("div");
       wrap.className = "hand-card";
 
-      if (!def && !hiddenHand) return;
+      if (!def) return;
 
       const isSpell = isSpellCard(def);
       const canSelectSpell =
         isSpell &&
         canInteractHand &&
-        !this.isCpuPlayer(s, player) &&
+        this.isLocalHumanSeat(s, player) &&
         canPlaySpellNow(s, player, def!) &&
         canAffordSpellCost(s, player, def!);
-      const chip = hiddenHand
-        ? createHiddenCardEl(false)
-        : cardFromDef(def!, {
+      const chip = cardFromDef(def!, {
             cost: def!.cost,
             attack: def!.attack,
             health: def!.health,
@@ -1964,7 +2197,7 @@ export class GameApp {
       chip = createCardEl("?", { compact: true });
     }
 
-    const cardEl = chip.querySelector(".game-card") ?? chip;
+    const cardEl = (chip.querySelector(".game-card") ?? chip) as HTMLElement;
 
     if (inCombatArena && combat) {
       const alreadyAttacked = hasAttackedThisStrike(combat, troop.instanceId);
@@ -1978,7 +2211,7 @@ export class GameApp {
     }
 
     if (!inCombatArena && this.canDragTroopsOnField(s, troop)) {
-      setCardDraggable(chip, { kind: "troop", troopId: troop.instanceId }, true);
+      setCardDraggable(cardEl, { kind: "troop", troopId: troop.instanceId }, true);
     }
 
     return chip;
