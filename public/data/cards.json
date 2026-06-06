@@ -365,6 +365,54 @@
       "leaderFormIds": []
     },
     {
+      "id": "klaus-violinista",
+      "name": "Klaus — o violinista",
+      "cardType": "leader",
+      "faction": "delta",
+      "cost": 0,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "leaderMaxHp": 8,
+      "leaderAbility": "Melodia Arcana (1×/turno, fase principal): Klaus se exausta e cria 1 Essência temporária (só para feitiços, some no fim do turno).",
+      "leaderAbilityId": "arcane-melody",
+      "leaderFormIds": [
+        "klaus-delta",
+        "klaus-portador-abismo"
+      ]
+    },
+    {
+      "id": "klaus-delta",
+      "name": "Klaus — o delta do ___",
+      "cardType": "leader",
+      "faction": "delta",
+      "cost": 0,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": true,
+      "leaderMaxHp": 8,
+      "leaderAbility": "Melodia Arcana Aprimorada (1×/turno, fase principal): Klaus se exausta e cria 2 Essências temporárias (só para feitiços).",
+      "leaderAbilityId": "arcane-melody",
+      "leaderFormOf": "klaus-violinista",
+      "sacrificeReward": { "essence": 2, "corruption": 0 },
+      "leaderFormIds": []
+    },
+    {
+      "id": "klaus-portador-abismo",
+      "name": "Klaus — o portador do abismo",
+      "cardType": "leader",
+      "faction": "delta",
+      "cost": 0,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": true,
+      "leaderMaxHp": 8,
+      "leaderAbility": "Summoner (habilidade em desenvolvimento).",
+      "leaderFormOf": "klaus-violinista",
+      "sacrificeReward": { "essence": 1, "corruption": 1 },
+      "leaderFormIds": []
+    },
+    {
       "id": "servo-cinzas",
       "name": "Servo das Cinzas",
       "cost": 1,

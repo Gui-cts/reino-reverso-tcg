@@ -473,9 +473,16 @@ function pickEmpathyMarkMainPhase(state: GameState, cpu: PlayerId): GameAction |
 
 function pickLeaderAbility(state: GameState, cpu: PlayerId): GameAction | null {
   const pl = state.players[cpu];
-  if (!pl.leaderId || pl.leaderAbilityUsedThisTurn) return null;
+  if (!pl.leaderId || pl.leaderAbilityUsedThisTurn || pl.leaderExhausted) return null;
   const leaderDef = state.catalog[pl.leaderId];
   if (!leaderDef?.leaderAbilityId) return null;
+
+  if (!state.combat && leaderDef.leaderAbilityId === "arcane-melody") {
+    if (state.turnPhase === "main" && state.activePlayer === cpu) {
+      return { type: "USE_LEADER_ABILITY", player: cpu, targetTroopId: "" };
+    }
+    return null;
+  }
 
   if (!state.combat && leaderDef.leaderAbilityId === "empathy-mark") {
     return pickEmpathyMarkMainPhase(state, cpu);
@@ -602,6 +609,9 @@ function pickMainTurnAction(state: GameState, cpu: PlayerId): GameAction | null 
     return null;
   }
   if (state.activePlayer !== cpu) return null;
+
+  const leaderAb = pickLeaderAbility(state, cpu);
+  if (leaderAb) return leaderAb;
 
   const combat = pickDeclareCombat(state, cpu);
   if (combat) return combat;

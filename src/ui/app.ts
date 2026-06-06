@@ -131,13 +131,16 @@ export class GameApp {
     this.render();
   }
 
-  private startGame(cpuPlayer: PlayerId | null, testMode: TestMode | null = null): void {
+  private lastLeaderId: string | null = null;
+
+  private startGame(cpuPlayer: PlayerId | null, testMode: TestMode | null = null, leaderId?: string): void {
     if (!this.catalog) throw new Error("Catálogo não carregado");
     this.lastCpuPlayer = cpuPlayer;
     this.lastTestMode = testMode;
+    this.lastLeaderId = leaderId ?? null;
     this.state = testMode
-      ? createTestGame(this.catalog, { cpuPlayer, testMode })
-      : createInitialGame(this.catalog, { cpuPlayer });
+      ? createTestGame(this.catalog, { cpuPlayer, testMode, leaderId })
+      : createInitialGame(this.catalog, { cpuPlayer, leaderId });
     this.screen = "game";
     this.selection = {
       troopId: null,
@@ -457,11 +460,25 @@ export class GameApp {
     const actions = document.createElement("div");
     actions.className = "menu-actions";
 
-    const vsCpu = document.createElement("button");
-    vsCpu.type = "button";
-    vsCpu.textContent = "Jogar vs CPU (você = Jogador 1)";
-    vsCpu.onclick = () => this.startGame(1);
-    actions.appendChild(vsCpu);
+    const leaderChoices = this.catalog
+      ? this.catalog.cards.filter((c) => c.cardType === "leader" && !c.leaderFormOf)
+      : [];
+
+    for (const leader of leaderChoices) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = `Jogar vs CPU — ${leader.name}`;
+      btn.onclick = () => this.startGame(1, null, leader.id);
+      actions.appendChild(btn);
+    }
+
+    if (leaderChoices.length === 0) {
+      const vsCpu = document.createElement("button");
+      vsCpu.type = "button";
+      vsCpu.textContent = "Jogar vs CPU (você = Jogador 1)";
+      vsCpu.onclick = () => this.startGame(1);
+      actions.appendChild(vsCpu);
+    }
 
     const hotseat = document.createElement("button");
     hotseat.type = "button";
@@ -571,7 +588,7 @@ export class GameApp {
     again.type = "button";
     again.textContent =
       s.cpuPlayer !== null ? "Jogar de novo vs CPU" : "Nova partida (2 jogadores)";
-    again.onclick = () => this.startGame(this.lastCpuPlayer, this.lastTestMode);
+    again.onclick = () => this.startGame(this.lastCpuPlayer, this.lastTestMode, this.lastLeaderId ?? undefined);
     btns.appendChild(again);
 
     const menu = document.createElement("button");
@@ -893,12 +910,15 @@ export class GameApp {
     const leaderName = leaderDef?.name ?? "Líder";
     const domGoalNum = dominationsToWinPhase(s.gamePhase);
     const domLabel = domGoalNum !== null ? `${p.dominatedArenas}/${domGoalNum}` : `${p.dominatedArenas}`;
+    const exhaustedTag = p.leaderExhausted
+      ? ' <span style="color:#e85d5d;font-weight:bold">(EXAUSTO)</span>'
+      : "";
     const leaderAbilityHint = leaderDef?.leaderAbility
       ? `<br/><span style="font-size:0.75rem;color:var(--warn)">${leaderDef.leaderAbility}</span>`
       : "";
     leader.innerHTML = `
       <strong>Jogador ${player + 1}</strong><br/>
-      ${leaderName}: ${p.leaderHp}/${leaderDef?.leaderMaxHp ?? LEADER_MAX_HP} HP<br/>
+      ${leaderName}: ${p.leaderHp}/${leaderDef?.leaderMaxHp ?? LEADER_MAX_HP} HP${exhaustedTag}<br/>
       Domínios: ${domLabel}<br/>
       Corrupção: ${p.corruption}/${maxCorruptionForPhase(s.gamePhase)}<br/>
       <span class="essence-badge">Essência: ${getAvailableEssence(s, player).length}/${getPlayerEssence(s, player).length} pronta(s)</span><br/>
@@ -951,7 +971,7 @@ export class GameApp {
       essSlots.appendChild(empty);
     } else {
       for (const e of essCards) {
-        essSlots.appendChild(createEssenceTokenEl(e.exhausted));
+        essSlots.appendChild(createEssenceTokenEl(e.exhausted, e.spellOnly));
       }
     }
     essencePanel.appendChild(essSlots);
@@ -1201,7 +1221,7 @@ export class GameApp {
 
   private renderLeaderAbilityButton(s: GameState, player: PlayerId, container: HTMLElement): void {
     const pl = s.players[player];
-    if (!pl.leaderId || pl.leaderAbilityUsedThisTurn) return;
+    if (!pl.leaderId || pl.leaderAbilityUsedThisTurn || pl.leaderExhausted) return;
     const leaderDef = s.catalog[pl.leaderId];
     if (!leaderDef?.leaderAbilityId) return;
 
@@ -1209,9 +1229,24 @@ export class GameApp {
     const canUseHere =
       (abilityId === "shield" && s.combat) ||
       (abilityId === "frost-convert" && s.combat) ||
-      (abilityId === "empathy-mark" && (s.combat || s.turnPhase === "main"));
+      (abilityId === "empathy-mark" && (s.combat || s.turnPhase === "main")) ||
+      (abilityId === "arcane-melody" && s.turnPhase === "main" && !s.combat);
 
     if (!canUseHere) return;
+
+    if (abilityId === "arcane-melody") {
+      const btn = document.createElement("button");
+      const isUpgraded = pl.leaderId === "klaus-delta";
+      btn.textContent = isUpgraded
+        ? "Melodia Arcana Aprimorada (exausta Líder → +2 temp)"
+        : "Melodia Arcana (exausta Líder → +1 temp)";
+      btn.title = leaderDef.leaderAbility ?? "";
+      btn.onclick = () => {
+        this.dispatchAction({ type: "USE_LEADER_ABILITY", player, targetTroopId: "" });
+      };
+      container.appendChild(btn);
+      return;
+    }
 
     if (this.selection.leaderAbilityTargeting) {
       const hint = document.createElement("p");

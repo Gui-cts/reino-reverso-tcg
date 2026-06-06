@@ -87,7 +87,7 @@ export type KeywordId =
 export type DeathEffectId = "draw-one" | "ping-leader-1";
 
 /** Habilidades ativas de Líder. */
-export type LeaderAbilityId = "shield" | "frost-convert" | "empathy-mark";
+export type LeaderAbilityId = "shield" | "frost-convert" | "empathy-mark" | "arcane-melody";
 
 export type CombatSubPhase = "magic" | "strike";
 
@@ -207,6 +207,8 @@ export interface EssenceInstance {
   cardId: string;
   owner: PlayerId;
   exhausted: boolean;
+  /** Essência temporária — só paga feitiços, some no fim do turno. */
+  spellOnly?: boolean;
 }
 
 export interface ArenaDefinition {
@@ -271,6 +273,8 @@ export interface PlayerState {
   leaderId: string | null;
   /** Habilidade do Líder já usada neste turno. */
   leaderAbilityUsedThisTurn: boolean;
+  /** Líder exausto — não pode usar habilidade até a próxima preparação. */
+  leaderExhausted: boolean;
 }
 
 export interface CombatState {

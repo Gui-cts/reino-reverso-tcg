@@ -46,15 +46,18 @@ export function createHiddenCardEl(compact = false): HTMLElement {
   return el;
 }
 
-export function createEssenceTokenEl(exhausted = false): HTMLElement {
+export function createEssenceTokenEl(exhausted = false, spellOnly = false): HTMLElement {
   const root = document.createElement("div");
   root.className = "game-card game-card--essence-token";
   if (exhausted) root.classList.add("exhausted");
+  if (spellOnly) root.classList.add("spell-only");
 
   const sym = document.createElement("span");
   sym.className = "game-card__essence-main";
-  sym.textContent = "✦";
-  sym.title = exhausted ? "Essência exausta" : "Essência pronta";
+  sym.textContent = spellOnly ? "♪" : "✦";
+  sym.title = spellOnly
+    ? (exhausted ? "Essência temporária exausta (só feitiços)" : "Essência temporária (só feitiços)")
+    : (exhausted ? "Essência exausta" : "Essência pronta");
   root.appendChild(sym);
 
   return root;

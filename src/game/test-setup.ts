@@ -61,6 +61,7 @@ function emptyPlayer(leaderHp: number): PlayerState {
     sacrificedThisTurn: false,
     corruption: 0,
     leaderAbilityUsedThisTurn: false,
+    leaderExhausted: false,
   };
 }
 
@@ -101,15 +102,36 @@ export function createTestGame(
   catalogData: CardCatalog,
   options: CreateTestGameOptions,
 ): GameState {
-  const { testMode, cpuPlayer = null } = options;
+  const { testMode, cpuPlayer = null, leaderId } = options;
   const cfg = TEST_CONFIG[testMode];
   const catalog = buildCatalogMap(catalogData.cards);
   const essenceCardId = pickEssenceCardId(catalog);
+
+  const allBaseLeaders = catalogData.cards.filter(
+    (c) => c.cardType === "leader" && !c.leaderFormOf,
+  );
+  const chosenLeaderId = leaderId ?? allBaseLeaders[0]?.id ?? null;
+  const chosenLeader = chosenLeaderId ? catalog[chosenLeaderId] : null;
+  const chosenHp = chosenLeader?.leaderMaxHp ?? cfg.leaderHp;
+
+  const cpuLeader =
+    allBaseLeaders.find((l) => l.id !== chosenLeaderId) ?? allBaseLeaders[0];
+  const cpuLeaderId = cpuLeader?.id ?? chosenLeaderId;
+  const cpuHp = cpuLeader?.leaderMaxHp ?? cfg.leaderHp;
+
+  const humanIdx: PlayerId = cpuPlayer === 0 ? 1 : 0;
+  const cpuIdx: PlayerId = cpuPlayer === 0 ? 0 : 1;
 
   const players: [PlayerState, PlayerState] = [
     { ...emptyPlayer(cfg.leaderHp), deck: shuffle([...catalogData.starterDeck]) },
     { ...emptyPlayer(cfg.leaderHp), deck: shuffle([...catalogData.starterDeck]) },
   ];
+  players[humanIdx] = { ...players[humanIdx], leaderId: chosenLeaderId, leaderHp: chosenHp };
+  if (cpuPlayer !== null) {
+    players[cpuIdx] = { ...players[cpuIdx], leaderId: cpuLeaderId, leaderHp: cpuHp };
+  } else {
+    players[cpuIdx] = { ...players[cpuIdx], leaderId: chosenLeaderId, leaderHp: chosenHp };
+  }
 
   let state: GameState = {
     catalog,

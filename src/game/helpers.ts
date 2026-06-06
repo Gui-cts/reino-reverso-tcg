@@ -58,6 +58,13 @@ export function getAvailableEssence(
   return getPlayerEssence(state, player).filter((e) => !e.exhausted);
 }
 
+export function getAvailableNonTempEssence(
+  state: GameState,
+  player: PlayerId,
+): EssenceInstance[] {
+  return getAvailableEssence(state, player).filter((e) => !e.spellOnly);
+}
+
 export function getArena(state: GameState, arenaId: string): ArenaState {
   const arena = state.arenas.find((a) => a.id === arenaId);
   if (!arena) throw new Error(`Arena não encontrada: ${arenaId}`);
@@ -116,7 +123,8 @@ export function payEssenceCost(
   const exhaustedIds: string[] = [];
 
   for (let i = 0; i < payment.exhaust; i++) {
-    const available = getAvailableEssence(next, player);
+    const available = getAvailableEssence(next, player)
+      .sort((a, b) => (a.spellOnly ? 1 : 0) - (b.spellOnly ? 1 : 0));
     const pick = available[0] ?? getPlayerEssence(next, player).find((e) => !exhaustedIds.includes(e.instanceId));
     if (!pick) return { state, ok: false };
     const essencePool = { ...next.essencePool };

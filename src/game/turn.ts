@@ -1,6 +1,6 @@
 import { processStartPhase } from "./conquest";
 import { clearMovementLocksForPlayer } from "./keywords";
-import { appendLog, sanitizePlayerHands, untapEssence } from "./helpers";
+import { appendLog, opponent, sanitizePlayerHands, untapEssence } from "./helpers";
 import { drawFromDeck } from "./state";
 import type { GameState, PlayerId } from "./types";
 import { CARDS_DRAW_PER_TURN } from "./types";
@@ -35,8 +35,29 @@ function resetTurnFlags(state: GameState, player: PlayerId): GameState {
     ...players[player],
     sacrificedThisTurn: false,
     leaderAbilityUsedThisTurn: false,
+    leaderExhausted: false,
   };
   return { ...state, players };
+}
+
+function clearTemporaryEssence(state: GameState, player: PlayerId): GameState {
+  const pl = state.players[player];
+  const tempIds = pl.essenceIds.filter((id) => {
+    const e = state.essencePool[id];
+    return e?.spellOnly;
+  });
+  if (tempIds.length === 0) return state;
+
+  const essencePool = { ...state.essencePool };
+  for (const id of tempIds) delete essencePool[id];
+
+  const tempSet = new Set(tempIds);
+  const players = [...state.players] as GameState["players"];
+  players[player] = {
+    ...players[player],
+    essenceIds: pl.essenceIds.filter((id) => !tempSet.has(id)),
+  };
+  return { ...state, players, essencePool };
 }
 
 /** Preparação → Compra → Início → Jogo (main). */
@@ -52,6 +73,7 @@ export function runTurnBegin(state: GameState, player: PlayerId): GameState {
   next = clearMovementLocksForPlayer(next, player);
   next = clearAttackSuppressionForPlayer(next, player);
   next = resetTurnFlags(next, player);
+  next = clearTemporaryEssence(next, opponent(player));
   next = {
     ...next,
     log: appendLog(next, `Jogador ${player + 1} — fase de preparação (desvirar).`),

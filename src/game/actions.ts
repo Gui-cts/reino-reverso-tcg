@@ -10,6 +10,7 @@ import {
   appendLog,
   countTroopsInZone,
   getAvailableEssence,
+  getAvailableNonTempEssence,
   payCorruptionCost,
   payEssenceCost,
   getTroopName,
@@ -191,10 +192,10 @@ function playTroop(state: GameState, troopId: string): GameState {
   const corruptionCost = getCorruptionCost(def);
 
   if (!canAffordCardCost(state, player, def, payment)) {
-    const pl = state.players[player];
+    const pl2 = state.players[player];
     const corMsg =
-      corruptionCost > 0 && pl.corruption < corruptionCost
-        ? ` Corrupção: precisa ${corruptionCost}, tem ${pl.corruption}.`
+      corruptionCost > 0 && pl2.corruption < corruptionCost
+        ? ` Corrupção: precisa ${corruptionCost}, tem ${pl2.corruption}.`
         : "";
     return {
       ...state,
@@ -202,6 +203,14 @@ function playTroop(state: GameState, troopId: string): GameState {
         state,
         `Recursos insuficientes (${formatCardCost(def)}; essência pronta: ${getAvailableEssence(state, player).length}).${corMsg}`,
       ),
+    };
+  }
+
+  const nonTempAvail = getAvailableNonTempEssence(state, player);
+  if (nonTempAvail.length < payment.exhaust) {
+    return {
+      ...state,
+      log: appendLog(state, "Essência temporária só pode pagar feitiços — insuficiente para tropas."),
     };
   }
 
@@ -617,6 +626,9 @@ function useLeaderAbility(
     return state;
   }
   const pl = state.players[player];
+  if (pl.leaderExhausted) {
+    return { ...state, log: appendLog(state, "Líder exausto — desvira na preparação.") };
+  }
   if (pl.leaderAbilityUsedThisTurn) {
     return { ...state, log: appendLog(state, "Habilidade do Líder já usada neste turno.") };
   }
@@ -662,7 +674,7 @@ function useLeaderAbility(
     const troops = { ...next.troops };
     troops[targetTroopId] = { ...target, shielded: true };
     const players = [...next.players] as GameState["players"];
-    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true };
+    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true, leaderExhausted: true };
 
     const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
     return {
@@ -710,7 +722,7 @@ function useLeaderAbility(
     const troops = { ...next.troops };
     troops[targetTroopId] = { ...target, isFrostborn: true };
     const players = [...next.players] as GameState["players"];
-    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true };
+    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true, leaderExhausted: true };
 
     const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
     return {
@@ -758,7 +770,7 @@ function useLeaderAbility(
     const troops = { ...next.troops };
     troops[targetTroopId] = { ...target, hasEmpathy: true, shielded: true };
     const players = [...next.players] as GameState["players"];
-    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true };
+    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true, leaderExhausted: true };
 
     const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
     return {
@@ -768,6 +780,50 @@ function useLeaderAbility(
       log: appendLog(
         next,
         `Jogador ${player + 1} marcou ${troopName} com Empatia (−1 Essência) — ganha Protetor + Escudo.`,
+      ),
+    };
+  }
+
+  if (leaderDef.leaderAbilityId === "arcane-melody") {
+    if (state.turnPhase !== "main" || state.combat) {
+      return { ...state, log: appendLog(state, "Melodia Arcana só pode ser usada na fase principal (sem combate).") };
+    }
+
+    const isUpgraded = pl.leaderId === "klaus-delta";
+    const count = isUpgraded ? 2 : 1;
+
+    let idCounter = state.nextInstanceId;
+    const essencePool = { ...state.essencePool };
+    const newEssenceIds: string[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const essenceId = `essence-temp-${idCounter++}`;
+      essencePool[essenceId] = {
+        instanceId: essenceId,
+        cardId: pl.leaderId!,
+        owner: player,
+        exhausted: false,
+        spellOnly: true,
+      };
+      newEssenceIds.push(essenceId);
+    }
+
+    const players = [...state.players] as GameState["players"];
+    players[player] = {
+      ...pl,
+      essenceIds: [...pl.essenceIds, ...newEssenceIds],
+      leaderAbilityUsedThisTurn: true,
+      leaderExhausted: true,
+    };
+
+    return {
+      ...state,
+      players,
+      essencePool,
+      nextInstanceId: idCounter,
+      log: appendLog(
+        state,
+        `Jogador ${player + 1} usou Melodia Arcana — +${count} Essência temporária (só feitiços). Líder exausto.`,
       ),
     };
   }
