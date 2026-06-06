@@ -216,11 +216,19 @@ export class GameApp {
     if (this.humanHasPlayableFastSpell(state)) return true;
     const human = this.humanPlayer(state);
     const pl = state.players[human];
-    if (pl.leaderId && !pl.leaderAbilityUsedThisTurn && !pl.leaderExhausted) {
-      const ld = state.catalog[pl.leaderId];
-      if (ld?.leaderAbilityId && state.combat) return true;
-    }
-    return false;
+    if (!pl.leaderId || pl.leaderAbilityUsedThisTurn || pl.leaderExhausted) return false;
+    const ld = state.catalog[pl.leaderId];
+    if (!ld?.leaderAbilityId || !state.combat) return false;
+    const abilityId = ld.leaderAbilityId;
+    if (abilityId === "shield" && getAvailableEssence(state, human).length < 2) return false;
+    if (abilityId === "frost-convert" && getAvailableEssence(state, human).length < 2) return false;
+    if (abilityId === "empathy-mark" && getAvailableEssence(state, human).length < 1) return false;
+    const arenaId = state.combat.arenaId;
+    const alliesInArena = Object.values(state.troops).filter(
+      (t) => t.owner === human && t.zone === "arena" && t.arenaId === arenaId && t.currentHealth > 0,
+    );
+    if (alliesInArena.length === 0) return false;
+    return true;
   }
 
   private confirmHumanPass(): void {
@@ -233,14 +241,22 @@ export class GameApp {
   private async waitForHumanPassOrAction(loopGen: number): Promise<boolean> {
     this.render();
     return new Promise<boolean>((resolve) => {
-      this.humanPassResolve = () => resolve(true);
-      const checkLoop = () => {
+      let resolved = false;
+      this.humanPassResolve = () => {
+        if (resolved) return;
+        resolved = true;
+        clearInterval(intervalId);
+        resolve(true);
+      };
+      const intervalId = setInterval(() => {
         if (loopGen !== this.cpuLoopGeneration) {
+          if (resolved) return;
+          resolved = true;
+          clearInterval(intervalId);
           this.humanPassResolve = null;
           resolve(false);
         }
-      };
-      setTimeout(checkLoop, 100);
+      }, 100);
     });
   }
 
