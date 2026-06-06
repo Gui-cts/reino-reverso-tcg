@@ -213,13 +213,19 @@ export class GameApp {
   }
 
   private humanCanRespond(state: GameState): boolean {
-    if (this.humanHasPlayableFastSpell(state)) return true;
+    if (!state.combat) return false;
+    if (state.combat.subPhase === "magic") return false;
+
     const human = this.humanPlayer(state);
+
+    if (this.humanHasPlayableFastSpell(state)) return true;
+
     const pl = state.players[human];
     if (!pl.leaderId || pl.leaderAbilityUsedThisTurn || pl.leaderExhausted) return false;
     const ld = state.catalog[pl.leaderId];
-    if (!ld?.leaderAbilityId || !state.combat) return false;
+    if (!ld?.leaderAbilityId) return false;
     const abilityId = ld.leaderAbilityId;
+    if (abilityId === "arcane-melody") return false;
     if (abilityId === "shield" && getAvailableEssence(state, human).length < 2) return false;
     if (abilityId === "frost-convert" && getAvailableEssence(state, human).length < 2) return false;
     if (abilityId === "empathy-mark" && getAvailableEssence(state, human).length < 1) return false;
