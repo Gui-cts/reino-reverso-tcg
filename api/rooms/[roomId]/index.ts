@@ -22,8 +22,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
-    const { getRoomView } = await import("../../src/net/room-service.js");
-    const { getRoom } = await import("../../src/net/room-store.js");
+    const { getRoomView, getRoom } = await import("../lib/rr-server.mjs");
     const room = await getRoom(roomId);
     if (!room) {
       sendJson(res, 404, { error: "Sala não encontrada" });

@@ -14,8 +14,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
-    const { createRoom } = await import("../../src/net/room-service.js");
-    const { saveRoom } = await import("../../src/net/room-store.js");
+    const { createRoom, saveRoom } = await import("../lib/rr-server.mjs");
     const body = await readJsonBody(req);
     const result = createRoom(typeof body.leaderId === "string" ? body.leaderId : undefined);
     await saveRoom(result.room);
