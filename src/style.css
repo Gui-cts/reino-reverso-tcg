@@ -431,6 +431,11 @@ h1 {
   cursor: grab;
 }
 
+.game-card--draggable .game-card__shell,
+.game-card--draggable .game-card__shell * {
+  pointer-events: none;
+}
+
 .game-card--draggable:active,
 .game-card.is-dragging {
   cursor: grabbing;
