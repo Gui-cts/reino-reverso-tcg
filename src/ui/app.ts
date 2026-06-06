@@ -76,11 +76,10 @@ export class GameApp {
   private cpuRunning = false;
   /** Incrementado a cada mudança de estado — invalida esperas/ações obsoletas do loop da CPU. */
   private cpuLoopGeneration = 0;
-  /** Próxima ação da CPU usa 500 ms (botão "Acelerar"). */
-  private cpuDelayOverride = false;
 
-  private static readonly CPU_DELAY_MS = 7000;
-  private static readonly CPU_DELAY_FAST_MS = 500;
+  private static readonly CPU_DELAY_MS = 500;
+  /** Resolve pendente — humano precisa confirmar "Passar" antes da CPU continuar. */
+  private humanPassResolve: (() => void) | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -198,16 +197,6 @@ export class GameApp {
     void this.runCpuLoop();
   }
 
-  private humanHasFastSpellInHand(state: GameState): boolean {
-    const human = this.humanPlayer(state);
-    return state.players[human].hand.some((id) => {
-      const inst = state.troops[id];
-      if (!inst) return false;
-      const def = state.catalog[inst.cardId];
-      return Boolean(def && isSpellCard(def) && getCardSpeed(def) === "fast");
-    });
-  }
-
   private humanHasPlayableFastSpell(state: GameState): boolean {
     const human = this.humanPlayer(state);
     for (const id of state.players[human].hand) {
@@ -223,21 +212,36 @@ export class GameApp {
     return false;
   }
 
-  private getCpuActionDelayMs(state: GameState): number {
-    if (this.cpuDelayOverride) {
-      this.cpuDelayOverride = false;
-      return GameApp.CPU_DELAY_FAST_MS;
+  private humanCanRespond(state: GameState): boolean {
+    if (this.humanHasPlayableFastSpell(state)) return true;
+    const human = this.humanPlayer(state);
+    const pl = state.players[human];
+    if (pl.leaderId && !pl.leaderAbilityUsedThisTurn && !pl.leaderExhausted) {
+      const ld = state.catalog[pl.leaderId];
+      if (ld?.leaderAbilityId && state.combat) return true;
     }
-    if (!this.humanHasPlayableFastSpell(state)) {
-      return GameApp.CPU_DELAY_FAST_MS;
-    }
-    return GameApp.CPU_DELAY_MS;
+    return false;
   }
 
-  private requestCpuFastDelay(): void {
-    this.cpuDelayOverride = true;
-    this.cpuLoopGeneration++;
-    void this.runCpuLoop();
+  private confirmHumanPass(): void {
+    if (this.humanPassResolve) {
+      this.humanPassResolve();
+      this.humanPassResolve = null;
+    }
+  }
+
+  private async waitForHumanPassOrAction(loopGen: number): Promise<boolean> {
+    this.render();
+    return new Promise<boolean>((resolve) => {
+      this.humanPassResolve = () => resolve(true);
+      const checkLoop = () => {
+        if (loopGen !== this.cpuLoopGeneration) {
+          this.humanPassResolve = null;
+          resolve(false);
+        }
+      };
+      setTimeout(checkLoop, 100);
+    });
   }
 
   private applyCpuActionResult(after: GameState): void {
@@ -263,8 +267,12 @@ export class GameApp {
         const cpu = cur.cpuPlayer;
         if (!cpuControlsPhase(cur, cpu)) break;
 
-        const delayMs = this.getCpuActionDelayMs(cur);
-        await new Promise((r) => setTimeout(r, delayMs));
+        if (this.humanCanRespond(cur)) {
+          const passed = await this.waitForHumanPassOrAction(loopGen);
+          if (!passed) break;
+        } else {
+          await new Promise((r) => setTimeout(r, GameApp.CPU_DELAY_MS));
+        }
         if (loopGen !== this.cpuLoopGeneration) break;
 
         const latest = this.getState();
@@ -1401,17 +1409,18 @@ export class GameApp {
       }
     }
 
-    if (
-      s.cpuPlayer !== null &&
-      s.matchPhase === "playing" &&
-      this.humanHasFastSpellInHand(s) &&
-      (cpuControlsPhase(s, s.cpuPlayer) || s.combat !== null)
-    ) {
-      const fastBtn = document.createElement("button");
-      fastBtn.className = "secondary";
-      fastBtn.textContent = "Acelerar CPU (0,5 s)";
-      fastBtn.onclick = () => this.requestCpuFastDelay();
-      btns.appendChild(fastBtn);
+    if (this.humanPassResolve) {
+      const passHint = document.createElement("p");
+      passHint.className = "mulligan-hint";
+      passHint.style.color = "#f0c878";
+      passHint.textContent = "Você pode responder com magia rápida ou habilidade do Líder.";
+      actions.appendChild(passHint);
+
+      const passBtn = document.createElement("button");
+      passBtn.className = "secondary";
+      passBtn.textContent = "Passar (sem resposta)";
+      passBtn.onclick = () => this.confirmHumanPass();
+      btns.appendChild(passBtn);
     }
 
     if (s.combat && isCombatMagicPhase(s)) {
