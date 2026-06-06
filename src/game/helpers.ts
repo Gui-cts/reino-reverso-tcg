@@ -81,11 +81,11 @@ export function canPayEssenceCost(
   player: PlayerId,
   payment: EssenceCost,
 ): boolean {
-  const pool = getPlayerEssence(state, player);
+  const available = getAvailableEssence(state, player);
   const sacrifice = payment.sacrifice ?? 0;
-  if (pool.length < payment.exhaust) return false;
+  if (available.length < payment.exhaust) return false;
   if (sacrifice > payment.exhaust) return false;
-  return pool.length >= payment.exhaust;
+  return true;
 }
 
 /** Exausta cartas de Essência (não descarta). */

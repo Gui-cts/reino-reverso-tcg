@@ -226,6 +226,11 @@ export function canTargetSpell(
   if (!spellDef.spellEffect || !isFieldTroop(target)) return false;
   if (troopIsUntargetable(target)) return false;
 
+  if (target.zone === "arena" && target.arenaId) {
+    const arena = state.arenas.find((a) => a.id === target.arenaId);
+    if (arena?.effect === "no-magic") return false;
+  }
+
   const inCombat = state.combat !== null;
   const combatArenaId = state.combat?.arenaId;
 
