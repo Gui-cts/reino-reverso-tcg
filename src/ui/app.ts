@@ -987,8 +987,8 @@ export class GameApp {
       !s.combat &&
       s.activePlayer === player;
     if (canDrop) {
-      slots.classList.add("drop-zone");
-      bindDropZone(slots, { kind: "base", player }, (p, z) => this.handleCardDrop(p, z));
+      base.classList.add("drop-zone");
+      bindDropZone(base, { kind: "base", player }, (p, z) => this.handleCardDrop(p, z));
     }
 
     const essencePanel = document.createElement("div");
@@ -1198,7 +1198,7 @@ export class GameApp {
             attack: def!.attack,
             health: def!.health,
             hasEssenceSymbol: def!.hasEssenceSymbol,
-            selected: this.selection.spellInstanceId === troopId,
+            selected: this.selection.spellInstanceId === troopId || this.selection.troopId === troopId,
             onClick: canSelectSpell
               ? () => {
                   const effect = def!.spellEffect;

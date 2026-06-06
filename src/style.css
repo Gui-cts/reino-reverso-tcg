@@ -426,7 +426,8 @@ h1 {
   height: 42px;
 }
 
-.game-card--draggable {
+.game-card--draggable,
+.game-card--draggable.game-card--interactive {
   cursor: grab;
 }
 
@@ -874,10 +875,6 @@ button.danger {
   font-size: 0.72rem;
   font-style: italic;
   padding: 0.35rem 0;
-}
-
-.troop-slots {
-  min-height: 2rem;
 }
 
 header {
