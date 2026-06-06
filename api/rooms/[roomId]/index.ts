@@ -1,30 +1,45 @@
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { sendJson, setCors } from "../_http.js";
 
-  if (req.method === "OPTIONS") return res.status(204).end();
-  if (req.method !== "GET") return res.status(405).json({ error: "Use GET" });
+export default async function handler(req: IncomingMessage, res: ServerResponse) {
+  setCors(res);
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  if (req.method !== "GET") {
+    sendJson(res, 405, { error: "Use GET" });
+    return;
+  }
 
-  const roomId = String(req.query.roomId ?? "");
-  const token = String(req.query.token ?? "");
+  const query = (req as IncomingMessage & { query?: Record<string, string> }).query ?? {};
+  const roomId = String(query.roomId ?? "");
+  const token = String(query.token ?? "");
   if (!roomId || !token) {
-    return res.status(400).json({ error: "roomId e token obrigatórios" });
+    sendJson(res, 400, { error: "roomId e token obrigatórios" });
+    return;
   }
 
   try {
     const { getRoomView } = await import("../../src/net/room-service.js");
     const { getRoom } = await import("../../src/net/room-store.js");
     const room = await getRoom(roomId);
-    if (!room) return res.status(404).json({ error: "Sala não encontrada" });
+    if (!room) {
+      sendJson(res, 404, { error: "Sala não encontrada" });
+      return;
+    }
 
     const view = getRoomView(room, token);
-    if (!view) return res.status(403).json({ error: "Token inválido" });
+    if (!view) {
+      sendJson(res, 403, { error: "Token inválido" });
+      return;
+    }
 
-    return res.status(200).json(view);
+    sendJson(res, 200, view);
   } catch (err) {
     console.error("fetch room failed:", err);
     const message = err instanceof Error ? err.message : "Falha ao buscar sala";
-    return res.status(500).json({ error: message });
+    sendJson(res, 500, { error: message });
   }
 }

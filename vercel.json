@@ -4,10 +4,7 @@
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
   "functions": {
     "api/**/*.ts": {
-      "includeFiles": "src/**"
-    },
-    "api/rooms/**/*.ts": {
-      "includeFiles": "public/data/cards.json"
+      "includeFiles": "{src/**,public/data/cards.json}"
     }
   }
 }

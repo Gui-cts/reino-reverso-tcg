@@ -1,31 +1,48 @@
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { GameAction } from "../../src/game/types.js";
+import { readJsonBody, sendJson, setCors } from "../_http.js";
 
-  if (req.method === "OPTIONS") return res.status(204).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
+export default async function handler(req: IncomingMessage, res: ServerResponse) {
+  setCors(res);
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  if (req.method !== "POST") {
+    sendJson(res, 405, { error: "Use POST" });
+    return;
+  }
 
-  const roomId = String(req.query.roomId ?? "");
-  if (!roomId) return res.status(400).json({ error: "roomId obrigatório" });
+  const roomId = String((req as IncomingMessage & { query?: Record<string, string> }).query?.roomId ?? "");
+  if (!roomId) {
+    sendJson(res, 400, { error: "roomId obrigatório" });
+    return;
+  }
 
-  const body = req.body ?? {};
-  if (!body.token || !body.action) {
-    return res.status(400).json({ error: "token e action obrigatórios" });
+  const body = await readJsonBody(req);
+  const token = typeof body.token === "string" ? body.token : "";
+  const action = body.action as GameAction | undefined;
+  if (!token || !action) {
+    sendJson(res, 400, { error: "token e action obrigatórios" });
+    return;
   }
 
   try {
     const { applyRoomAction } = await import("../../src/net/room-service.js");
     const { getRoom, saveRoom } = await import("../../src/net/room-store.js");
     const room = await getRoom(roomId);
-    if (!room) return res.status(404).json({ error: "Sala não encontrada" });
+    if (!room) {
+      sendJson(res, 404, { error: "Sala não encontrada" });
+      return;
+    }
 
-    const result = applyRoomAction(room, body.token, body.action);
+    const result = applyRoomAction(room, token, action);
     await saveRoom(room);
-    return res.status(result.ok ? 200 : 409).json(result);
+    sendJson(res, result.ok ? 200 : 409, result);
   } catch (err) {
     console.error("room action failed:", err);
     const message = err instanceof Error ? err.message : "Falha ao processar ação";
-    return res.status(500).json({ error: message });
+    sendJson(res, 500, { error: message });
   }
 }
