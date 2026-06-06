@@ -53,6 +53,8 @@ type UiSelection = {
   arenaId: string | null;
   spellInstanceId: string | null;
   mulliganIndices: Set<number>;
+  /** Habilidade do Líder ativada — próximo clique em tropa aplica a habilidade. */
+  leaderAbilityTargeting: boolean;
 };
 
 type AppScreen = "menu" | "game";
@@ -67,6 +69,7 @@ export class GameApp {
     troopId: null,
     arenaId: null,
     spellInstanceId: null,
+    leaderAbilityTargeting: false,
     mulliganIndices: new Set(),
   };
   private root: HTMLElement;
@@ -141,6 +144,7 @@ export class GameApp {
       arenaId: null,
       spellInstanceId: null,
       mulliganIndices: new Set(),
+      leaderAbilityTargeting: false,
     };
     this.render();
     void this.runCpuLoop();
@@ -185,6 +189,7 @@ export class GameApp {
     this.selection.troopId = null;
     this.selection.arenaId = null;
     this.selection.spellInstanceId = null;
+    this.selection.leaderAbilityTargeting = false;
     this.cpuLoopGeneration++;
     this.render();
     void this.runCpuLoop();
@@ -1200,50 +1205,47 @@ export class GameApp {
     const leaderDef = s.catalog[pl.leaderId];
     if (!leaderDef?.leaderAbilityId) return;
 
-    if (leaderDef.leaderAbilityId === "shield" && s.combat) {
-      const btn = document.createElement("button");
-      btn.textContent = `Escudo do Líder — proteger aliado`;
-      btn.title = leaderDef.leaderAbility ?? "";
-      btn.onclick = () => {
-        const troopId = this.selection.troopId;
-        if (!troopId) {
-          alert("Selecione uma tropa aliada na arena primeiro (clique nela).");
-          return;
-        }
-        this.dispatchAction({ type: "USE_LEADER_ABILITY", player, targetTroopId: troopId });
+    const abilityId = leaderDef.leaderAbilityId;
+    const canUseHere =
+      (abilityId === "shield" && s.combat) ||
+      (abilityId === "frost-convert" && s.combat) ||
+      (abilityId === "empathy-mark" && (s.combat || s.turnPhase === "main"));
+
+    if (!canUseHere) return;
+
+    if (this.selection.leaderAbilityTargeting) {
+      const hint = document.createElement("p");
+      hint.className = "mulligan-hint";
+      hint.style.color = "#f0c878";
+      hint.textContent = "Clique em uma tropa aliada na arena para aplicar a habilidade do Líder.";
+      container.appendChild(hint);
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "secondary";
+      cancelBtn.textContent = "Cancelar habilidade";
+      cancelBtn.onclick = () => {
+        this.selection.leaderAbilityTargeting = false;
+        this.render();
       };
-      container.appendChild(btn);
+      container.appendChild(cancelBtn);
+      return;
     }
 
-    if (leaderDef.leaderAbilityId === "frost-convert" && s.combat) {
-      const btn = document.createElement("button");
-      btn.textContent = `Cria do Inverno — transformar aliado`;
-      btn.title = leaderDef.leaderAbility ?? "";
-      btn.onclick = () => {
-        const troopId = this.selection.troopId;
-        if (!troopId) {
-          alert("Selecione uma tropa aliada na arena primeiro (clique nela).");
-          return;
-        }
-        this.dispatchAction({ type: "USE_LEADER_ABILITY", player, targetTroopId: troopId });
-      };
-      container.appendChild(btn);
-    }
+    const labels: Record<string, string> = {
+      shield: "Escudo do Líder (2 Essência)",
+      "frost-convert": "Cria do Inverno (2 Essência)",
+      "empathy-mark": "Marcar com Empatia (1 Essência)",
+    };
 
-    if (leaderDef.leaderAbilityId === "empathy-mark" && (s.combat || s.turnPhase === "main")) {
-      const btn = document.createElement("button");
-      btn.textContent = `Empatia — marcar aliado`;
-      btn.title = leaderDef.leaderAbility ?? "";
-      btn.onclick = () => {
-        const troopId = this.selection.troopId;
-        if (!troopId) {
-          alert("Selecione uma tropa aliada na arena primeiro (clique nela).");
-          return;
-        }
-        this.dispatchAction({ type: "USE_LEADER_ABILITY", player, targetTroopId: troopId });
-      };
-      container.appendChild(btn);
-    }
+    const btn = document.createElement("button");
+    btn.textContent = labels[abilityId] ?? "Habilidade do Líder";
+    btn.title = leaderDef.leaderAbility ?? "";
+    btn.onclick = () => {
+      this.selection.leaderAbilityTargeting = true;
+      this.selection.spellInstanceId = null;
+      this.render();
+    };
+    container.appendChild(btn);
   }
 
   private renderLeaderEvolutionButton(s: GameState, player: PlayerId, container: HTMLElement): void {
@@ -1396,9 +1398,8 @@ export class GameApp {
         btns.appendChild(passBtn);
       }
 
-      if (this.canControlPlayer(s, active)) {
-        this.renderLeaderAbilityButton(s, active, btns);
-      }
+      const human = this.humanPlayer(s);
+      this.renderLeaderAbilityButton(s, human, btns);
     } else if (s.combat && isCombatStrikePhase(s)) {
       const combatHint = document.createElement("p");
       combatHint.className = "mulligan-hint";
@@ -1410,9 +1411,8 @@ export class GameApp {
           : `Combate: vez do Jogador ${striker + 1}…`;
       actions.appendChild(combatHint);
 
-      if (this.canControlPlayer(s, active)) {
-        this.renderLeaderAbilityButton(s, active, btns);
-      }
+      const humanStrike = this.humanPlayer(s);
+      this.renderLeaderAbilityButton(s, humanStrike, btns);
     } else if (canAct && s.turnPhase === "main" && !s.combat) {
       const essencePanel = document.createElement("div");
       essencePanel.className = "essence-panel";
@@ -1610,7 +1610,25 @@ export class GameApp {
         }
       }
     } else {
-      if (this.canDragTroopsOnField(s, troop) && troop.zone === "arena") {
+      if (
+        this.selection.leaderAbilityTargeting &&
+        troop.zone === "arena" &&
+        troop.owner === this.humanPlayer(s) &&
+        troop.currentHealth > 0
+      ) {
+        const human = this.humanPlayer(s);
+        onClick = (e) => {
+          e.stopPropagation();
+          this.selection.leaderAbilityTargeting = false;
+          this.dispatchAction({
+            type: "USE_LEADER_ABILITY",
+            player: human,
+            targetTroopId: troop.instanceId,
+          });
+        };
+        subLabel = subLabel ? `${subLabel} · alvo habilidade` : "clique — alvo da habilidade";
+        selected = true;
+      } else if (this.canDragTroopsOnField(s, troop) && troop.zone === "arena") {
         onClick = (e) => {
           e.stopPropagation();
           this.selection.troopId =
