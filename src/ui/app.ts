@@ -381,7 +381,7 @@ export class GameApp {
         : "Combate final — derrote o Líder inimigo";
     header.innerHTML = `
       <h1>Reino Reverso TCG</h1>
-      <p class="subtitle">${phaseDisplayName(s.gamePhase)} · ${this.modeLabel(s)} · Líderes J1 ${s.players[0].leaderHp}/${LEADER_MAX_HP} · J2 ${s.players[1].leaderHp}/${LEADER_MAX_HP} · ${phaseMeta}</p>
+      <p class="subtitle">${phaseDisplayName(s.gamePhase)} · ${this.modeLabel(s)} · Líderes J1 ${s.players[0].leaderHp}/${this.getLeaderMaxHp(s, 0)} · J2 ${s.players[1].leaderHp}/${this.getLeaderMaxHp(s, 1)} · ${phaseMeta}</p>
     `;
     this.root.appendChild(header);
 
@@ -1175,6 +1175,15 @@ export class GameApp {
     return bar;
   }
 
+  private getLeaderMaxHp(s: GameState, player: PlayerId): number {
+    const leaderId = s.players[player].leaderId;
+    if (leaderId) {
+      const def = s.catalog[leaderId];
+      if (def?.leaderMaxHp) return def.leaderMaxHp;
+    }
+    return LEADER_MAX_HP;
+  }
+
   private renderLeaderAbilityButton(s: GameState, player: PlayerId, container: HTMLElement): void {
     const pl = s.players[player];
     if (!pl.leaderId || pl.leaderAbilityUsedThisTurn) return;
@@ -1404,6 +1413,29 @@ export class GameApp {
       `;
       actions.appendChild(essencePanel);
 
+      const selectedTroop = this.selection.troopId ? s.troops[this.selection.troopId] : null;
+      if (
+        selectedTroop &&
+        selectedTroop.owner === active &&
+        selectedTroop.zone === "arena" &&
+        !selectedTroop.exhausted &&
+        !selectedTroop.pinned &&
+        !selectedTroop.movementLocked
+      ) {
+        const retreatBtn = document.createElement("button");
+        const troopName = s.catalog[selectedTroop.cardId]?.name ?? "Tropa";
+        retreatBtn.textContent = `Recuar ${troopName} para a base`;
+        retreatBtn.onclick = () => {
+          this.dispatchAction({
+            type: "MOVE_TROOP",
+            troopId: selectedTroop.instanceId,
+            to: "base",
+          });
+          this.selection.troopId = null;
+        };
+        btns.appendChild(retreatBtn);
+      }
+
       const combatBtn = document.createElement("button");
       combatBtn.textContent = "Declarar combate na arena selecionada";
       combatBtn.disabled = !this.selection.arenaId;
@@ -1568,8 +1600,16 @@ export class GameApp {
         }
       }
     } else {
-      if (this.canDragTroopsOnField(s, troop)) {
-        // drag configurado após criar chip
+      if (this.canDragTroopsOnField(s, troop) && troop.zone === "arena") {
+        onClick = (e) => {
+          e.stopPropagation();
+          this.selection.troopId =
+            this.selection.troopId === troop.instanceId ? null : troop.instanceId;
+          this.render();
+        };
+        if (this.selection.troopId === troop.instanceId) {
+          subLabel = subLabel ? `${subLabel} · selecionada` : "selecionada — use botão Recuar";
+        }
       }
     }
 
