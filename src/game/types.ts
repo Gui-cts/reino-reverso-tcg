@@ -13,8 +13,8 @@ export const LEADER_EVOLUTION_CORRUPTION_COST = 5;
 /** Corrupção máxima por fase de mundo. */
 export function maxCorruptionForPhase(phase: WorldPhase): number {
   switch (phase) {
-    case "mundo-normal": return 3;
-    case "abismo": return 7;
+    case "mundo-normal": return 5;
+    case "abismo": return 10;
     case "reino-reverso": return 999;
   }
 }
