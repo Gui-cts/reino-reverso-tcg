@@ -1510,6 +1510,38 @@ export class GameApp {
         btns.appendChild(retreatBtn);
       }
 
+      if (
+        selectedTroop &&
+        selectedTroop.owner === active &&
+        selectedTroop.zone === "base" &&
+        !selectedTroop.exhausted &&
+        !selectedTroop.pinned
+      ) {
+        const availableArenas = s.arenas.filter(
+          (a) => a.dominatedBy === null &&
+            Object.values(s.troops).filter(
+              (t) => t.owner === active && t.zone === "arena" && t.arenaId === a.id && t.currentHealth > 0,
+            ).length < 3,
+        );
+        const troopName = s.catalog[selectedTroop.cardId]?.name ?? "Tropa";
+        for (const arena of availableArenas) {
+          const sendBtn = document.createElement("button");
+          sendBtn.textContent = availableArenas.length === 1
+            ? `Enviar ${troopName} para ${arena.name}`
+            : `→ ${arena.name}`;
+          sendBtn.onclick = () => {
+            this.dispatchAction({
+              type: "MOVE_TROOP",
+              troopId: selectedTroop.instanceId,
+              to: "arena",
+              arenaId: arena.id,
+            });
+            this.selection.troopId = null;
+          };
+          btns.appendChild(sendBtn);
+        }
+      }
+
       const combatBtn = document.createElement("button");
       combatBtn.textContent = "Declarar combate na arena selecionada";
       combatBtn.disabled = !this.selection.arenaId;
@@ -1691,7 +1723,7 @@ export class GameApp {
         };
         subLabel = subLabel ? `${subLabel} · alvo habilidade` : "clique — alvo da habilidade";
         selected = true;
-      } else if (this.canDragTroopsOnField(s, troop) && troop.zone === "arena") {
+      } else if (this.canDragTroopsOnField(s, troop) && (troop.zone === "arena" || troop.zone === "base")) {
         onClick = (e) => {
           e.stopPropagation();
           this.selection.troopId =
@@ -1699,7 +1731,9 @@ export class GameApp {
           this.render();
         };
         if (this.selection.troopId === troop.instanceId) {
-          subLabel = subLabel ? `${subLabel} · selecionada` : "selecionada — use botão Recuar";
+          subLabel = troop.zone === "arena"
+            ? (subLabel ? `${subLabel} · selecionada` : "selecionada — use botão Recuar")
+            : (subLabel ? `${subLabel} · selecionada` : "selecionada — use botão Enviar");
         }
       }
     }
