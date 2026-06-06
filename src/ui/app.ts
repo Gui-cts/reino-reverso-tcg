@@ -98,6 +98,11 @@ export class GameApp {
   private canControlPlayer(s: GameState, player: PlayerId): boolean {
     if (this.isCpuPlayer(s, player)) return false;
 
+    if (s.pendingSpell) {
+      if (s.pendingSpell.counterWindowOpen && player === opponent(s.pendingSpell.caster)) return true;
+      if (s.pendingSpell.awaitingCounterPayment && player === s.pendingSpell.caster) return true;
+    }
+
     if (s.matchPhase === "setup_arenas_p0") return player === 0;
     if (s.matchPhase === "setup_arenas_p1") return player === 1;
     if (s.matchPhase === "mulligan_p0") return player === 0;
@@ -957,6 +962,10 @@ export class GameApp {
       ${leaderAbilityHint}
     `;
 
+    if (!this.isCpuPlayer(s, player)) {
+      this.renderLeaderAbilityInPanel(s, player, leader);
+    }
+
     const base = document.createElement("div");
     base.className = "base-panel";
     const baseTroops = this.troopsInBase(s, player);
@@ -1240,18 +1249,9 @@ export class GameApp {
     return bar;
   }
 
-  private getLeaderMaxHp(s: GameState, player: PlayerId): number {
-    const leaderId = s.players[player].leaderId;
-    if (leaderId) {
-      const def = s.catalog[leaderId];
-      if (def?.leaderMaxHp) return def.leaderMaxHp;
-    }
-    return LEADER_MAX_HP;
-  }
-
-  private renderLeaderAbilityButton(s: GameState, player: PlayerId, container: HTMLElement): void {
+  private renderLeaderAbilityInPanel(s: GameState, player: PlayerId, container: HTMLElement): void {
     const pl = s.players[player];
-    if (!pl.leaderId || pl.leaderAbilityUsedThisTurn || pl.leaderExhausted) return;
+    if (!pl.leaderId) return;
     const leaderDef = s.catalog[pl.leaderId];
     if (!leaderDef?.leaderAbilityId) return;
 
@@ -1259,58 +1259,60 @@ export class GameApp {
     const canUseHere =
       (abilityId === "shield" && s.combat) ||
       (abilityId === "frost-convert" && s.combat) ||
-      (abilityId === "empathy-mark" && (s.combat || s.turnPhase === "main")) ||
+      (abilityId === "empathy-mark" && (s.combat || (s.turnPhase === "main" && !s.combat))) ||
       (abilityId === "arcane-melody" && s.turnPhase === "main" && !s.combat);
 
-    if (!canUseHere) return;
+    if (!canUseHere || s.matchPhase !== "playing") return;
 
-    if (abilityId === "arcane-melody") {
-      const btn = document.createElement("button");
-      const isUpgraded = pl.leaderId === "klaus-delta";
-      btn.textContent = isUpgraded
-        ? "Melodia Arcana Aprimorada (exausta Líder → +2 temp)"
-        : "Melodia Arcana (exausta Líder → +1 temp)";
-      btn.title = leaderDef.leaderAbility ?? "";
-      btn.onclick = () => {
-        this.dispatchAction({ type: "USE_LEADER_ABILITY", player, targetTroopId: "" });
-      };
-      container.appendChild(btn);
-      return;
-    }
-
-    if (this.selection.leaderAbilityTargeting) {
-      const hint = document.createElement("p");
-      hint.className = "mulligan-hint";
-      hint.style.color = "#f0c878";
-      hint.textContent = "Clique em uma tropa aliada na arena para aplicar a habilidade do Líder.";
-      container.appendChild(hint);
-
-      const cancelBtn = document.createElement("button");
-      cancelBtn.className = "secondary";
-      cancelBtn.textContent = "Cancelar habilidade";
-      cancelBtn.onclick = () => {
-        this.selection.leaderAbilityTargeting = false;
-        this.render();
-      };
-      container.appendChild(cancelBtn);
-      return;
-    }
-
+    const disabled = pl.leaderAbilityUsedThisTurn || pl.leaderExhausted;
     const labels: Record<string, string> = {
-      shield: "Escudo do Líder (2 Essência)",
-      "frost-convert": "Cria do Inverno (2 Essência)",
-      "empathy-mark": "Marcar com Empatia (1 Essência)",
+      shield: "🛡 Escudo (2 Ess.)",
+      "frost-convert": "❄ Cria do Inverno (2 Ess.)",
+      "empathy-mark": "💜 Empatia (1 Ess.)",
+      "arcane-melody": "🎵 Melodia Arcana",
     };
 
     const btn = document.createElement("button");
-    btn.textContent = labels[abilityId] ?? "Habilidade do Líder";
-    btn.title = leaderDef.leaderAbility ?? "";
-    btn.onclick = () => {
-      this.selection.leaderAbilityTargeting = true;
-      this.selection.spellInstanceId = null;
-      this.render();
-    };
+    btn.style.cssText = "margin-top:0.4rem;width:100%;font-size:0.78rem;padding:0.35rem 0.5rem";
+    btn.textContent = labels[abilityId] ?? "Habilidade";
+    btn.disabled = disabled;
+    btn.title = disabled
+      ? (pl.leaderExhausted ? "Líder exausto — desvira na preparação" : "Já usou neste turno")
+      : (leaderDef.leaderAbility ?? "");
+
+    if (abilityId === "arcane-melody") {
+      btn.onclick = () => {
+        this.dispatchAction({ type: "USE_LEADER_ABILITY", player, targetTroopId: "" });
+      };
+    } else {
+      btn.onclick = () => {
+        if (this.selection.leaderAbilityTargeting) {
+          this.selection.leaderAbilityTargeting = false;
+        } else {
+          this.selection.leaderAbilityTargeting = true;
+          this.selection.spellInstanceId = null;
+        }
+        this.render();
+      };
+    }
+
     container.appendChild(btn);
+
+    if (this.selection.leaderAbilityTargeting) {
+      const hint = document.createElement("div");
+      hint.style.cssText = "font-size:0.72rem;color:#f0c878;margin-top:0.25rem";
+      hint.textContent = "Clique em tropa aliada na arena.";
+      container.appendChild(hint);
+    }
+  }
+
+  private getLeaderMaxHp(s: GameState, player: PlayerId): number {
+    const leaderId = s.players[player].leaderId;
+    if (leaderId) {
+      const def = s.catalog[leaderId];
+      if (def?.leaderMaxHp) return def.leaderMaxHp;
+    }
+    return LEADER_MAX_HP;
   }
 
   private renderLeaderEvolutionButton(s: GameState, player: PlayerId, container: HTMLElement): void {
@@ -1464,8 +1466,6 @@ export class GameApp {
         btns.appendChild(passBtn);
       }
 
-      const human = this.humanPlayer(s);
-      this.renderLeaderAbilityButton(s, human, btns);
     } else if (s.combat && isCombatStrikePhase(s)) {
       const combatHint = document.createElement("p");
       combatHint.className = "mulligan-hint";
@@ -1477,8 +1477,6 @@ export class GameApp {
           : `Combate: vez do Jogador ${striker + 1}…`;
       actions.appendChild(combatHint);
 
-      const humanStrike = this.humanPlayer(s);
-      this.renderLeaderAbilityButton(s, humanStrike, btns);
     } else if (canAct && s.turnPhase === "main" && !s.combat) {
       const essencePanel = document.createElement("div");
       essencePanel.className = "essence-panel";
@@ -1533,7 +1531,6 @@ export class GameApp {
       btns.appendChild(endBtn);
 
       this.renderLeaderEvolutionButton(s, active, btns);
-      this.renderLeaderAbilityButton(s, active, btns);
 
       if (contested.length > 0) {
         const warn = document.createElement("p");
