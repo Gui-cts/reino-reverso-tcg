@@ -1,7 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { GameAction } from "../../src/game/types";
-import { applyRoomAction } from "../../src/net/room-service";
-import { getRoom, saveRoom } from "../../src/net/room-store";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -20,6 +18,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const { applyRoomAction } = await import("../../src/net/room-service");
+    const { getRoom, saveRoom } = await import("../../src/net/room-store");
     const room = await getRoom(roomId);
     if (!room) return res.status(404).json({ error: "Sala não encontrada" });
 
@@ -27,7 +27,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await saveRoom(room);
     return res.status(result.ok ? 200 : 409).json(result);
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Falha ao processar ação" });
+    console.error("room action failed:", err);
+    const message = err instanceof Error ? err.message : "Falha ao processar ação";
+    return res.status(500).json({ error: message });
   }
 }

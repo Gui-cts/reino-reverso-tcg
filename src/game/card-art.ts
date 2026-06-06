@@ -1,19 +1,12 @@
 import { getCardType } from "./card-meta";
 import type { CardDefinition } from "./types";
 
+export { CARD_FRAME_URLS, type CardFrameKind } from "./card-frames";
+
 const DEFAULT_ART = "/cards/placeholder-troop.svg";
 
 export const PLACEHOLDER_ART_TROOP = "/cards/placeholder-troop.svg";
 export const PLACEHOLDER_ART_SPELL = "/cards/placeholder-spell.svg";
-
-/** Molduras de carta (PNG em public/cards/frames/). */
-export const CARD_FRAME_URLS = {
-  essence: "/cards/frames/frame-essencia.png",
-  corruption: "/cards/frames/frame-corrupcao.png",
-  essenceAndCorruption: "/cards/frames/frame-essencia-corrupcao.png",
-} as const;
-
-export type CardFrameKind = keyof typeof CARD_FRAME_URLS;
 
 export function getCardPlaceholderUrl(
   def: Pick<CardDefinition, "cardType" | "cardKind" | "spellEffect">,

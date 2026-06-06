@@ -1,6 +1,4 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { createRoom } from "../../src/net/room-service";
-import { saveRoom } from "../../src/net/room-store";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -11,6 +9,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
 
   try {
+    const { createRoom } = await import("../../src/net/room-service");
+    const { saveRoom } = await import("../../src/net/room-store");
     const body = (req.body ?? {}) as { leaderId?: string };
     const result = createRoom(body.leaderId);
     await saveRoom(result.room);
@@ -21,7 +21,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       view: result.view,
     });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Falha ao criar sala" });
+    console.error("create room failed:", err);
+    const message = err instanceof Error ? err.message : "Falha ao criar sala";
+    return res.status(500).json({ error: message });
   }
 }

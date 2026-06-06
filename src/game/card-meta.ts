@@ -1,4 +1,4 @@
-import { CARD_FRAME_URLS, type CardFrameKind } from "./card-art";
+import { CARD_FRAME_URLS, type CardFrameKind } from "./card-frames";
 import { canPayCorruptionCost, canPayEssenceCost } from "./helpers";
 import type {
   CardDefinition,

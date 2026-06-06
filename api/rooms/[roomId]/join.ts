@@ -1,6 +1,4 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { joinRoom } from "../../src/net/room-service";
-import { getRoom, saveRoom } from "../../src/net/room-store";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -14,6 +12,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!roomId) return res.status(400).json({ error: "roomId obrigatório" });
 
   try {
+    const { joinRoom } = await import("../../src/net/room-service");
+    const { getRoom, saveRoom } = await import("../../src/net/room-store");
     const room = await getRoom(roomId);
     if (!room) return res.status(404).json({ error: "Sala não encontrada" });
 
@@ -23,7 +23,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await saveRoom(room);
     return res.status(200).json(joined);
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Falha ao entrar na sala" });
+    console.error("join room failed:", err);
+    const message = err instanceof Error ? err.message : "Falha ao entrar na sala";
+    return res.status(500).json({ error: message });
   }
 }
