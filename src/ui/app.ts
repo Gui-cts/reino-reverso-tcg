@@ -267,13 +267,17 @@ export class GameApp {
         if (!action) break;
 
         const after = dispatch(latest, action);
-        const unchanged =
-          after === latest ||
-          (after.troops === latest.troops &&
-           after.players === latest.players &&
-           after.combat === latest.combat &&
-           after.matchPhase === latest.matchPhase);
-        if (unchanged && action.type !== "END_TURN") break;
+        const logOnly =
+          after !== latest &&
+          after.troops === latest.troops &&
+          after.players === latest.players &&
+          after.combat === latest.combat &&
+          after.matchPhase === latest.matchPhase &&
+          after.arenas === latest.arenas &&
+          after.selectedArenaIds === latest.selectedArenaIds &&
+          after.arenaSetupPicks === latest.arenaSetupPicks &&
+          after.pendingSpell === latest.pendingSpell;
+        if ((after === latest || logOnly) && action.type !== "END_TURN") break;
 
         this.applyCpuActionResult(after);
         this.cpuLoopGeneration++;
