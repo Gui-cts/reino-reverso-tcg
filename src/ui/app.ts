@@ -267,7 +267,13 @@ export class GameApp {
         if (!action) break;
 
         const after = dispatch(latest, action);
-        if (after === latest && action.type !== "END_TURN") break;
+        const unchanged =
+          after === latest ||
+          (after.troops === latest.troops &&
+           after.players === latest.players &&
+           after.combat === latest.combat &&
+           after.matchPhase === latest.matchPhase);
+        if (unchanged && action.type !== "END_TURN") break;
 
         this.applyCpuActionResult(after);
         this.cpuLoopGeneration++;

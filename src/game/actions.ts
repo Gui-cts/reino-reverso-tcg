@@ -613,8 +613,8 @@ function useLeaderAbility(
   targetTroopId: string,
 ): GameState {
   if (state.matchPhase !== "playing") return state;
-  if (state.activePlayer !== player) {
-    return { ...state, log: appendLog(state, "Não é seu turno.") };
+  if (!state.combat && state.activePlayer !== player) {
+    return state;
   }
   const pl = state.players[player];
   if (pl.leaderAbilityUsedThisTurn) {
