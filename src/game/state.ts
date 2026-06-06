@@ -88,9 +88,6 @@ export function createInitialGame(
 ): GameState {
   const cpuPlayer = options.cpuPlayer ?? null;
   const catalog = buildCatalogMap(catalogData.cards);
-  const deck0 = shuffle([...catalogData.starterDeck]);
-  const deck1 = shuffle([...catalogData.starterDeck]);
-
   const allBaseLeaders = catalogData.cards.filter(
     (c) => c.cardType === "leader" && !c.leaderFormOf,
   );
@@ -103,22 +100,34 @@ export function createInitialGame(
 
   const cpuLeader =
     allBaseLeaders.find((l) => l.id !== chosenLeaderId) ?? allBaseLeaders[0];
-  const cpuLeaderId = cpuLeader?.id ?? chosenLeaderId;
-  const cpuHp = cpuLeader?.leaderMaxHp ?? LEADER_MAX_HP;
+  const cpuLeaderId = cpuPlayer !== null ? (cpuLeader?.id ?? chosenLeaderId) : chosenLeaderId;
+  const cpuHp = cpuPlayer !== null ? (cpuLeader?.leaderMaxHp ?? LEADER_MAX_HP) : chosenHp;
 
   const humanIdx: PlayerId = cpuPlayer === 0 ? 1 : 0;
   const cpuIdx: PlayerId = cpuPlayer === 0 ? 0 : 1;
 
-  const players: [PlayerState, PlayerState] = [
-    { ...emptyPlayer(), deck: deck0 },
-    { ...emptyPlayer(), deck: deck1 },
-  ];
-  players[humanIdx] = { ...players[humanIdx], leaderId: chosenLeaderId, leaderHp: chosenHp };
-  if (cpuPlayer !== null) {
-    players[cpuIdx] = { ...players[cpuIdx], leaderId: cpuLeaderId, leaderHp: cpuHp };
-  } else {
-    players[cpuIdx] = { ...players[cpuIdx], leaderId: chosenLeaderId, leaderHp: chosenHp };
+  const allFormCards = catalogData.cards.filter((c) => c.leaderFormOf);
+  const baseDeck = catalogData.starterDeck.filter((id) => {
+    const def = catalog[id];
+    return !def?.leaderFormOf;
+  });
+
+  function buildDeckForLeader(leaderId: string | null): string[] {
+    const forms = allFormCards
+      .filter((c) => c.leaderFormOf === leaderId)
+      .map((c) => c.id);
+    return shuffle([...baseDeck, ...forms]);
   }
+
+  const humanLeaderId = chosenLeaderId;
+  const cpuLeaderIdFinal = cpuLeaderId;
+
+  const players: [PlayerState, PlayerState] = [
+    { ...emptyPlayer(), deck: buildDeckForLeader(humanIdx === 0 ? humanLeaderId : cpuLeaderIdFinal) },
+    { ...emptyPlayer(), deck: buildDeckForLeader(humanIdx === 1 ? humanLeaderId : cpuLeaderIdFinal) },
+  ];
+  players[humanIdx] = { ...players[humanIdx], leaderId: humanLeaderId, leaderHp: chosenHp };
+  players[cpuIdx] = { ...players[cpuIdx], leaderId: cpuLeaderIdFinal, leaderHp: cpuHp };
 
   let state: GameState = {
     catalog,
