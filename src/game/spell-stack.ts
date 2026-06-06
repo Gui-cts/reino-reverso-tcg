@@ -27,6 +27,7 @@ export function spellRequiresTarget(effect: SpellEffectId): boolean {
     case "troop-tutor":
     case "spell-tutor":
     case "counterspell":
+    case "destroy-artifact":
       return false;
     default:
       return true;
@@ -272,6 +273,25 @@ export function applySpellEffect(
         return next;
       }
       return state;
+    }
+    case "destroy-artifact": {
+      const enemy = opponent(caster);
+      const enemyArtifacts = Object.values(state.artifacts).filter(a => a.owner === enemy);
+      if (enemyArtifacts.length === 0) {
+        return { ...state, log: appendLog(state, "Nenhum artefato/equipamento inimigo para destruir.") };
+      }
+      const target = enemyArtifacts[0]!;
+      const targetName = state.catalog[target.cardId]?.name ?? "Artefato";
+      const artifacts = { ...state.artifacts };
+      delete artifacts[target.instanceId];
+      const players = [...state.players] as GameState["players"];
+      players[enemy] = { ...players[enemy], discard: [...players[enemy].discard, target.cardId] };
+      return {
+        ...state,
+        artifacts,
+        players,
+        log: appendLog(state, `${targetName} do Jogador ${enemy + 1} foi destruído!`),
+      };
     }
     default:
       return state;

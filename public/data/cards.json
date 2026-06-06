@@ -736,6 +736,43 @@
       "health": 0,
       "hasEssenceSymbol": false,
       "faction": "neutra"
+    },
+    {
+      "id": "altar-sombrio",
+      "name": "Altar Sombrio",
+      "cardType": "artifact",
+      "faction": "neutra",
+      "cost": 0,
+      "corruptionCost": 1,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "artifactEffect": "sacrifice-for-corruption"
+    },
+    {
+      "id": "destruidor-reliquias",
+      "name": "Destruidor de Relíquias",
+      "cardType": "troop",
+      "faction": "neutra",
+      "cost": 3,
+      "attack": 2,
+      "health": 2,
+      "hasEssenceSymbol": false,
+      "keywords": ["aterrisagem"],
+      "landingEffect": "destroy-enemy-artifact"
+    },
+    {
+      "id": "fragmentar",
+      "name": "Fragmentar",
+      "cardType": "spell",
+      "cardKind": "spell",
+      "cardSpeed": "standard",
+      "spellEffect": "destroy-artifact",
+      "cost": 2,
+      "attack": 0,
+      "health": 0,
+      "hasEssenceSymbol": false,
+      "faction": "neutra"
     }
   ],
   "starterDeck": [
@@ -800,6 +837,9 @@
     "falcao-abismo",
     "falcao-abismo",
     "noah-vampiro-inverno",
-    "noah-delta-empatia"
+    "noah-delta-empatia",
+    "altar-sombrio",
+    "destruidor-reliquias",
+    "fragmentar"
   ]
 }

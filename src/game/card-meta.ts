@@ -23,7 +23,7 @@ export const FACTION_LABELS: Record<string, string> = {
   delta: "Delta",
 };
 
-export const CARD_ROLES_COMING_SOON: CardType[] = ["equipment", "artifact"];
+export const CARD_ROLES_COMING_SOON: CardType[] = ["equipment"];
 
 export function normalizeCardDefinition(raw: CardDefinition): CardDefinition {
   const cardType = resolveCardType(raw);
@@ -68,7 +68,7 @@ export function isDeckableCard(def: CardDefinition | undefined): boolean {
   if (!def || def.isToken) return false;
   if (def.leaderFormOf) return true;
   const type = getCardType(def);
-  return type === "troop" || type === "spell";
+  return type === "troop" || type === "spell" || type === "artifact";
 }
 
 export function isLeaderFormCard(def: CardDefinition | undefined): boolean {

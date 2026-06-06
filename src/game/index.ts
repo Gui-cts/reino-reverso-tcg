@@ -60,6 +60,7 @@ export { spellRequiresTarget, troopIsUntargetable } from "./spell-stack";
 export { runTurnBegin } from "./turn";
 export { buryDeadTroops } from "./troop-cleanup";
 export {
+  applyLandingEffect,
   cardHasKeyword,
   describeKeywordRule,
   formatKeywordsLine,

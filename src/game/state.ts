@@ -133,6 +133,7 @@ export function createInitialGame(
     catalog,
     troops: {},
     essencePool: {},
+    artifacts: {},
     players,
     arenas: [],
     activePlayer: 0,

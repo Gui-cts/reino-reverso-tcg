@@ -29,10 +29,11 @@ import { applyRRNonResponsePenaltyAtEndTurn } from "./reino-reverso";
 import {
   canAffordCardCost,
   formatCardCost,
+  getCardType,
   getCorruptionCost,
   getEssenceCost,
 } from "./card-meta";
-import { troopCanFlyBetweenArenas, troopEntersReadyOnDeploy } from "./keywords";
+import { applyLandingEffect, cardHasKeyword, troopCanFlyBetweenArenas, troopEntersReadyOnDeploy } from "./keywords";
 import {
   isSpellCard,
   isTroopCard,
@@ -181,6 +182,10 @@ function playTroop(state: GameState, troopId: string): GameState {
     };
   }
 
+  if (getCardType(def) === "artifact") {
+    return playArtifact(state, troopId, player, def);
+  }
+
   if (!isTroopCard(def)) {
     return {
       ...state,
@@ -256,6 +261,11 @@ function playTroop(state: GameState, troopId: string): GameState {
       `Jogador ${player + 1} convocou ${def.name} na base (${entersReady ? "Investida — pronta" : "exausta"}). Custo: ${formatCardCost(def)}.`,
     ),
   };
+
+  if (cardHasKeyword(def, "aterrisagem") && def.landingEffect) {
+    next = applyLandingEffect(next, next.troops[troopId]!);
+  }
+
   return sanitizePlayerHands(next);
 }
 
@@ -898,6 +908,109 @@ function evolveLeader(
   });
 }
 
+function playArtifact(
+  state: GameState,
+  troopId: string,
+  player: PlayerId,
+  def: import("./types").CardDefinition,
+): GameState {
+  const corruptionCost = getCorruptionCost(def);
+  const payment = getEssenceCost(def);
+
+  if (!canAffordCardCost(state, player, def, payment)) {
+    return {
+      ...state,
+      log: appendLog(state, `Recursos insuficientes para ${def.name} (${formatCardCost(def)}).`),
+    };
+  }
+
+  let next = state;
+
+  if (payment.exhaust > 0) {
+    const paid = payEssenceCost(next, player, payment);
+    if (!paid.ok) return { ...state, log: appendLog(state, "Essência insuficiente.") };
+    next = paid.state;
+  }
+
+  if (corruptionCost > 0) {
+    const paid = payCorruptionCost(next, player, corruptionCost);
+    if (!paid.ok) return { ...state, log: appendLog(state, "Corrupção insuficiente.") };
+    next = paid.state;
+  }
+
+  const hand = next.players[player].hand.filter(id => id !== troopId);
+  const players = [...next.players] as GameState["players"];
+  players[player] = { ...next.players[player], hand };
+
+  const troops = { ...next.troops };
+  const troopInst = state.troops[troopId];
+  const cardId = troopInst ? troopInst.cardId : def.id;
+  delete troops[troopId];
+
+  const artifactId = `artifact-${next.nextInstanceId}`;
+  const artifacts = {
+    ...next.artifacts,
+    [artifactId]: { instanceId: artifactId, cardId, owner: player },
+  };
+
+  return sanitizePlayerHands({
+    ...next,
+    players,
+    troops,
+    artifacts,
+    nextInstanceId: next.nextInstanceId + 1,
+    log: appendLog(next, `Jogador ${player + 1} colocou ${def.name} em jogo (artefato). Custo: ${formatCardCost(def)}.`),
+  });
+}
+
+function activateArtifact(state: GameState, artifactId: string, sacrificeTroopId?: string): GameState {
+  if (state.turnPhase !== "main" || state.combat) return state;
+  const player = state.activePlayer;
+  const artifact = state.artifacts[artifactId];
+  if (!artifact || artifact.owner !== player) return state;
+
+  const def = state.catalog[artifact.cardId];
+  if (!def?.artifactEffect) return state;
+
+  if (def.artifactEffect === "sacrifice-for-corruption") {
+    if (!sacrificeTroopId) {
+      return { ...state, log: appendLog(state, "Selecione uma tropa aliada para sacrificar.") };
+    }
+    const troop = state.troops[sacrificeTroopId];
+    if (!troop || troop.owner !== player || (troop.zone !== "base" && troop.zone !== "arena")) {
+      return { ...state, log: appendLog(state, "Tropa inválida para sacrifício.") };
+    }
+
+    const cap = maxCorruptionForPhase(state.gamePhase);
+    const cur = state.players[player].corruption;
+    if (cur >= cap) {
+      return { ...state, log: appendLog(state, `Corrupção no máximo (${cap}).`) };
+    }
+
+    const troopName = state.catalog[troop.cardId]?.name ?? "Tropa";
+    const troops = { ...state.troops };
+    delete troops[sacrificeTroopId];
+
+    const players = [...state.players] as GameState["players"];
+    const pl = players[player];
+    players[player] = {
+      ...pl,
+      hand: pl.hand.filter(id => id !== sacrificeTroopId),
+      discard: [...pl.discard, troop.cardId],
+      corruption: Math.min(cap, cur + 1),
+    };
+
+    return sanitizePlayerHands({
+      ...state,
+      troops,
+      players,
+      log: appendLog(state, `Jogador ${player + 1} sacrificou ${troopName} no artefato → +1 Corrupção (${Math.min(cap, cur + 1)}/${cap}).`),
+    });
+  }
+
+  return state;
+}
+
 function applyAction(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "SELECT_ARENA":
@@ -959,6 +1072,9 @@ function applyAction(state: GameState, action: GameAction): GameState {
 
     case "EVOLVE_LEADER":
       return evolveLeader(state, action.player, action.formId, action.formInstanceId);
+
+    case "ACTIVATE_ARTIFACT":
+      return activateArtifact(state, action.artifactId, action.sacrificeTroopId);
 
     default:
       return state;

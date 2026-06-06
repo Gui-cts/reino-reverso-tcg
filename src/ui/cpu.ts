@@ -31,7 +31,7 @@ import type {
   SpellEffectId,
   TroopInstance,
 } from "../game/types";
-import { MAX_TROOPS_PER_ZONE } from "../game/types";
+import { MAX_TROOPS_PER_ZONE, maxCorruptionForPhase } from "../game/types";
 
 function pickRandom<T>(arr: T[]): T | undefined {
   if (arr.length === 0) return undefined;
@@ -595,12 +595,50 @@ function pickBestCombatAttack(
   };
 }
 
+function pickActivateArtifact(state: GameState, cpu: PlayerId): GameAction | null {
+  if (state.turnPhase !== "main" || state.combat) return null;
+
+  const cap = maxCorruptionForPhase(state.gamePhase);
+  const cur = state.players[cpu].corruption;
+  if (cur >= cap) return null;
+
+  const artifacts = Object.values(state.artifacts).filter(a => a.owner === cpu);
+  const sacrificeArt = artifacts.find(a => {
+    const def = state.catalog[a.cardId];
+    return def?.artifactEffect === "sacrifice-for-corruption";
+  });
+  if (!sacrificeArt) return null;
+
+  const expendable = Object.values(state.troops).filter(t => {
+    if (t.owner !== cpu || t.currentHealth <= 0) return false;
+    if (t.zone !== "base" && t.zone !== "arena") return false;
+    const def = state.catalog[t.cardId];
+    const power = (def?.attack ?? 0) + (def?.health ?? 0);
+    return power <= 3;
+  });
+
+  if (expendable.length === 0) return null;
+
+  const sorted = [...expendable].sort((a, b) => {
+    const ap = a.attack + a.currentHealth;
+    const bp = b.attack + b.currentHealth;
+    return ap - bp;
+  });
+
+  return {
+    type: "ACTIVATE_ARTIFACT",
+    artifactId: sacrificeArt.instanceId,
+    sacrificeTroopId: sorted[0]!.instanceId,
+  };
+}
+
 function hasMainPhaseWork(state: GameState, cpu: PlayerId): boolean {
   if (pickSacrificeForEssence(state, cpu)) return true;
   if (pickPlaySpell(state, cpu)) return true;
   if (pickPlayTroop(state, cpu)) return true;
   if (pickMoveTroop(state, cpu)) return true;
   if (pickDeclareCombat(state, cpu)) return true;
+  if (pickActivateArtifact(state, cpu)) return true;
   return false;
 }
 
@@ -636,6 +674,9 @@ function pickMainTurnAction(state: GameState, cpu: PlayerId): GameAction | null 
 
   const moveAgain = pickMoveTroop(state, cpu);
   if (moveAgain) return moveAgain;
+
+  const activateArt = pickActivateArtifact(state, cpu);
+  if (activateArt) return activateArt;
 
   const contested = getContestedArenaNames(state, cpu);
   if (contested.length > 0) return null;

@@ -70,7 +70,8 @@ export type SpellEffectId =
   | "spell-tutor"
   | "constriction"
   | "ethereal"
-  | "omega";
+  | "omega"
+  | "destroy-artifact";
 
 /** Palavras-chave de tropa (não são magias). */
 export type KeywordId =
@@ -81,10 +82,17 @@ export type KeywordId =
   | "vincular"
   | "silencio"
   | "fatiar"
-  | "voar";
+  | "voar"
+  | "aterrisagem";
 
 /** Efeito ao morrer (`testamento`) — independente de `spellEffect`. */
 export type DeathEffectId = "draw-one" | "ping-leader-1";
+
+/** Efeitos de ativação de artefatos permanentes. */
+export type ArtifactEffectId = "sacrifice-for-corruption";
+
+/** Efeitos de aterrisagem (ao entrar em campo). */
+export type LandingEffectId = "destroy-enemy-artifact";
 
 /** Habilidades ativas de Líder. */
 export type LeaderAbilityId = "shield" | "frost-convert" | "empathy-mark" | "arcane-melody";
@@ -148,6 +156,10 @@ export interface CardDefinition {
   keywords?: KeywordId[];
   /** Com `testamento` — efeito ao morrer (não bloqueado por Bar do João). */
   deathEffect?: DeathEffectId;
+  /** Artefato: efeito de ativação. */
+  artifactEffect?: ArtifactEffectId;
+  /** Efeito de aterrisagem (ao entrar em campo). */
+  landingEffect?: LandingEffectId;
 }
 
 /** Baralho + metadados para validação (deckbuilder / partida). */
@@ -187,6 +199,13 @@ export interface TroopInstance {
   isFrostborn?: boolean;
   /** Marca de Empatia — tropa marcada pela habilidade empathy-mark. */
   hasEmpathy?: boolean;
+}
+
+/** Artefato permanente em jogo na base do jogador. */
+export interface ArtifactInstance {
+  instanceId: string;
+  cardId: string;
+  owner: PlayerId;
 }
 
 /** Feitiço aguardando contramagia ou resolução. */
@@ -303,6 +322,8 @@ export interface GameState {
   catalog: Record<string, CardDefinition>;
   troops: Record<string, TroopInstance>;
   essencePool: Record<string, EssenceInstance>;
+  /** Artefatos em jogo (permanentes na base). */
+  artifacts: Record<string, ArtifactInstance>;
   players: [PlayerState, PlayerState];
   arenas: ArenaState[];
   activePlayer: PlayerId;
@@ -359,4 +380,5 @@ export type GameAction =
       choice: "essence" | "corruption" | "recycle";
     }
   | { type: "USE_LEADER_ABILITY"; player: PlayerId; targetTroopId: string }
-  | { type: "EVOLVE_LEADER"; player: PlayerId; formId: string; formInstanceId: string };
+  | { type: "EVOLVE_LEADER"; player: PlayerId; formId: string; formInstanceId: string }
+  | { type: "ACTIVATE_ARTIFACT"; artifactId: string; sacrificeTroopId?: string };

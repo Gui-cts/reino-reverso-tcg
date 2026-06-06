@@ -137,6 +137,7 @@ export function createTestGame(
     catalog,
     troops: {},
     essencePool: {},
+    artifacts: {},
     players,
     arenas: [],
     activePlayer: 0,

@@ -6,7 +6,7 @@ import {
   testModeLabel,
   type TestMode,
 } from "../game";
-import type { GameAction, CardCatalog, GameState, PlayerId, TroopInstance } from "../game/types";
+import type { GameAction, ArtifactInstance, CardCatalog, GameState, PlayerId, TroopInstance } from "../game/types";
 import { LEADER_MAX_HP, LEADER_EVOLUTION_CORRUPTION_COST, maxCorruptionForPhase } from "../game/types";
 import {
   getAvailableEssence,
@@ -55,6 +55,8 @@ type UiSelection = {
   mulliganIndices: Set<number>;
   /** Habilidade do Líder ativada — próximo clique em tropa aplica a habilidade. */
   leaderAbilityTargeting: boolean;
+  /** Artefato selecionado para ativação — próximo clique em tropa sacrifica. */
+  artifactTargetingId: string | null;
 };
 
 type AppScreen = "menu" | "game";
@@ -70,6 +72,7 @@ export class GameApp {
     arenaId: null,
     spellInstanceId: null,
     leaderAbilityTargeting: false,
+    artifactTargetingId: null,
     mulliganIndices: new Set(),
   };
   private root: HTMLElement;
@@ -152,6 +155,7 @@ export class GameApp {
       spellInstanceId: null,
       mulliganIndices: new Set(),
       leaderAbilityTargeting: false,
+      artifactTargetingId: null,
     };
     this.render();
     void this.runCpuLoop();
@@ -197,6 +201,7 @@ export class GameApp {
     this.selection.arenaId = null;
     this.selection.spellInstanceId = null;
     this.selection.leaderAbilityTargeting = false;
+    this.selection.artifactTargetingId = null;
     this.cpuLoopGeneration++;
     this.render();
     void this.runCpuLoop();
@@ -319,7 +324,8 @@ export class GameApp {
           after.arenas === latest.arenas &&
           after.selectedArenaIds === latest.selectedArenaIds &&
           after.arenaSetupPicks === latest.arenaSetupPicks &&
-          after.pendingSpell === latest.pendingSpell;
+          after.pendingSpell === latest.pendingSpell &&
+          after.artifacts === latest.artifacts;
         if ((after === latest || logOnly) && action.type !== "END_TURN") break;
 
         this.applyCpuActionResult(after);
@@ -991,6 +997,8 @@ export class GameApp {
       bindDropZone(base, { kind: "base", player }, (p, z) => this.handleCardDrop(p, z));
     }
 
+    const artifactsPanel = this.renderArtifactsPanel(s, player);
+
     const essencePanel = document.createElement("div");
     essencePanel.className = "essence-zone-panel";
     const essReady = getAvailableEssence(s, player).length;
@@ -1023,7 +1031,7 @@ export class GameApp {
 
     const zones = document.createElement("div");
     zones.className = "zones-column";
-    zones.append(base, essencePanel);
+    zones.append(base, artifactsPanel, essencePanel);
 
     const spacer = document.createElement("div");
     row.append(leader, zones, spacer);
@@ -1675,6 +1683,86 @@ export class GameApp {
     );
   }
 
+  private getPlayerArtifacts(s: GameState, player: PlayerId): ArtifactInstance[] {
+    return Object.values(s.artifacts).filter(a => a.owner === player);
+  }
+
+  private renderArtifactsPanel(s: GameState, player: PlayerId): HTMLElement {
+    const panel = document.createElement("div");
+    panel.className = "artifact-zone-panel";
+    const artifacts = this.getPlayerArtifacts(s, player);
+    panel.innerHTML = `<strong>Artefatos — J${player + 1} (${artifacts.length})</strong>`;
+
+    if (artifacts.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "zone-empty";
+      empty.textContent = "— nenhum —";
+      panel.appendChild(empty);
+      return panel;
+    }
+
+    const slots = document.createElement("div");
+    slots.className = "troop-slots";
+
+    const canAct =
+      s.matchPhase === "playing" &&
+      s.turnPhase === "main" &&
+      !s.combat &&
+      s.activePlayer === player &&
+      this.canControlPlayer(s, player);
+
+    for (const art of artifacts) {
+      const def = s.catalog[art.cardId];
+      const card = document.createElement("div");
+      card.className = "artifact-card";
+      const name = def?.name ?? art.cardId;
+      const effectLabel = def?.artifactEffect === "sacrifice-for-corruption"
+        ? "Sacrifique tropa → +1 Corrupção"
+        : "";
+
+      card.innerHTML = `<span class="artifact-name">${name}</span>`;
+      if (effectLabel) {
+        const fx = document.createElement("span");
+        fx.className = "artifact-effect";
+        fx.textContent = effectLabel;
+        card.appendChild(fx);
+      }
+
+      if (canAct && def?.artifactEffect) {
+        const btn = document.createElement("button");
+        btn.className = "artifact-activate-btn";
+        btn.textContent = "Ativar";
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          if (def.artifactEffect === "sacrifice-for-corruption") {
+            if (this.selection.artifactTargetingId === art.instanceId) {
+              this.selection.artifactTargetingId = null;
+            } else {
+              this.selection.artifactTargetingId = art.instanceId;
+              this.selection.spellInstanceId = null;
+              this.selection.leaderAbilityTargeting = false;
+            }
+            this.render();
+          }
+        };
+        card.appendChild(btn);
+
+        if (this.selection.artifactTargetingId === art.instanceId) {
+          card.classList.add("artifact-targeting");
+          const hint = document.createElement("div");
+          hint.className = "artifact-hint";
+          hint.textContent = "Clique em tropa aliada para sacrificar.";
+          card.appendChild(hint);
+        }
+      }
+
+      slots.appendChild(card);
+    }
+
+    panel.appendChild(slots);
+    return panel;
+  }
+
   private troopChip(s: GameState, troop: TroopInstance): HTMLElement {
     const def = s.catalog[troop.cardId];
     const combat = s.combat;
@@ -1745,6 +1833,24 @@ export class GameApp {
       }
     } else {
       if (
+        this.selection.artifactTargetingId &&
+        (troop.zone === "base" || troop.zone === "arena") &&
+        troop.owner === this.humanPlayer(s) &&
+        troop.currentHealth > 0
+      ) {
+        const artId = this.selection.artifactTargetingId;
+        onClick = (e) => {
+          e.stopPropagation();
+          this.selection.artifactTargetingId = null;
+          this.dispatchAction({
+            type: "ACTIVATE_ARTIFACT",
+            artifactId: artId,
+            sacrificeTroopId: troop.instanceId,
+          });
+        };
+        subLabel = subLabel ? `${subLabel} · sacrificar` : "clique — sacrificar no artefato";
+        selected = true;
+      } else if (
         this.selection.leaderAbilityTargeting &&
         troop.zone === "arena" &&
         troop.owner === this.humanPlayer(s) &&

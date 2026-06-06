@@ -48,6 +48,8 @@ export function keywordLabel(keyword: KeywordId): string {
       return "Fatiar";
     case "voar":
       return "Voar";
+    case "aterrisagem":
+      return "Aterrisagem";
     default:
       return keyword;
   }
@@ -96,6 +98,8 @@ export function describeKeywordRule(keyword: KeywordId): string {
       return "Dano excedente ao matar continua em outro inimigo legal na arena (mesmo ataque).";
     case "voar":
       return "Pode mover entre arenas (não só base ↔ arena).";
+    case "aterrisagem":
+      return "Efeito ao entrar em campo (convocada da mão para a base).";
     default:
       return "";
   }
@@ -329,4 +333,30 @@ export function troopBlocksEnchantments(
   target: TroopInstance,
 ): boolean {
   return troopHasKeyword(state, target, "silencio");
+}
+
+export function applyLandingEffect(state: GameState, troop: TroopInstance): GameState {
+  const def = state.catalog[troop.cardId];
+  if (!def?.landingEffect || !cardHasKeyword(def, "aterrisagem")) return state;
+
+  if (def.landingEffect === "destroy-enemy-artifact") {
+    const enemy = opponent(troop.owner);
+    const enemyArtifacts = Object.values(state.artifacts).filter(a => a.owner === enemy);
+    if (enemyArtifacts.length === 0) {
+      return { ...state, log: appendLog(state, `Aterrisagem — nenhum artefato inimigo para destruir.`) };
+    }
+    const target = enemyArtifacts[0]!;
+    const targetName = state.catalog[target.cardId]?.name ?? "Artefato";
+    const artifacts = { ...state.artifacts };
+    delete artifacts[target.instanceId];
+    const players = [...state.players] as GameState["players"];
+    players[enemy] = { ...players[enemy], discard: [...players[enemy].discard, target.cardId] };
+    return {
+      ...state,
+      artifacts,
+      players,
+      log: appendLog(state, `Aterrisagem — ${def.name} destruiu ${targetName}!`),
+    };
+  }
+  return state;
 }

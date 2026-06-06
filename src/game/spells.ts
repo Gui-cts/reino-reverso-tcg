@@ -122,6 +122,8 @@ export function describeSpellEffect(effect: SpellEffectId): string {
       return "Tropa aliada não pode ser alvo de ataques nem feitiços pontuais neste turno.";
     case "omega":
       return "Destrói instantaneamente uma tropa inimiga no campo (custa 1 Corrupção).";
+    case "destroy-artifact":
+      return "Destrói um artefato ou equipamento inimigo.";
     default:
       return "";
   }
@@ -151,6 +153,8 @@ export function spellEffectLabel(effect: SpellEffectId): string {
       return "Etereal";
     case "omega":
       return "Omega";
+    case "destroy-artifact":
+      return "Fragmentar";
     default:
       return "";
   }
