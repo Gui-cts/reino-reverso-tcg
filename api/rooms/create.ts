@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { createRoom } from "../../src/net/room-service.js";
-import { saveRoom } from "../../src/net/room-store.js";
+import { createRoom } from "../../src/net/room-service";
+import { saveRoom } from "../../src/net/room-store";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");

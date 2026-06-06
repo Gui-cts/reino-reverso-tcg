@@ -23,9 +23,15 @@ export type ActionResponse = {
 };
 
 async function parseJson<T>(res: Response): Promise<T> {
-  const data = (await res.json()) as T & { error?: string };
+  const text = await res.text();
+  let data: T & { error?: string };
+  try {
+    data = JSON.parse(text) as T & { error?: string };
+  } catch {
+    throw new Error(text.slice(0, 120) || `HTTP ${res.status}`);
+  }
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`);
+    throw new Error(data.error ?? (text.slice(0, 120) || `HTTP ${res.status}`));
   }
   return data;
 }
