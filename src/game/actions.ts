@@ -950,7 +950,7 @@ function playArtifact(
   const artifactId = `artifact-${next.nextInstanceId}`;
   const artifacts = {
     ...next.artifacts,
-    [artifactId]: { instanceId: artifactId, cardId, owner: player },
+    [artifactId]: { instanceId: artifactId, cardId, owner: player, exhausted: false },
   };
 
   return sanitizePlayerHands({
@@ -971,6 +971,10 @@ function activateArtifact(state: GameState, artifactId: string, sacrificeTroopId
 
   const def = state.catalog[artifact.cardId];
   if (!def?.artifactEffect) return state;
+
+  if (artifact.exhausted) {
+    return { ...state, log: appendLog(state, `${def.name} está exausto — desvira na preparação.`) };
+  }
 
   if (def.artifactEffect === "sacrifice-for-corruption") {
     if (!sacrificeTroopId) {
@@ -1000,11 +1004,15 @@ function activateArtifact(state: GameState, artifactId: string, sacrificeTroopId
       corruption: Math.min(cap, cur + 1),
     };
 
+    const artifacts = { ...state.artifacts };
+    artifacts[artifactId] = { ...artifact, exhausted: true };
+
     return sanitizePlayerHands({
       ...state,
       troops,
       players,
-      log: appendLog(state, `Jogador ${player + 1} sacrificou ${troopName} no artefato → +1 Corrupção (${Math.min(cap, cur + 1)}/${cap}).`),
+      artifacts,
+      log: appendLog(state, `Jogador ${player + 1} sacrificou ${troopName} no artefato → +1 Corrupção (${Math.min(cap, cur + 1)}/${cap}). Artefato exausto.`),
     });
   }
 
@@ -1033,7 +1041,7 @@ function applyAction(state: GameState, action: GameAction): GameState {
       return playTroop(state, action.troopId);
 
     case "PLAY_SPELL":
-      return playSpell(state, action.player, action.spellInstanceId, action.targetTroopId);
+      return playSpell(state, action.player, action.spellInstanceId, action.targetTroopId, action.targetArtifactId);
 
     case "PASS_SPELL_COUNTER":
       return passSpellCounter(state, action.player);

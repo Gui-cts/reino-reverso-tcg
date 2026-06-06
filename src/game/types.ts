@@ -206,6 +206,7 @@ export interface ArtifactInstance {
   instanceId: string;
   cardId: string;
   owner: PlayerId;
+  exhausted: boolean;
 }
 
 /** Feitiço aguardando contramagia ou resolução. */
@@ -214,6 +215,7 @@ export interface PendingSpellState {
   spellCardId: string;
   effect: SpellEffectId;
   targetTroopId: string | null;
+  targetArtifactId: string | null;
   /** Oponente pode responder com Contramagia. */
   counterWindowOpen: boolean;
   /** Contramagia foi jogada; o lançador original decide pagar 2 essências. */
@@ -364,6 +366,7 @@ export type GameAction =
       player: PlayerId;
       spellInstanceId: string;
       targetTroopId?: string | null;
+      targetArtifactId?: string | null;
     }
   | { type: "PASS_SPELL_COUNTER"; player: PlayerId }
   | { type: "RESOLVE_COUNTER_PAYMENT"; player: PlayerId; payTwoEssence: boolean }

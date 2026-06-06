@@ -282,6 +282,7 @@ export function playSpell(
   caster: PlayerId,
   spellInstanceId: string,
   targetTroopId?: string | null,
+  targetArtifactId?: string | null,
 ): GameState {
   const pl = state.players[caster];
   if (!pl.hand.includes(spellInstanceId)) {
@@ -405,6 +406,7 @@ export function playSpell(
       spellCardId: spellInst.cardId,
       effect,
       targetTroopId: targetId,
+      targetArtifactId: targetArtifactId ?? null,
       counterWindowOpen: true,
       awaitingCounterPayment: false,
     },

@@ -100,6 +100,7 @@ export function applySpellEffect(
   effect: SpellEffectId,
   targetTroopId: string | null,
   spellName: string,
+  targetArtifactId?: string | null,
 ): GameState {
   const arenaId = state.combat?.arenaId ?? null;
 
@@ -280,7 +281,12 @@ export function applySpellEffect(
       if (enemyArtifacts.length === 0) {
         return { ...state, log: appendLog(state, "Nenhum artefato/equipamento inimigo para destruir.") };
       }
-      const target = enemyArtifacts[0]!;
+      const target = targetArtifactId
+        ? state.artifacts[targetArtifactId]
+        : enemyArtifacts[0]!;
+      if (!target || target.owner !== enemy) {
+        return { ...state, log: appendLog(state, "Artefato alvo inválido.") };
+      }
       const targetName = state.catalog[target.cardId]?.name ?? "Artefato";
       const artifacts = { ...state.artifacts };
       delete artifacts[target.instanceId];
@@ -321,6 +327,7 @@ export function resolvePendingSpell(state: GameState): GameState {
     pending.effect,
     pending.targetTroopId,
     name,
+    pending.targetArtifactId,
   );
   return {
     ...next,

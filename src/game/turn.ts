@@ -29,6 +29,18 @@ function clearAttackSuppressionForPlayer(state: GameState, player: PlayerId): Ga
   return { ...state, troops };
 }
 
+function untapArtifacts(state: GameState, player: PlayerId): GameState {
+  const artifacts = { ...state.artifacts };
+  let changed = false;
+  for (const a of Object.values(artifacts)) {
+    if (a.owner === player && a.exhausted) {
+      artifacts[a.instanceId] = { ...a, exhausted: false };
+      changed = true;
+    }
+  }
+  return changed ? { ...state, artifacts } : state;
+}
+
 function resetTurnFlags(state: GameState, player: PlayerId): GameState {
   const players = [...state.players] as GameState["players"];
   players[player] = {
@@ -70,6 +82,7 @@ export function runTurnBegin(state: GameState, player: PlayerId): GameState {
 
   next = untapPlayer(next, player);
   next = untapEssence(next, player);
+  next = untapArtifacts(next, player);
   next = clearMovementLocksForPlayer(next, player);
   next = clearAttackSuppressionForPlayer(next, player);
   next = resetTurnFlags(next, player);
