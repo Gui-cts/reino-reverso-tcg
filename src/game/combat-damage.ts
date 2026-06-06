@@ -1,4 +1,4 @@
-import { getTroopName } from "./helpers";
+import { appendLog, getTroopName } from "./helpers";
 import {
   applyVincularAfterCombatHit,
   getLegalCombatTargets,
@@ -143,9 +143,61 @@ export function applyStrikeDamage(
     logLine = `${attackerName} atacou ${hitParts.join(", ")} em ${arenaName}${hasFatiar ? " (Fatiar)" : ""}.`;
   }
 
+  let finalState: GameState = { ...state, troops };
+  const attackerFinal = troops[attacker.instanceId];
+
+  if (attacker.isFrostborn && hitParts.length > 0) {
+    const roll = Math.floor(Math.random() * 6) + 1;
+    const frozen = roll % 2 === 0;
+    const firstTarget = troops[firstTargetId];
+    if (frozen && firstTarget && firstTarget.currentHealth > 0) {
+      troops[firstTargetId] = { ...firstTarget, attackSuppressed: true };
+      finalState = {
+        ...finalState,
+        troops: { ...troops },
+        log: appendLog(finalState, `Congelar — ${getTroopName(finalState, firstTarget)} congelado(a)! (1d6 = ${roll}, par → attackSuppressed)`),
+      };
+    } else {
+      finalState = {
+        ...finalState,
+        log: appendLog(finalState, `Congelar — 1d6 = ${roll} (${frozen ? "par, mas alvo caiu" : "ímpar, sem efeito"}).`),
+      };
+    }
+  }
+
+  if (
+    attacker.isFrostborn &&
+    attackerFinal &&
+    attackerFinal.currentHealth > 0 &&
+    hitParts.length > 0 &&
+    finalState.players[attacker.owner].leaderId === "noah-vampiro-inverno"
+  ) {
+    const firstTarget = troops[firstTargetId];
+    const hpBefore = firstTarget
+      ? Math.min(attacker.attack, (state.troops[firstTargetId]?.currentHealth ?? 0))
+      : 0;
+    const damageDealt = hpBefore > 0 ? hpBefore : 0;
+    if (damageDealt > 0) {
+      const catalogDef = finalState.catalog[attacker.cardId];
+      const maxHp = catalogDef ? catalogDef.health + (attacker.healthBonus ?? 0) : attacker.currentHealth;
+      const healed = Math.min(damageDealt, maxHp - attackerFinal.currentHealth);
+      if (healed > 0) {
+        troops[attacker.instanceId] = {
+          ...attackerFinal,
+          currentHealth: attackerFinal.currentHealth + healed,
+        };
+        finalState = {
+          ...finalState,
+          troops: { ...troops },
+          log: appendLog(finalState, `Vampirismo — ${getTroopName(finalState, attacker)} curou ${healed} HP (dano causado ao alvo).`),
+        };
+      }
+    }
+  }
+
   return {
-    state: { ...state, troops },
-    troops,
+    state: finalState,
+    troops: finalState.troops,
     logLine,
   };
 }

@@ -342,7 +342,8 @@
       "health": 0,
       "hasEssenceSymbol": true,
       "leaderMaxHp": 10,
-      "leaderAbility": "Forma evoluída (habilidade em desenvolvimento).",
+      "leaderAbility": "Cria do Inverno (1×/turno no combate, 2 Essência): transforma tropa aliada em Cria do Inverno. Ao atacar: 1d6 par → congela alvo. Passiva: Crias que causam dano e sobrevivem curam o dano causado (vampirismo).",
+      "leaderAbilityId": "frost-convert",
       "leaderFormOf": "noah-lider-base",
       "sacrificeReward": { "essence": 1, "corruption": 1 },
       "leaderFormIds": []
@@ -357,7 +358,8 @@
       "health": 0,
       "hasEssenceSymbol": true,
       "leaderMaxHp": 10,
-      "leaderAbility": "Forma evoluída (habilidade em desenvolvimento).",
+      "leaderAbility": "Empatia (1×/turno, combate ou principal, 1 Essência): marca tropa aliada com Empatia (ganha Protetor + Escudo). Passiva: ao morrer, aliados na mesma arena ganham +1/+1.",
+      "leaderAbilityId": "empathy-mark",
       "leaderFormOf": "noah-lider-base",
       "sacrificeReward": { "essence": 2, "corruption": 0 },
       "leaderFormIds": []

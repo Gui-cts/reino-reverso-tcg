@@ -132,7 +132,7 @@ export function getLegalCombatTargets(
   const enemies = getTroopsInZone(state, opponent(striker), "arena", arenaId).filter(
     (t) => t.currentHealth > 0 && !t.etherealThisTurn,
   );
-  const protectors = enemies.filter((t) => troopHasKeyword(state, t, "protetor"));
+  const protectors = enemies.filter((t) => troopHasKeyword(state, t, "protetor") || t.hasEmpathy);
   if (protectors.length > 0) return protectors;
   return enemies;
 }
@@ -213,6 +213,44 @@ function resolveDeathEffect(
   }
 }
 
+function applyEmpathyOnDeath(state: GameState, troop: TroopInstance): GameState {
+  const owner = troop.owner;
+  const arenaId = troop.arenaId;
+  if (!arenaId) return state;
+
+  const allies = getTroopsInZone(state, owner, "arena", arenaId).filter(
+    (t) => t.currentHealth > 0 && t.instanceId !== troop.instanceId,
+  );
+  if (allies.length === 0) {
+    return {
+      ...state,
+      log: appendLog(
+        state,
+        `Empatia (${getTroopName(state, troop)}) — nenhuma tropa aliada na arena para fortalecer.`,
+      ),
+    };
+  }
+
+  const troops = { ...state.troops };
+  for (const ally of allies) {
+    troops[ally.instanceId] = {
+      ...ally,
+      attack: ally.attack + 1,
+      currentHealth: ally.currentHealth + 1,
+      healthBonus: ally.healthBonus + 1,
+    };
+  }
+
+  return {
+    ...state,
+    troops,
+    log: appendLog(
+      state,
+      `Empatia — ${getTroopName(state, troop)} morreu; ${allies.length} aliado(s) na arena ganharam +1/+1.`,
+    ),
+  };
+}
+
 /** Dispara Eco / Testamento — nunca passa por regras de magia de arena. */
 export function applyTroopDeathTriggers(
   state: GameState,
@@ -230,6 +268,10 @@ export function applyTroopDeathTriggers(
 
   if (cardHasKeyword(def, "eco")) {
     next = applyEcoOnDeath(next, troop);
+  }
+
+  if (troop.hasEmpathy && next.players[troop.owner].leaderId === "noah-delta-empatia") {
+    next = applyEmpathyOnDeath(next, troop);
   }
 
   return next;

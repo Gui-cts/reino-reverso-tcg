@@ -87,7 +87,7 @@ export type KeywordId =
 export type DeathEffectId = "draw-one" | "ping-leader-1";
 
 /** Habilidades ativas de Líder. */
-export type LeaderAbilityId = "shield";
+export type LeaderAbilityId = "shield" | "frost-convert" | "empathy-mark";
 
 export type CombatSubPhase = "magic" | "strike";
 
@@ -183,6 +183,10 @@ export interface TroopInstance {
   attackSuppressed?: boolean;
   /** Escudo do Líder — bloqueia o próximo dano recebido (qualquer quantidade). */
   shielded?: boolean;
+  /** Cria do Inverno — tropa transformada pela habilidade frost-convert. */
+  isFrostborn?: boolean;
+  /** Marca de Empatia — tropa marcada pela habilidade empathy-mark. */
+  hasEmpathy?: boolean;
 }
 
 /** Feitiço aguardando contramagia ou resolução. */

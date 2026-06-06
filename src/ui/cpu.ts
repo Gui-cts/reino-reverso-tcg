@@ -456,12 +456,31 @@ function pickDeclareCombat(state: GameState, cpu: PlayerId): GameAction | null {
   return { type: "DECLARE_COMBAT", arenaId: best.arenaId };
 }
 
+function pickEmpathyMarkMainPhase(state: GameState, cpu: PlayerId): GameAction | null {
+  if (getAvailableEssence(state, cpu).length < 1) return null;
+  for (const arena of state.arenas) {
+    if (arena.dominatedBy !== null) continue;
+    const allies = livingInArena(state, cpu, arena.id).filter((t) => !t.hasEmpathy);
+    const enemies = livingInArena(state, opponent(cpu), arena.id);
+    if (allies.length === 0 || enemies.length === 0) continue;
+    const bestTarget = [...allies].sort((a, b) => (b.currentHealth) - (a.currentHealth))[0];
+    if (bestTarget) {
+      return { type: "USE_LEADER_ABILITY", player: cpu, targetTroopId: bestTarget.instanceId };
+    }
+  }
+  return null;
+}
+
 function pickLeaderAbility(state: GameState, cpu: PlayerId): GameAction | null {
-  if (!state.combat) return null;
   const pl = state.players[cpu];
   if (!pl.leaderId || pl.leaderAbilityUsedThisTurn) return null;
   const leaderDef = state.catalog[pl.leaderId];
   if (!leaderDef?.leaderAbilityId) return null;
+
+  if (!state.combat && leaderDef.leaderAbilityId === "empathy-mark") {
+    return pickEmpathyMarkMainPhase(state, cpu);
+  }
+  if (!state.combat) return null;
 
   if (leaderDef.leaderAbilityId === "shield") {
     if (getAvailableEssence(state, cpu).length < 2) return null;
@@ -475,6 +494,32 @@ function pickLeaderAbility(state: GameState, cpu: PlayerId): GameAction | null {
       const aVulnerable = a.currentHealth <= maxEnemyAtk ? 1000 : 0;
       const bVulnerable = b.currentHealth <= maxEnemyAtk ? 1000 : 0;
       return (bVulnerable + b.attack) - (aVulnerable + a.attack);
+    })[0];
+    if (!bestTarget) return null;
+    return { type: "USE_LEADER_ABILITY", player: cpu, targetTroopId: bestTarget.instanceId };
+  }
+
+  if (leaderDef.leaderAbilityId === "frost-convert") {
+    if (getAvailableEssence(state, cpu).length < 2) return null;
+    const arenaId = state.combat.arenaId;
+    const allies = livingInArena(state, cpu, arenaId).filter((t) => !t.isFrostborn);
+    if (allies.length === 0) return null;
+    const bestTarget = [...allies].sort((a, b) => (b.attack + b.currentHealth) - (a.attack + a.currentHealth))[0];
+    if (!bestTarget) return null;
+    return { type: "USE_LEADER_ABILITY", player: cpu, targetTroopId: bestTarget.instanceId };
+  }
+
+  if (leaderDef.leaderAbilityId === "empathy-mark") {
+    if (getAvailableEssence(state, cpu).length < 1) return null;
+    const arenaId = state.combat.arenaId;
+    const allies = livingInArena(state, cpu, arenaId).filter((t) => !t.hasEmpathy);
+    if (allies.length === 0) return null;
+    const enemies = livingInArena(state, opponent(cpu), arenaId);
+    if (enemies.length === 0) return null;
+    const bestTarget = [...allies].sort((a, b) => {
+      const aFrontline = a.currentHealth >= 3 ? 100 : 0;
+      const bFrontline = b.currentHealth >= 3 ? 100 : 0;
+      return (bFrontline + b.currentHealth) - (aFrontline + a.currentHealth);
     })[0];
     if (!bestTarget) return null;
     return { type: "USE_LEADER_ABILITY", player: cpu, targetTroopId: bestTarget.instanceId };

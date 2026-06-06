@@ -61,6 +61,8 @@ flowchart LR
 | Líder | Facção | Habilidade | Quando |
 |-------|--------|------------|--------|
 | **Noah — o pugilista** (10 HP) | Delta | **Escudo** (2 Essência): protege 1 tropa aliada na arena; bloqueia o próximo dano (qualquer quantidade) | Durante combate |
+| **Noah — o vampiro inverno** (10 HP) | Delta | **Cria do Inverno** (2 Essência): transforma tropa aliada em Cria do Inverno. Ao atacar: 1d6 par → congela alvo (attackSuppressed). Passiva: Crias que causam dano e sobrevivem curam o dano causado (vampirismo). | Durante combate |
+| **Noah — o Delta da Empatia** (10 HP) | Delta | **Empatia** (1 Essência): marca tropa aliada com Empatia (ganha Protetor + Escudo). Passiva: ao morrer, aliados na mesma arena ganham +1/+1. | Combate ou fase principal |
 
 #### Evolução de Líder
 

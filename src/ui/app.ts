@@ -1195,6 +1195,36 @@ export class GameApp {
       };
       container.appendChild(btn);
     }
+
+    if (leaderDef.leaderAbilityId === "frost-convert" && s.combat) {
+      const btn = document.createElement("button");
+      btn.textContent = `Cria do Inverno — transformar aliado`;
+      btn.title = leaderDef.leaderAbility ?? "";
+      btn.onclick = () => {
+        const troopId = this.selection.troopId;
+        if (!troopId) {
+          alert("Selecione uma tropa aliada na arena primeiro (clique nela).");
+          return;
+        }
+        this.dispatchAction({ type: "USE_LEADER_ABILITY", player, targetTroopId: troopId });
+      };
+      container.appendChild(btn);
+    }
+
+    if (leaderDef.leaderAbilityId === "empathy-mark" && (s.combat || s.turnPhase === "main")) {
+      const btn = document.createElement("button");
+      btn.textContent = `Empatia — marcar aliado`;
+      btn.title = leaderDef.leaderAbility ?? "";
+      btn.onclick = () => {
+        const troopId = this.selection.troopId;
+        if (!troopId) {
+          alert("Selecione uma tropa aliada na arena primeiro (clique nela).");
+          return;
+        }
+        this.dispatchAction({ type: "USE_LEADER_ABILITY", player, targetTroopId: troopId });
+      };
+      container.appendChild(btn);
+    }
   }
 
   private renderLeaderEvolutionButton(s: GameState, player: PlayerId, container: HTMLElement): void {
@@ -1395,6 +1425,7 @@ export class GameApp {
       btns.appendChild(endBtn);
 
       this.renderLeaderEvolutionButton(s, active, btns);
+      this.renderLeaderAbilityButton(s, active, btns);
 
       if (contested.length > 0) {
         const warn = document.createElement("p");

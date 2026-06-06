@@ -28,6 +28,25 @@ Antes da partida, você escolhe um **Líder**. Ele fica fora do baralho e repres
 | **Habilidade: Escudo** | Durante o combate (1×/turno, custa **2 Essência**): proteja uma tropa aliada na arena. O escudo bloqueia o **próximo dano** que ela receber, independente da quantidade (1 ou 50). |
 | Evoluções | Noah — o vampiro inverno · Noah — o Delta da Empatia |
 
+### Noah — o vampiro inverno (forma evoluída)
+
+| Atributo | Valor |
+|----------|-------|
+| HP | 10 |
+| Facção | Delta |
+| **Habilidade: Cria do Inverno** | Durante o combate (1×/turno, custa **2 Essência**): transforma uma tropa aliada na arena em **Cria do Inverno** (mantém stats, ganha comportamento de gelo). |
+| **Congelar (ao atacar)** | Quando uma Cria do Inverno **ataca**, rola 1d6. Se **par**, o alvo fica com `attackSuppressed` (não pode atacar no próximo turno) — "congelado". |
+| **Vampirismo (passiva)** | Após dano de combate, se a Cria causou dano e sobreviveu, cura HP igual ao dano causado (máx. HP original). |
+
+### Noah — o Delta da Empatia (forma evoluída)
+
+| Atributo | Valor |
+|----------|-------|
+| HP | 10 |
+| Facção | Delta |
+| **Habilidade: Empatia** | Combate ou fase principal (1×/turno, custa **1 Essência**): marca uma tropa aliada na arena com Empatia. A tropa ganha **Protetor** (deve ser atacada primeiro) e **Escudo** (bloqueia próximo dano). |
+| **Empatia (passiva)** | Quando uma tropa com Empatia morre, todas as outras tropas aliadas na **mesma arena** ganham **+1/+1** permanente. |
+
 ### Evolução de Líder
 
 Na **fase principal** do seu turno (sem combate ativo), se você tiver **5 Corrupção**, pode evoluí-lo para uma forma disponível. A evolução é **irreversível** na partida.

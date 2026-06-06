@@ -676,6 +676,102 @@ function useLeaderAbility(
     };
   }
 
+  if (leaderDef.leaderAbilityId === "frost-convert") {
+    if (!state.combat) {
+      return { ...state, log: appendLog(state, "Cria do Inverno só pode ser usada durante o combate.") };
+    }
+
+    const frostCost = { exhaust: 2 };
+    const canPay = getAvailableEssence(state, player).length >= frostCost.exhaust;
+    if (!canPay) {
+      return {
+        ...state,
+        log: appendLog(state, `Cria do Inverno exige ${frostCost.exhaust} Essência pronta (tem ${getAvailableEssence(state, player).length}).`),
+      };
+    }
+
+    const target = state.troops[targetTroopId];
+    if (!target || target.owner !== player) {
+      return { ...state, log: appendLog(state, "Alvo inválido — escolha uma tropa aliada.") };
+    }
+    if (target.zone !== "arena") {
+      return { ...state, log: appendLog(state, "Alvo deve estar em uma arena.") };
+    }
+    if (target.isFrostborn) {
+      return { ...state, log: appendLog(state, "Esta tropa já é uma Cria do Inverno.") };
+    }
+
+    const paid = payEssenceCost(state, player, frostCost);
+    if (!paid.ok) {
+      return { ...state, log: appendLog(state, "Não foi possível pagar o custo de Cria do Inverno.") };
+    }
+    let next = paid.state;
+
+    const troops = { ...next.troops };
+    troops[targetTroopId] = { ...target, isFrostborn: true };
+    const players = [...next.players] as GameState["players"];
+    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true };
+
+    const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
+    return {
+      ...next,
+      troops,
+      players,
+      log: appendLog(
+        next,
+        `Jogador ${player + 1} transformou ${troopName} em Cria do Inverno (−2 Essência) — ganha comportamento de gelo.`,
+      ),
+    };
+  }
+
+  if (leaderDef.leaderAbilityId === "empathy-mark") {
+    if (state.combat === null && state.turnPhase !== "main") {
+      return { ...state, log: appendLog(state, "Empatia pode ser usada na fase principal ou no combate.") };
+    }
+
+    const empathyCost = { exhaust: 1 };
+    const canPay = getAvailableEssence(state, player).length >= empathyCost.exhaust;
+    if (!canPay) {
+      return {
+        ...state,
+        log: appendLog(state, `Empatia exige ${empathyCost.exhaust} Essência pronta (tem ${getAvailableEssence(state, player).length}).`),
+      };
+    }
+
+    const target = state.troops[targetTroopId];
+    if (!target || target.owner !== player) {
+      return { ...state, log: appendLog(state, "Alvo inválido — escolha uma tropa aliada.") };
+    }
+    if (target.zone !== "arena") {
+      return { ...state, log: appendLog(state, "Alvo deve estar em uma arena.") };
+    }
+    if (target.hasEmpathy) {
+      return { ...state, log: appendLog(state, "Esta tropa já tem Empatia.") };
+    }
+
+    const paid = payEssenceCost(state, player, empathyCost);
+    if (!paid.ok) {
+      return { ...state, log: appendLog(state, "Não foi possível pagar o custo de Empatia.") };
+    }
+    let next = paid.state;
+
+    const troops = { ...next.troops };
+    troops[targetTroopId] = { ...target, hasEmpathy: true, shielded: true };
+    const players = [...next.players] as GameState["players"];
+    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true };
+
+    const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
+    return {
+      ...next,
+      troops,
+      players,
+      log: appendLog(
+        next,
+        `Jogador ${player + 1} marcou ${troopName} com Empatia (−1 Essência) — ganha Protetor + Escudo.`,
+      ),
+    };
+  }
+
   return state;
 }
 
