@@ -1,6 +1,4 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
-import { sendJson } from "../_http.js";
-
-export default function handler(_req: IncomingMessage, res: ServerResponse) {
-  sendJson(res, 200, { ok: true, ts: Date.now() });
+export default function handler(_req, res) {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, ts: Date.now() }));
 }
