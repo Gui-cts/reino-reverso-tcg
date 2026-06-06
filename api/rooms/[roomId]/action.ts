@@ -1,7 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { GameAction } from "../../src/game/types";
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -12,14 +9,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const roomId = String(req.query.roomId ?? "");
   if (!roomId) return res.status(400).json({ error: "roomId obrigatório" });
 
-  const body = (req.body ?? {}) as { token?: string; action?: GameAction };
+  const body = req.body ?? {};
   if (!body.token || !body.action) {
     return res.status(400).json({ error: "token e action obrigatórios" });
   }
 
   try {
-    const { applyRoomAction } = await import("../../src/net/room-service");
-    const { getRoom, saveRoom } = await import("../../src/net/room-store");
+    const { applyRoomAction } = await import("../../src/net/room-service.js");
+    const { getRoom, saveRoom } = await import("../../src/net/room-store.js");
     const room = await getRoom(roomId);
     if (!room) return res.status(404).json({ error: "Sala não encontrada" });
 

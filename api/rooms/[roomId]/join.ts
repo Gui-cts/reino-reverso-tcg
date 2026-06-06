@@ -1,6 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -12,8 +10,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!roomId) return res.status(400).json({ error: "roomId obrigatório" });
 
   try {
-    const { joinRoom } = await import("../../src/net/room-service");
-    const { getRoom, saveRoom } = await import("../../src/net/room-store");
+    const { joinRoom } = await import("../../src/net/room-service.js");
+    const { getRoom, saveRoom } = await import("../../src/net/room-store.js");
     const room = await getRoom(roomId);
     if (!room) return res.status(404).json({ error: "Sala não encontrada" });
 
