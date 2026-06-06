@@ -1233,6 +1233,14 @@ export class GameApp {
 
       if (canDragHand && !hiddenHand) {
         setCardDraggable(chip, { kind: "hand", troopId }, true);
+        chip.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.selection.troopId =
+            this.selection.troopId === troopId ? null : troopId;
+          this.selection.spellInstanceId = null;
+          this.render();
+        });
+        chip.classList.add("game-card--interactive");
         if (def!.hasEssenceSymbol && !pl.sacrificedThisTurn) {
           chip.addEventListener("contextmenu", (e) => {
             e.preventDefault();
@@ -1488,6 +1496,37 @@ export class GameApp {
       actions.appendChild(essencePanel);
 
       const selectedTroop = this.selection.troopId ? s.troops[this.selection.troopId] : null;
+
+      if (
+        selectedTroop &&
+        selectedTroop.owner === active &&
+        selectedTroop.zone === "hand"
+      ) {
+        const handDef = s.catalog[selectedTroop.cardId];
+        const troopName = handDef?.name ?? "Carta";
+
+        if (handDef && !isSpellCard(handDef)) {
+          const summonBtn = document.createElement("button");
+          summonBtn.textContent = `Convocar ${troopName} na base`;
+          summonBtn.onclick = () => {
+            this.dispatchAction({ type: "PLAY_TROOP", troopId: selectedTroop.instanceId });
+            this.selection.troopId = null;
+          };
+          btns.appendChild(summonBtn);
+        }
+
+        if (handDef?.hasEssenceSymbol && !s.players[active].sacrificedThisTurn) {
+          const sacBtn = document.createElement("button");
+          sacBtn.className = "secondary";
+          sacBtn.textContent = `Sacrificar ${troopName} → Essência`;
+          sacBtn.onclick = () => {
+            this.dispatchAction({ type: "SACRIFICE_ESSENCE", troopId: selectedTroop.instanceId });
+            this.selection.troopId = null;
+          };
+          btns.appendChild(sacBtn);
+        }
+      }
+
       if (
         selectedTroop &&
         selectedTroop.owner === active &&
