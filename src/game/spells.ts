@@ -359,7 +359,7 @@ export function playSpell(
     };
   }
 
-  const paid = payEssenceCost(state, caster, payment);
+  const paid = payEssenceCost(state, caster, payment, true);
   if (!paid.ok) {
     return { ...state, log: appendLog(state, "Não foi possível pagar o custo em Essência.") };
   }

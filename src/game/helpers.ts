@@ -112,6 +112,7 @@ export function payEssenceCost(
   state: GameState,
   player: PlayerId,
   payment: EssenceCost,
+  preferTemp = false,
 ): { state: GameState; ok: boolean } {
   const sacrifice = payment.sacrifice ?? 0;
   const pool = getPlayerEssence(state, player);
@@ -124,7 +125,10 @@ export function payEssenceCost(
 
   for (let i = 0; i < payment.exhaust; i++) {
     const available = getAvailableEssence(next, player)
-      .sort((a, b) => (a.spellOnly ? 1 : 0) - (b.spellOnly ? 1 : 0));
+      .sort((a, b) => preferTemp
+        ? (b.spellOnly ? 1 : 0) - (a.spellOnly ? 1 : 0)
+        : (a.spellOnly ? 1 : 0) - (b.spellOnly ? 1 : 0)
+      );
     const pick = available[0] ?? getPlayerEssence(next, player).find((e) => !exhaustedIds.includes(e.instanceId));
     if (!pick) return { state, ok: false };
     const essencePool = { ...next.essencePool };
