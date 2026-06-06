@@ -4,7 +4,7 @@
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
   "functions": {
     "api/**/*.ts": {
-      "includeFiles": "api/lib/**"
+      "includeFiles": "api/lib/rr-server.mjs"
     }
   }
 }

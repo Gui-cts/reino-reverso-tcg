@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { sendJson, setCors } from "../_http.js";
+import { getQuery, sendJson, setCors } from "../../http.js";
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   setCors(res);
@@ -13,14 +13,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  const roomId = String((req as IncomingMessage & { query?: Record<string, string> }).query?.roomId ?? "");
+  const roomId = String(getQuery(req).roomId ?? "");
   if (!roomId) {
     sendJson(res, 400, { error: "roomId obrigatório" });
     return;
   }
 
   try {
-    const { joinRoom, getRoom, saveRoom } = await import("../lib/rr-server.mjs");
+    const { joinRoom, getRoom, saveRoom } = await import("../../lib/rr-server.mjs");
     const room = await getRoom(roomId);
     if (!room) {
       sendJson(res, 404, { error: "Sala não encontrada" });

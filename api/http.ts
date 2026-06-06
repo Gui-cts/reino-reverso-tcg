@@ -24,3 +24,7 @@ export function setCors(res: ServerResponse): void {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
+
+export function getQuery(req: IncomingMessage): Record<string, string> {
+  return (req as IncomingMessage & { query?: Record<string, string> }).query ?? {};
+}

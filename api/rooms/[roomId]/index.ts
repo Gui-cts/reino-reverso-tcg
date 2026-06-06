@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { sendJson, setCors } from "../_http.js";
+import { getQuery, sendJson, setCors } from "../../http.js";
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   setCors(res);
@@ -13,7 +13,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  const query = (req as IncomingMessage & { query?: Record<string, string> }).query ?? {};
+  const query = getQuery(req);
   const roomId = String(query.roomId ?? "");
   const token = String(query.token ?? "");
   if (!roomId || !token) {
@@ -22,7 +22,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
-    const { getRoomView, getRoom } = await import("../lib/rr-server.mjs");
+    const { getRoomView, getRoom } = await import("../../lib/rr-server.mjs");
     const room = await getRoom(roomId);
     if (!room) {
       sendJson(res, 404, { error: "Sala não encontrada" });

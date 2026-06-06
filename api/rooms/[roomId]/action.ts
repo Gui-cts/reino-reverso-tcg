@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { GameAction } from "../../src/game/types.js";
-import { readJsonBody, sendJson, setCors } from "../_http.js";
+import type { GameAction } from "../../../src/game/types.js";
+import { getQuery, readJsonBody, sendJson, setCors } from "../../http.js";
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   setCors(res);
@@ -14,7 +14,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  const roomId = String((req as IncomingMessage & { query?: Record<string, string> }).query?.roomId ?? "");
+  const roomId = String(getQuery(req).roomId ?? "");
   if (!roomId) {
     sendJson(res, 400, { error: "roomId obrigatório" });
     return;
@@ -29,7 +29,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
-    const { applyRoomAction, getRoom, saveRoom } = await import("../lib/rr-server.mjs");
+    const { applyRoomAction, getRoom, saveRoom } = await import("../../lib/rr-server.mjs");
     const room = await getRoom(roomId);
     if (!room) {
       sendJson(res, 404, { error: "Sala não encontrada" });

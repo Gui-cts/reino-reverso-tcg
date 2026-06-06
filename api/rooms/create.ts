@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { readJsonBody, sendJson, setCors } from "../_http.js";
+import { readJsonBody, sendJson, setCors } from "../http.js";
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   setCors(res);
