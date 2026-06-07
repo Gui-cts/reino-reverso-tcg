@@ -42,6 +42,7 @@ import {
   resolveCounterPayment,
 } from "./spells";
 import { buryDeadTroops } from "./troop-cleanup";
+import { repairStaleTurnPhase } from "./turn";
 import { isLeaderFormCard } from "./card-meta";
 import type { GameAction, GameState, PlayerId } from "./types";
 import { LEADER_EVOLUTION_CORRUPTION_COST, MAX_TROOPS_PER_ZONE, maxCorruptionForPhase } from "./types";
@@ -1091,5 +1092,5 @@ function applyAction(state: GameState, action: GameAction): GameState {
 
 export function dispatch(state: GameState, action: GameAction): GameState {
   if (state.matchPhase === "finished") return state;
-  return buryDeadTroops(applyAction(state, action));
+  return buryDeadTroops(repairStaleTurnPhase(applyAction(state, action)));
 }

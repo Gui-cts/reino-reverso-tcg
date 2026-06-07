@@ -373,12 +373,18 @@ Checklist do que o código atual cobre:
 - [x] Evolução de Líder (5 Corrupção → nova forma)
 - [x] 3 formas do Noah (pugilista, vampiro inverno, Delta da Empatia)
 - [x] Facção Delta
+- [x] vs CPU (IA com combate, magias e fallback em arena contestada)
+- [x] 1v1 online (salas, polling, fog of war, reconexão por sessão)
+- [x] Magias rápidas e habilidades reativas do Líder durante combate
+- [x] Artefato piloto (Altar Sombrio — sacrificar tropa por Corrupção)
+- [x] Corrupção máxima por fase: MN=5, Abismo=10, RR=sem limite
+- [x] Keywords piloto: Protetor, Testamento, Eco, Silêncio, Fatiar, Voar
 
 Fora do protótipo atual:
 
-- [ ] Artefatos, equipamentos
-- [ ] Multiplayer online
-- [ ] Validação estrita de baralho por Líder (UI de deckbuilder)
+- [ ] Equipamentos
+- [ ] UI de deckbuilder com validação por Líder
+- [ ] Pools completos de arenas Abismo/RR além do piloto
 
 ### Como rodar
 

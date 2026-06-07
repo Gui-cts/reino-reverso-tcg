@@ -1108,24 +1108,18 @@ function applySpellEffect(state, caster, effect, targetTroopId, spellName, targe
       const target = state.troops[targetTroopId];
       if (!target || target.owner === caster) return state;
       if (target.zone !== "base" && target.zone !== "arena") return state;
-      const troops = { ...state.troops };
-      delete troops[targetTroopId];
-      const owner = target.owner;
-      const players = [...state.players];
-      players[owner] = {
-        ...players[owner],
-        discard: [...players[owner].discard, target.cardId]
+      const troops = {
+        ...state.troops,
+        [targetTroopId]: { ...target, currentHealth: 0 }
       };
       let next = {
         ...state,
-        players,
         troops,
         log: appendLog(
           state,
           `${spellName}: ${getTroopName(state, target)} foi destru\xEDda instantaneamente.`
         )
       };
-      next = sanitizePlayerHands(next);
       if (arenaId && next.combat) {
         return checkCombatEndAfterDamage(next, arenaId, "Combate encerrado ap\xF3s Omega.");
       }
@@ -2849,6 +2843,12 @@ function runTurnBegin(state, player) {
   next = sanitizePlayerHands(next);
   return { ...next, turnPhase: "main" };
 }
+function repairStaleTurnPhase(state) {
+  if (state.matchPhase === "playing" && !state.combat && state.turnPhase === "combat") {
+    return { ...state, turnPhase: "main" };
+  }
+  return state;
+}
 
 // src/game/troop-cleanup.ts
 function buryDeadTroops(state) {
@@ -3768,7 +3768,7 @@ function applyAction(state, action) {
 }
 function dispatch(state, action) {
   if (state.matchPhase === "finished") return state;
-  return buryDeadTroops(applyAction(state, action));
+  return buryDeadTroops(repairStaleTurnPhase(applyAction(state, action)));
 }
 
 // src/game/permissions.ts
@@ -3907,12 +3907,22 @@ function toPlayerView(state, seat, meta) {
     state.players[0].deck.length,
     state.players[1].deck.length
   ];
+  const oppHandIds = state.players[opp].hand;
   const players = structuredClone(state.players);
   players[opp] = {
     ...players[opp],
     hand: [],
     deck: []
   };
+  const troops = { ...state.troops };
+  for (const id of oppHandIds) {
+    delete troops[id];
+  }
+  for (const [id, troop] of Object.entries(troops)) {
+    if (troop.owner === opp && troop.zone === "hand") {
+      delete troops[id];
+    }
+  }
   return {
     ...meta,
     handCounts,
@@ -3920,6 +3930,7 @@ function toPlayerView(state, seat, meta) {
     state: {
       ...state,
       players,
+      troops,
       cpuPlayer: null
     }
   };

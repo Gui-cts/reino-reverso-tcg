@@ -169,24 +169,18 @@ export function applySpellEffect(
       const target = state.troops[targetTroopId];
       if (!target || target.owner === caster) return state;
       if (target.zone !== "base" && target.zone !== "arena") return state;
-      const troops = { ...state.troops };
-      delete troops[targetTroopId];
-      const owner = target.owner;
-      const players = [...state.players] as GameState["players"];
-      players[owner] = {
-        ...players[owner],
-        discard: [...players[owner].discard, target.cardId],
+      const troops = {
+        ...state.troops,
+        [targetTroopId]: { ...target, currentHealth: 0 },
       };
       let next: GameState = {
         ...state,
-        players,
         troops,
         log: appendLog(
           state,
           `${spellName}: ${getTroopName(state, target)} foi destruída instantaneamente.`,
         ),
       };
-      next = sanitizePlayerHands(next);
       if (arenaId && next.combat) {
         return checkCombatEndAfterDamage(next, arenaId, "Combate encerrado após Omega.");
       }

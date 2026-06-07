@@ -115,3 +115,11 @@ export function runTurnBegin(state: GameState, player: PlayerId): GameState {
 
   return { ...next, turnPhase: "main" };
 }
+
+/** Corrige turnPhase preso em "combat" após o combate encerrar. */
+export function repairStaleTurnPhase(state: GameState): GameState {
+  if (state.matchPhase === "playing" && !state.combat && state.turnPhase === "combat") {
+    return { ...state, turnPhase: "main" };
+  }
+  return state;
+}

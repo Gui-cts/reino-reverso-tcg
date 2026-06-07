@@ -3,6 +3,7 @@ import {
   createTestGame,
   dispatch,
   loadCardCatalog,
+  repairStaleTurnPhase,
   testModeLabel,
   type TestMode,
 } from "../game";
@@ -68,6 +69,8 @@ type UiSelection = {
 };
 
 type AppScreen = "menu" | "game" | "online-wait";
+
+const ONLINE_SESSION_PREFIX = "rr-online-session:";
 
 export class GameApp {
   private catalog: CardCatalog | null = null;
@@ -142,11 +145,72 @@ export class GameApp {
 
     const roomFromUrl = new URLSearchParams(window.location.search).get("room");
     if (roomFromUrl) {
-      this.pendingJoinRoomId = roomFromUrl.trim().toUpperCase();
-      this.onlineStatus = `Sala ${this.pendingJoinRoomId} — escolha seu Líder e clique em Entrar.`;
+      const roomId = roomFromUrl.trim().toUpperCase();
+      const saved = this.loadOnlineSession(roomId);
+      if (saved) {
+        void this.resumeOnlineRoom(roomId, saved.token, saved.seat);
+      } else {
+        this.pendingJoinRoomId = roomId;
+        this.onlineStatus = `Sala ${roomId} — escolha seu Líder e clique em Entrar.`;
+      }
     }
     this.ensureOnlineLeaderDefault();
     this.render();
+  }
+
+  private saveOnlineSession(roomId: string, token: string, seat: PlayerId): void {
+    sessionStorage.setItem(
+      `${ONLINE_SESSION_PREFIX}${roomId}`,
+      JSON.stringify({ token, seat }),
+    );
+  }
+
+  private loadOnlineSession(roomId: string): { token: string; seat: PlayerId } | null {
+    try {
+      const raw = sessionStorage.getItem(`${ONLINE_SESSION_PREFIX}${roomId}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { token?: string; seat?: number };
+      if (typeof parsed.token === "string" && (parsed.seat === 0 || parsed.seat === 1)) {
+        return { token: parsed.token, seat: parsed.seat };
+      }
+    } catch {
+      /* sessão inválida */
+    }
+    return null;
+  }
+
+  private clearOnlineSession(roomId: string | null): void {
+    if (roomId) sessionStorage.removeItem(`${ONLINE_SESSION_PREFIX}${roomId}`);
+  }
+
+  private async resumeOnlineRoom(
+    roomId: string,
+    token: string,
+    seat: PlayerId,
+  ): Promise<void> {
+    if (this.onlineBusy) return;
+    this.onlineBusy = true;
+    this.onlineStatus = "Reconectando à sala…";
+    this.render();
+    try {
+      const view = await apiFetchRoom(roomId, token);
+      this.onlineRoomId = roomId;
+      this.onlineToken = token;
+      this.onlineSeat = seat;
+      this.saveOnlineSession(roomId, token, seat);
+      this.applyOnlineView(view);
+      this.screen = view.bothConnected ? "game" : "online-wait";
+      this.onlineStatus = view.bothConnected ? "" : "Aguardando oponente…";
+      this.startOnlinePolling();
+      this.render();
+    } catch {
+      this.clearOnlineSession(roomId);
+      this.pendingJoinRoomId = roomId;
+      this.onlineStatus = `Sala ${roomId} — escolha seu Líder e clique em Entrar.`;
+      this.render();
+    } finally {
+      this.onlineBusy = false;
+    }
   }
 
   private baseLeaderChoices() {
@@ -215,6 +279,7 @@ export class GameApp {
 
   private returnToMenu(): void {
     this.stopOnlinePolling();
+    this.clearOnlineSession(this.onlineRoomId);
     this.onlineRoomId = null;
     this.onlineToken = null;
     this.onlineSeat = null;
@@ -241,7 +306,7 @@ export class GameApp {
   private applyOnlineView(view: PlayerViewPayload): void {
     if (!this.catalog) return;
     this.stateVersion = view.version;
-    this.state = view.state;
+    this.state = repairStaleTurnPhase(view.state);
     this.onlineHandCounts = view.handCounts;
     this.onlineDeckCounts = view.deckCounts;
     this.selection.troopId = null;
@@ -287,6 +352,7 @@ export class GameApp {
       this.onlineRoomId = result.roomId;
       this.onlineToken = result.token;
       this.onlineSeat = result.seat;
+      this.saveOnlineSession(result.roomId, result.token, result.seat);
       this.applyOnlineView(result.view);
       this.screen = "online-wait";
       this.onlineStatus = "Aguardando oponente…";
@@ -325,6 +391,7 @@ export class GameApp {
       this.onlineRoomId = code;
       this.onlineToken = result.token;
       this.onlineSeat = result.seat;
+      this.saveOnlineSession(code, result.token, result.seat);
       this.applyOnlineView(result.view);
       this.screen = "game";
       this.onlineStatus = "";
@@ -352,13 +419,6 @@ export class GameApp {
 
   private getState(): GameState {
     if (!this.state) throw new Error("Jogo não inicializado");
-    if (
-      this.state.matchPhase === "playing" &&
-      !this.state.combat &&
-      this.state.turnPhase === "combat"
-    ) {
-      this.state = { ...this.state, turnPhase: "main" };
-    }
     return this.state;
   }
 
@@ -378,7 +438,7 @@ export class GameApp {
   }
 
   private update(next: GameState): void {
-    this.state = next;
+    this.state = repairStaleTurnPhase(next);
     this.selection.troopId = null;
     this.selection.arenaId = null;
     this.selection.spellInstanceId = null;
@@ -459,7 +519,7 @@ export class GameApp {
   }
 
   private applyCpuActionResult(after: GameState): void {
-    this.state = after;
+    this.state = repairStaleTurnPhase(after);
     this.selection.troopId = null;
     this.selection.arenaId = null;
     this.selection.spellInstanceId = null;
@@ -902,9 +962,15 @@ export class GameApp {
 
     const again = document.createElement("button");
     again.type = "button";
-    again.textContent =
-      s.cpuPlayer !== null ? "Jogar de novo vs CPU" : "Nova partida (2 jogadores)";
-    again.onclick = () => this.startGame(this.lastCpuPlayer, this.lastTestMode, this.lastLeaderId ?? undefined);
+    if (this.onlineSeat !== null) {
+      again.textContent = "Voltar ao menu";
+      again.onclick = () => this.returnToMenu();
+    } else {
+      again.textContent =
+        s.cpuPlayer !== null ? "Jogar de novo vs CPU" : "Nova partida (2 jogadores)";
+      again.onclick = () =>
+        this.startGame(this.lastCpuPlayer, this.lastTestMode, this.lastLeaderId ?? undefined);
+    }
     btns.appendChild(again);
 
     const menu = document.createElement("button");

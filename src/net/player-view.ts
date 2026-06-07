@@ -30,12 +30,23 @@ export function toPlayerView(
     state.players[1].deck.length,
   ];
 
+  const oppHandIds = state.players[opp].hand;
   const players = structuredClone(state.players) as GameState["players"];
   players[opp] = {
     ...players[opp],
     hand: [],
     deck: [],
   };
+
+  const troops = { ...state.troops };
+  for (const id of oppHandIds) {
+    delete troops[id];
+  }
+  for (const [id, troop] of Object.entries(troops)) {
+    if (troop.owner === opp && troop.zone === "hand") {
+      delete troops[id];
+    }
+  }
 
   return {
     ...meta,
@@ -44,6 +55,7 @@ export function toPlayerView(
     state: {
       ...state,
       players,
+      troops,
       cpuPlayer: null,
     },
   };

@@ -57,7 +57,7 @@ export {
   spellEffectLabel,
 } from "./spells";
 export { spellRequiresTarget, troopIsUntargetable } from "./spell-stack";
-export { runTurnBegin } from "./turn";
+export { runTurnBegin, repairStaleTurnPhase } from "./turn";
 export { buryDeadTroops } from "./troop-cleanup";
 export {
   applyLandingEffect,

@@ -444,16 +444,47 @@ function pickDeclareCombat(state: GameState, cpu: PlayerId): GameAction | null {
   let best: { arenaId: string; allies: number; enemies: number } | null = null;
   for (const name of contested) {
     const arena = state.arenas.find((a) => a.name === name);
-    if (!arena) continue;
+    if (!arena || arena.dominatedBy !== null) continue;
     const allies = livingInArena(state, cpu, arena.id).length;
     const enemies = livingInArena(state, opponent(cpu), arena.id).length;
-    if (allies === 0) continue;
+    if (allies === 0 || enemies === 0) continue;
     if (!best || allies > best.allies || (allies === best.allies && enemies < best.enemies)) {
       best = { arenaId: arena.id, allies, enemies };
     }
   }
-  if (!best) return null;
+  if (!best) return pickDeclareCombatFallback(state, cpu);
   return { type: "DECLARE_COMBAT", arenaId: best.arenaId };
+}
+
+/** Declara combate em qualquer arena contestada válida (evita travar o loop da CPU). */
+function pickDeclareCombatFallback(state: GameState, cpu: PlayerId): GameAction | null {
+  for (const name of getContestedArenaNames(state, cpu)) {
+    const arena = state.arenas.find((a) => a.name === name);
+    if (!arena || arena.dominatedBy !== null) continue;
+    const allies = livingInArena(state, cpu, arena.id).length;
+    const enemies = livingInArena(state, opponent(cpu), arena.id).length;
+    if (allies > 0 && enemies > 0) {
+      return { type: "DECLARE_COMBAT", arenaId: arena.id };
+    }
+  }
+  return null;
+}
+
+function pickEndCombatStrike(state: GameState, cpu: PlayerId): GameAction | null {
+  const combat = state.combat;
+  if (!combat || combat.subPhase !== "strike") return null;
+  if (getCombatAssigningPlayer(combat) !== cpu) return null;
+
+  const allies = livingInArena(state, cpu, combat.arenaId);
+  const canStillAttack = allies.some(
+    (t) =>
+      !hasAttackedThisStrike(combat, t.instanceId) &&
+      !t.exhausted &&
+      !t.attackSuppressed,
+  );
+  if (canStillAttack) return null;
+
+  return { type: "END_COMBAT_STRIKE" };
 }
 
 function pickEmpathyMarkMainPhase(state: GameState, cpu: PlayerId): GameAction | null {
@@ -679,7 +710,9 @@ function pickMainTurnAction(state: GameState, cpu: PlayerId): GameAction | null 
   if (activateArt) return activateArt;
 
   const contested = getContestedArenaNames(state, cpu);
-  if (contested.length > 0) return null;
+  if (contested.length > 0) {
+    return pickDeclareCombatFallback(state, cpu);
+  }
 
   if (hasMainPhaseWork(state, cpu)) return null;
 
@@ -774,6 +807,9 @@ export function pickCpuAction(state: GameState, cpuPlayer: PlayerId): GameAction
   const combatAction = pickBestCombatAttack(state, cpu);
   if (combatAction) return combatAction;
 
+  const endStrike = pickEndCombatStrike(state, cpu);
+  if (endStrike) return endStrike;
+
   return pickMainTurnAction(state, cpu);
 }
 
@@ -809,7 +845,13 @@ export function cpuControlsPhase(state: GameState, cpuPlayer: PlayerId): boolean
       if (!state.combat.magicPassed[cpuPlayer]) return true;
       return cpuHasPlayableSpell(state, cpuPlayer);
     }
-    if (getCombatAssigningPlayer(state.combat) === cpuPlayer) return true;
+    if (getCombatAssigningPlayer(state.combat) === cpuPlayer) {
+      return (
+        pickBestCombatAttack(state, cpuPlayer) !== null ||
+        pickEndCombatStrike(state, cpuPlayer) !== null ||
+        cpuHasPlayableSpell(state, cpuPlayer)
+      );
+    }
     return cpuHasPlayableSpell(state, cpuPlayer);
   }
 
