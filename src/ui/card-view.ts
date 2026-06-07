@@ -3,6 +3,8 @@ import {
   formatKeywordsLine,
   keywordLabel,
 } from "../game/keywords";
+import { getCardType } from "../game/card-meta";
+import { describeArtifactEffect, describeEquipmentEffect } from "../game/equipment";
 import { describeSpellEffect, getCardSpeed, isSpellCard, speedLabel } from "../game/spells";
 import type { CardDefinition, KeywordId } from "../game/types";
 import { getCardArtUrl } from "../game/card-art";
@@ -122,6 +124,16 @@ function buildCardTooltip(
     if (kw) lines.push(kw);
     if (def.deathEffect) {
       lines.push(describeKeywordRule("testamento"));
+    }
+    if (def.spellEffect) {
+      lines.push(describeSpellEffect(def.spellEffect));
+    }
+    const cardType = getCardType(def);
+    if (cardType === "artifact" && def.artifactEffect) {
+      lines.push(describeArtifactEffect(def.artifactEffect));
+    }
+    if (cardType === "equipment") {
+      lines.push(describeEquipmentEffect(def));
     }
   }
   if (subLabel) lines.push(subLabel);
@@ -256,13 +268,15 @@ function createSpellCardEl(def: CardDefinition, opts: CardViewOptions = {}): HTM
 }
 
 export function cardFromDef(def: CardDefinition, opts: CardViewOptions = {}): HTMLElement {
+  const isTroop = getCardType(def) === "troop";
+
   if (opts.miniature) {
     const kwLine = formatKeywordsLine(def);
     const extraSub =
       opts.subLabel && opts.subLabel !== kwLine ? opts.subLabel : undefined;
     const el = createFramedCardEl(def, {
-      attack: opts.attack ?? def.attack,
-      health: opts.health ?? def.health,
+      attack: isTroop ? (opts.attack ?? def.attack) : undefined,
+      health: isTroop ? (opts.health ?? def.health) : undefined,
       hasEssenceSymbol: def.hasEssenceSymbol,
       imageUrl: getCardArtUrl(def),
       ...opts,
@@ -280,8 +294,8 @@ export function cardFromDef(def: CardDefinition, opts: CardViewOptions = {}): HT
     const extraSub =
       opts.subLabel && opts.subLabel !== kwLine ? opts.subLabel : undefined;
     const el = createFramedCardEl(def, {
-      attack: opts.attack ?? def.attack,
-      health: opts.health ?? def.health,
+      attack: isTroop ? (opts.attack ?? def.attack) : undefined,
+      health: isTroop ? (opts.health ?? def.health) : undefined,
       hasEssenceSymbol: def.hasEssenceSymbol,
       imageUrl: getCardArtUrl(def),
       ...opts,
@@ -302,8 +316,8 @@ export function cardFromDef(def: CardDefinition, opts: CardViewOptions = {}): HT
   const subLabel = opts.subLabel ?? (kwLine || undefined);
   const el = createCardEl(def.name, {
     cost: def.cost,
-    attack: def.attack,
-    health: def.health,
+    attack: isTroop ? def.attack : undefined,
+    health: isTroop ? def.health : undefined,
     hasEssenceSymbol: def.hasEssenceSymbol,
     imageUrl: getCardArtUrl(def),
     ...opts,

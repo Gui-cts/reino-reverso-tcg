@@ -1,6 +1,32 @@
 import { appendLog, getTroopName } from "./helpers";
 import { getCardType } from "./card-meta";
-import type { CardDefinition, EquipmentInstance, GameState, PlayerId, TroopInstance } from "./types";
+import type {
+  ArtifactEffectId,
+  CardDefinition,
+  EquipmentInstance,
+  GameState,
+  PlayerId,
+  TroopInstance,
+} from "./types";
+
+export function describeArtifactEffect(effect: ArtifactEffectId): string {
+  switch (effect) {
+    case "sacrifice-for-corruption":
+      return "Ativar: sacrifique uma tropa aliada para ganhar +1 Corrupção. Fica exausto até o próximo turno.";
+    default:
+      return "";
+  }
+}
+
+export function describeEquipmentEffect(def: CardDefinition): string {
+  const atk = def.attack ?? 0;
+  const hp = def.health ?? 0;
+  const bonus: string[] = [];
+  if (atk > 0) bonus.push(`+${atk} ataque`);
+  if (hp > 0) bonus.push(`+${hp} vida`);
+  const bonusText = bonus.length ? ` Concede ${bonus.join(" e ")}.` : "";
+  return `Equipa em tropa aliada na base ou arena.${bonusText}`;
+}
 
 export function isEquipmentCard(def: CardDefinition | undefined): boolean {
   return Boolean(def && getCardType(def) === "equipment");

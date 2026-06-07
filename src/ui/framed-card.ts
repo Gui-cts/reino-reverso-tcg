@@ -1,10 +1,12 @@
 import {
   formatCardTypeLineCompact,
   formatEssenceOrbText,
+  getCardType,
   getCorruptionCost,
   getEssenceCost,
   resolveCardFrameKind,
 } from "../game/card-meta";
+import { describeArtifactEffect, describeEquipmentEffect } from "../game/equipment";
 import {
   describeDeathEffect,
   describeKeywordRule,
@@ -73,6 +75,19 @@ function populateDescriptionEl(
 
   if (isSpellCard(def) && def.spellEffect) {
     appendDescPlain(descEl, describeSpellEffect(def.spellEffect));
+    if (extraSubLabel) appendDescPlain(descEl, extraSubLabel);
+    return;
+  }
+
+  const cardType = getCardType(def);
+  if (cardType === "artifact" && def.artifactEffect) {
+    appendDescPlain(descEl, describeArtifactEffect(def.artifactEffect));
+    if (extraSubLabel) appendDescPlain(descEl, extraSubLabel);
+    return;
+  }
+
+  if (cardType === "equipment") {
+    appendDescPlain(descEl, describeEquipmentEffect(def));
     if (extraSubLabel) appendDescPlain(descEl, extraSubLabel);
     return;
   }

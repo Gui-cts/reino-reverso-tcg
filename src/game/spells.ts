@@ -11,6 +11,7 @@ import {
 } from "./helpers";
 import {
   canAffordCardCost,
+  getCardType,
   getCorruptionCost,
   getEssenceCost,
 } from "./card-meta";
@@ -43,8 +44,8 @@ export function isSpellCard(def: CardDefinition | undefined): boolean {
 
 export function isTroopCard(def: CardDefinition | undefined): boolean {
   if (!def) return false;
-  if (def.cardType === "troop" || def.isToken) return true;
-  return !isSpellCard(def) && !def.isToken;
+  if (def.isToken) return true;
+  return getCardType(def) === "troop";
 }
 
 export function getCardSpeed(def: CardDefinition): CardSpeed {
