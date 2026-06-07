@@ -1601,6 +1601,7 @@ export class GameApp {
         } else {
           this.selection.leaderAbilityTargeting = true;
           this.selection.spellInstanceId = null;
+          this.selection.troopId = null;
         }
         this.render();
       };
@@ -2070,7 +2071,48 @@ export class GameApp {
     let selected = this.selection.troopId === troop.instanceId;
     let subLabel: string | undefined;
 
-    if (inCombatArena && combat && isCombatStrikePhase(s)) {
+    // Habilidade do Líder / artefato têm prioridade sobre seleção de combate.
+    if (
+      this.selection.leaderAbilityTargeting &&
+      troop.owner === this.humanPlayer(s) &&
+      troop.currentHealth > 0
+    ) {
+      const human = this.humanPlayer(s);
+      if (troop.zone === "arena") {
+        onClick = (e) => {
+          e.stopPropagation();
+          this.selection.leaderAbilityTargeting = false;
+          this.selection.troopId = null;
+          this.dispatchAction({
+            type: "USE_LEADER_ABILITY",
+            player: human,
+            targetTroopId: troop.instanceId,
+          });
+        };
+        subLabel = "clique — alvo da habilidade";
+        selected = true;
+      } else {
+        subLabel = "deve estar na arena";
+      }
+    } else if (
+      this.selection.artifactTargetingId &&
+      (troop.zone === "base" || troop.zone === "arena") &&
+      troop.owner === this.humanPlayer(s) &&
+      troop.currentHealth > 0
+    ) {
+      const artId = this.selection.artifactTargetingId;
+      onClick = (e) => {
+        e.stopPropagation();
+        this.selection.artifactTargetingId = null;
+        this.dispatchAction({
+          type: "ACTIVATE_ARTIFACT",
+          artifactId: artId,
+          sacrificeTroopId: troop.instanceId,
+        });
+      };
+      subLabel = "clique — sacrificar no artefato";
+      selected = true;
+    } else if (inCombatArena && combat && isCombatStrikePhase(s)) {
       const assigningPlayer = getCombatAssigningPlayer(combat);
       const alreadyAttacked = hasAttackedThisStrike(combat, troop.instanceId);
       const randomTargets = arenaUsesRandomCombatTargets(s, combat.arenaId);
@@ -2126,43 +2168,7 @@ export class GameApp {
         }
       }
     } else {
-      if (
-        this.selection.artifactTargetingId &&
-        (troop.zone === "base" || troop.zone === "arena") &&
-        troop.owner === this.humanPlayer(s) &&
-        troop.currentHealth > 0
-      ) {
-        const artId = this.selection.artifactTargetingId;
-        onClick = (e) => {
-          e.stopPropagation();
-          this.selection.artifactTargetingId = null;
-          this.dispatchAction({
-            type: "ACTIVATE_ARTIFACT",
-            artifactId: artId,
-            sacrificeTroopId: troop.instanceId,
-          });
-        };
-        subLabel = subLabel ? `${subLabel} · sacrificar` : "clique — sacrificar no artefato";
-        selected = true;
-      } else if (
-        this.selection.leaderAbilityTargeting &&
-        troop.zone === "arena" &&
-        troop.owner === this.humanPlayer(s) &&
-        troop.currentHealth > 0
-      ) {
-        const human = this.humanPlayer(s);
-        onClick = (e) => {
-          e.stopPropagation();
-          this.selection.leaderAbilityTargeting = false;
-          this.dispatchAction({
-            type: "USE_LEADER_ABILITY",
-            player: human,
-            targetTroopId: troop.instanceId,
-          });
-        };
-        subLabel = subLabel ? `${subLabel} · alvo habilidade` : "clique — alvo da habilidade";
-        selected = true;
-      } else if (this.canDragTroopsOnField(s, troop) && (troop.zone === "arena" || troop.zone === "base")) {
+      if (this.canDragTroopsOnField(s, troop) && (troop.zone === "arena" || troop.zone === "base")) {
         onClick = (e) => {
           e.stopPropagation();
           this.selection.troopId =
