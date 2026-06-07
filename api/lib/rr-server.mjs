@@ -1356,8 +1356,8 @@ function isSpellCard(def) {
 }
 function isTroopCard(def) {
   if (!def) return false;
-  if (def.cardType === "troop" || def.isToken) return true;
-  return !isSpellCard(def) && !def.isToken;
+  if (def.isToken) return true;
+  return getCardType(def) === "troop";
 }
 function getCardSpeed(def) {
   if (def.cardSpeed) return def.cardSpeed;
