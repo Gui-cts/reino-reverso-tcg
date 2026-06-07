@@ -73,7 +73,7 @@ function payEssenceCost(state, player, payment, preferTemp = false) {
     let essencePool = { ...next.essencePool };
     let essenceIds = [...next.players[player].essenceIds];
     let essenceDiscard = [...next.players[player].essenceDiscard];
-    const players = [...next.players];
+    const players2 = [...next.players];
     for (const id of toSacrifice) {
       const inst = essencePool[id];
       if (!inst) continue;
@@ -81,8 +81,8 @@ function payEssenceCost(state, player, payment, preferTemp = false) {
       delete essencePool[id];
       essenceIds = essenceIds.filter((eid) => eid !== id);
     }
-    players[player] = { ...players[player], essenceIds, essenceDiscard };
-    next = { ...next, players, essencePool };
+    players2[player] = { ...players2[player], essenceIds, essenceDiscard };
+    next = { ...next, players: players2, essencePool };
   }
   return { state: next, ok: true };
 }
@@ -95,22 +95,22 @@ function payCorruptionCost(state, player, amount) {
   if (!canPayCorruptionCost(state, player, amount)) {
     return { state, ok: false };
   }
-  const players = [...state.players];
-  players[player] = {
-    ...players[player],
-    corruption: players[player].corruption - amount
+  const players2 = [...state.players];
+  players2[player] = {
+    ...players2[player],
+    corruption: players2[player].corruption - amount
   };
-  return { state: { ...state, players }, ok: true };
+  return { state: { ...state, players: players2 }, ok: true };
 }
 function sanitizePlayerHands(state) {
-  const players = [...state.players];
+  const players2 = [...state.players];
   for (const p of [0, 1]) {
-    players[p] = {
-      ...players[p],
-      hand: players[p].hand.filter((id) => state.troops[id]?.owner === p)
+    players2[p] = {
+      ...players2[p],
+      hand: players2[p].hand.filter((id) => state.troops[id]?.owner === p)
     };
   }
-  return { ...state, players };
+  return { ...state, players: players2 };
 }
 function untapEssence(state, player) {
   const essencePool = { ...state.essencePool };
@@ -521,28 +521,28 @@ function troopsInArenaForPlayer(state, player) {
   );
 }
 function removeTroopFromField(state, troop) {
-  const players = [...state.players];
+  const players2 = [...state.players];
   const p = troop.owner;
-  players[p] = {
-    ...players[p],
-    hand: players[p].hand.filter((id) => id !== troop.instanceId)
+  players2[p] = {
+    ...players2[p],
+    hand: players2[p].hand.filter((id) => id !== troop.instanceId)
   };
   const troops = { ...state.troops };
   delete troops[troop.instanceId];
   let nextId = state.nextInstanceId;
   return {
-    state: { ...state, players, troops, nextInstanceId: nextId },
+    state: { ...state, players: players2, troops, nextInstanceId: nextId },
     nextId
   };
 }
 function addEssenceFromTroop(state, troop, nextId) {
   const [idNum, newNext] = nextInstanceId({ ...state, nextInstanceId: nextId });
   const essenceId = `essence-${idNum}`;
-  const players = [...state.players];
+  const players2 = [...state.players];
   const p = troop.owner;
-  players[p] = {
-    ...players[p],
-    essenceIds: [...players[p].essenceIds, essenceId]
+  players2[p] = {
+    ...players2[p],
+    essenceIds: [...players2[p].essenceIds, essenceId]
   };
   const essencePool = {
     ...state.essencePool,
@@ -554,7 +554,7 @@ function addEssenceFromTroop(state, troop, nextId) {
     }
   };
   return {
-    state: { ...state, players, essencePool, nextInstanceId: newNext },
+    state: { ...state, players: players2, essencePool, nextInstanceId: newNext },
     nextId: newNext
   };
 }
@@ -563,19 +563,19 @@ function applyPostPhaseChoiceForPlayer(state, player, choice) {
   let next = state;
   let nextId = state.nextInstanceId;
   if (choice === "recycle") {
-    const players = [...next.players];
+    const players2 = [...next.players];
     const troops = { ...next.troops };
     for (const troop of arenaTroops) {
-      players[player] = {
-        ...players[player],
-        deck: shuffle([...players[player].deck, troop.cardId]),
-        hand: players[player].hand.filter((id) => id !== troop.instanceId)
+      players2[player] = {
+        ...players2[player],
+        deck: shuffle([...players2[player].deck, troop.cardId]),
+        hand: players2[player].hand.filter((id) => id !== troop.instanceId)
       };
       delete troops[troop.instanceId];
     }
     next = {
       ...next,
-      players,
+      players: players2,
       troops,
       log: appendLog(
         next,
@@ -589,18 +589,18 @@ function applyPostPhaseChoiceForPlayer(state, player, choice) {
       nextId = removed.nextId;
     }
     const gain = Math.min(3, arenaTroops.length);
-    const players = [...next.players];
+    const players2 = [...next.players];
     if (gain > 0) {
-      const cur = players[player].corruption;
+      const cur = players2[player].corruption;
       const cap = maxCorruptionForPhase(next.gamePhase);
-      players[player] = {
-        ...players[player],
+      players2[player] = {
+        ...players2[player],
         corruption: Math.min(cap, cur + gain)
       };
     }
     next = {
       ...next,
-      players,
+      players: players2,
       nextInstanceId: nextId,
       log: appendLog(
         next,
@@ -633,14 +633,14 @@ function finalizePhaseTransition(state) {
 function clearArenaField(state) {
   const conquestWatch = {};
   const troops = { ...state.troops };
-  const players = [...state.players];
+  const players2 = [...state.players];
   for (const t of Object.values(troops)) {
     if (t.zone !== "arena") continue;
     const p = t.owner;
-    players[p] = {
-      ...players[p],
-      hand: players[p].hand.filter((id) => id !== t.instanceId),
-      discard: [...players[p].discard, t.cardId]
+    players2[p] = {
+      ...players2[p],
+      hand: players2[p].hand.filter((id) => id !== t.instanceId),
+      discard: [...players2[p].discard, t.cardId]
     };
     delete troops[t.instanceId];
   }
@@ -649,7 +649,7 @@ function clearArenaField(state) {
     arenas: [],
     conquestWatch,
     troops,
-    players: players.map((pl) => ({
+    players: players2.map((pl) => ({
       ...pl,
       dominatedArenas: 0
     })),
@@ -741,12 +741,12 @@ function finishArenaSetupAndResume(state, pickIds, firstPlayer) {
 }
 function applyLeaderDamageTo(state, target, damage, reason, attacker) {
   const winnerOnKo = attacker ?? opponent(target);
-  const players = [...state.players];
-  const hp = Math.max(0, players[target].leaderHp - damage);
-  players[target] = { ...players[target], leaderHp: hp };
+  const players2 = [...state.players];
+  const hp = Math.max(0, players2[target].leaderHp - damage);
+  players2[target] = { ...players2[target], leaderHp: hp };
   let next = {
     ...state,
-    players,
+    players: players2,
     log: appendLog(state, reason)
   };
   if (hp <= 0) {
@@ -810,17 +810,17 @@ function destroyEquipmentOnTroop(state, troopId, logPrefix) {
   const equipments = { ...state.equipments };
   delete equipments[eq.instanceId];
   const owner = troop.owner;
-  const players = [...state.players];
-  players[owner] = {
-    ...players[owner],
-    discard: [...players[owner].discard, eq.cardId]
+  const players2 = [...state.players];
+  players2[owner] = {
+    ...players2[owner],
+    discard: [...players2[owner].discard, eq.cardId]
   };
   const eqName = eqDef?.name ?? eq.cardId;
   return {
     ...state,
     troops,
     equipments,
-    players,
+    players: players2,
     log: appendLog(state, `${logPrefix} \u2014 ${eqName} foi destru\xEDdo.`)
   };
 }
@@ -832,15 +832,15 @@ function destroyEnemyRelic(state, caster) {
     const targetName = state.catalog[target.cardId]?.name ?? "Artefato";
     const artifacts = { ...state.artifacts };
     delete artifacts[target.instanceId];
-    const players = [...state.players];
-    players[enemy] = {
-      ...players[enemy],
-      discard: [...players[enemy].discard, target.cardId]
+    const players2 = [...state.players];
+    players2[enemy] = {
+      ...players2[enemy],
+      discard: [...players2[enemy].discard, target.cardId]
     };
     return {
       ...state,
       artifacts,
-      players,
+      players: players2,
       log: appendLog(state, `${targetName} do Jogador ${enemy + 1} foi destru\xEDdo!`)
     };
   }
@@ -1096,15 +1096,15 @@ function tutorFromDeck(state, player, match, notFoundMsg) {
       arenaId: null
     }
   };
-  const players = [...state.players];
-  players[player] = {
+  const players2 = [...state.players];
+  players2[player] = {
     ...pl,
     deck,
     hand: [...pl.hand, instanceId]
   };
   return {
     ...state,
-    players,
+    players: players2,
     troops,
     nextInstanceId: nextId,
     log: appendLog(state, `${def.name} foi revelada e colocada na m\xE3o do Jogador ${player + 1}.`)
@@ -1568,16 +1568,16 @@ function playSpell(state, caster, spellInstanceId, targetTroopId, targetArtifact
     };
   }
   next = paidCorruption.state;
-  const players = [...next.players];
-  const hand = players[caster].hand.filter((id) => id !== spellInstanceId);
-  players[caster] = {
-    ...players[caster],
+  const players2 = [...next.players];
+  const hand = players2[caster].hand.filter((id) => id !== spellInstanceId);
+  players2[caster] = {
+    ...players2[caster],
     hand,
-    discard: [...players[caster].discard, spellInst.cardId]
+    discard: [...players2[caster].discard, spellInst.cardId]
   };
   const troops = { ...next.troops };
   delete troops[spellInstanceId];
-  next = { ...next, players, troops };
+  next = { ...next, players: players2, troops };
   if (effect === "counterspell") {
     const pending = state.pendingSpell;
     return openPendingSpell(
@@ -1747,7 +1747,7 @@ function createInitialGame(catalogData, options = {}) {
     const def = leaderId ? catalog[leaderId] : null;
     return def?.leaderMaxHp ?? LEADER_MAX_HP;
   }
-  const players = [
+  const players2 = [
     {
       ...emptyPlayer(),
       deck: buildDeckForLeader(leaderForPlayer(0), deckSourceForPlayer(0))
@@ -1759,7 +1759,7 @@ function createInitialGame(catalogData, options = {}) {
   ];
   for (const p of [0, 1]) {
     const lid = leaderForPlayer(p);
-    players[p] = { ...players[p], leaderId: lid, leaderHp: hpForLeader(lid) };
+    players2[p] = { ...players2[p], leaderId: lid, leaderHp: hpForLeader(lid) };
   }
   let state = {
     catalog,
@@ -1767,7 +1767,7 @@ function createInitialGame(catalogData, options = {}) {
     essencePool: {},
     artifacts: {},
     equipments: {},
-    players,
+    players: players2,
     arenas: [],
     activePlayer: 0,
     matchPhase: "setup_arenas_p0",
@@ -1838,11 +1838,11 @@ function reassignPlayerLeader(state, player, leaderId, starterDeck) {
     player,
     state.nextInstanceId
   );
-  const players = [...state.players];
-  players[player] = drawn.player;
+  const players2 = [...state.players];
+  players2[player] = drawn.player;
   return {
     ...state,
-    players,
+    players: players2,
     troops: drawn.troops,
     nextInstanceId: drawn.nextId,
     log: [
@@ -1928,19 +1928,19 @@ function shufflePlayerDeck(state, player) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
-  const players = [...state.players];
-  players[player] = { ...pl, deck };
-  return { ...state, players };
+  const players2 = [...state.players];
+  players2[player] = { ...pl, deck };
+  return { ...state, players: players2 };
 }
 function addCardToDeck(state, player, cardId, shuffleAfter = true) {
-  const players = [...state.players];
-  players[player] = {
-    ...players[player],
-    deck: [...players[player].deck, cardId]
+  const players2 = [...state.players];
+  players2[player] = {
+    ...players2[player],
+    deck: [...players2[player].deck, cardId]
   };
   let next = {
     ...state,
-    players,
+    players: players2,
     log: appendLog(state, `Carta adicionada ao baralho do Jogador ${player + 1}.`)
   };
   return shuffleAfter ? shufflePlayerDeck(next, player) : next;
@@ -2077,16 +2077,16 @@ function applyArenaOnDominate(state, arenaId, player) {
       }
       break;
     case "conquest-3-corruption": {
-      const players = [...next.players];
-      const cur = players[player].corruption;
+      const players2 = [...next.players];
+      const cur = players2[player].corruption;
       const cap = maxCorruptionForPhase(next.gamePhase);
-      players[player] = {
-        ...players[player],
+      players2[player] = {
+        ...players2[player],
         corruption: Math.min(cap, cur + 1)
       };
       next = {
         ...next,
-        players,
+        players: players2,
         log: appendLog(
           next,
           `Templo das Sombras \u2014 Jogador ${player + 1} ganhou +1 Corrup\xE7\xE3o (${Math.min(cap, cur + 1)}/${cap}).`
@@ -2135,24 +2135,24 @@ function vacuumDamageForArena(effect) {
 function destroyArenaSurvivors(state, arenaId) {
   const arena = getArena(state, arenaId);
   const troops = { ...state.troops };
-  const players = [...state.players];
+  const players2 = [...state.players];
   const names = [];
   for (const t of Object.values(troops)) {
     if (t.zone !== "arena" || t.arenaId !== arenaId || t.currentHealth <= 0) continue;
     const p = t.owner;
-    players[p] = {
-      ...players[p],
-      hand: players[p].hand.filter((id) => id !== t.instanceId),
-      discard: [...players[p].discard, t.cardId]
+    players2[p] = {
+      ...players2[p],
+      hand: players2[p].hand.filter((id) => id !== t.instanceId),
+      discard: [...players2[p].discard, t.cardId]
     };
     names.push(getTroopName(state, t));
     delete troops[t.instanceId];
   }
-  if (names.length === 0) return { ...state, troops, players };
+  if (names.length === 0) return { ...state, troops, players: players2 };
   return {
     ...state,
     troops,
-    players,
+    players: players2,
     log: appendLog(
       state,
       names.length === 1 ? `Reino Reverso (${arena.name}) \u2014 ${names[0]} foi destru\xEDda ap\xF3s o combate.` : `Reino Reverso (${arena.name}) \u2014 ${names.length} tropas destru\xEDdas ap\xF3s o combate.`
@@ -2725,20 +2725,20 @@ function applyDomination(state, arena, player) {
   const arenas = state.arenas.map(
     (a) => a.id === arena.id ? { ...a, dominatedBy: player } : a
   );
-  const players = [...state.players];
-  players[player] = {
-    ...players[player],
-    dominatedArenas: players[player].dominatedArenas + 1
+  const players2 = [...state.players];
+  players2[player] = {
+    ...players2[player],
+    dominatedArenas: players2[player].dominatedArenas + 1
   };
   let next = {
     ...state,
     arenas,
-    players,
+    players: players2,
     conquestWatch: { ...state.conquestWatch, [arena.id]: null }
   };
   next = pinTroopsInArena(next, arena.id, player);
   next = applyArenaOnDominate(next, arena.id, player);
-  const domCount = players[player].dominatedArenas;
+  const domCount = players2[player].dominatedArenas;
   next = applyLeaderDamage(
     next,
     player,
@@ -2853,14 +2853,14 @@ function untapArtifacts(state, player) {
   return changed ? { ...state, artifacts } : state;
 }
 function resetTurnFlags(state, player) {
-  const players = [...state.players];
-  players[player] = {
-    ...players[player],
+  const players2 = [...state.players];
+  players2[player] = {
+    ...players2[player],
     sacrificedThisTurn: false,
     leaderAbilityUsedThisTurn: false,
     leaderExhausted: false
   };
-  return { ...state, players };
+  return { ...state, players: players2 };
 }
 function clearTemporaryEssence(state, player) {
   const pl = state.players[player];
@@ -2872,12 +2872,12 @@ function clearTemporaryEssence(state, player) {
   const essencePool = { ...state.essencePool };
   for (const id of tempIds) delete essencePool[id];
   const tempSet = new Set(tempIds);
-  const players = [...state.players];
-  players[player] = {
-    ...players[player],
+  const players2 = [...state.players];
+  players2[player] = {
+    ...players2[player],
     essenceIds: pl.essenceIds.filter((id) => !tempSet.has(id))
   };
-  return { ...state, players, essencePool };
+  return { ...state, players: players2, essencePool };
 }
 function runTurnBegin(state, player) {
   let next = {
@@ -2940,13 +2940,13 @@ function buryDeadTroops(state) {
     if (next.matchPhase === "finished") return next;
   }
   const troops = { ...next.troops };
-  const players = [...next.players];
+  const players2 = [...next.players];
   let equipments = { ...next.equipments };
   const buriedNames = [];
   const exiledNames = [];
   for (const t of dead) {
     const p = t.owner;
-    const pl = { ...players[p] };
+    const pl = { ...players2[p] };
     pl.hand = pl.hand.filter((id) => id !== t.instanceId);
     const name = getTroopName(next, t);
     if (t.equipmentId) {
@@ -2964,10 +2964,10 @@ function buryDeadTroops(state) {
       pl.discard = [...pl.discard, t.cardId];
       buriedNames.push(name);
     }
-    players[p] = pl;
+    players2[p] = pl;
     delete troops[t.instanceId];
   }
-  next = { ...next, troops, players, equipments };
+  next = { ...next, troops, players: players2, equipments };
   if (buriedNames.length === 1) {
     next = {
       ...next,
@@ -3157,8 +3157,8 @@ function playTroop(state, troopId) {
   }
   next = paidCorruption.state;
   const hand = next.players[player].hand.filter((id) => id !== troopId);
-  const players = [...next.players];
-  players[player] = { ...next.players[player], hand };
+  const players2 = [...next.players];
+  players2[player] = { ...next.players[player], hand };
   const entersReady = troopEntersReadyOnDeploy(def);
   const troops = { ...next.troops };
   troops[troopId] = {
@@ -3174,7 +3174,7 @@ function playTroop(state, troopId) {
   };
   next = {
     ...next,
-    players,
+    players: players2,
     troops,
     log: appendLog(
       next,
@@ -3226,8 +3226,8 @@ function sacrificeEssence(state, troopId) {
   const cap = maxCorruptionForPhase(state.gamePhase);
   const corruptionGain = Math.min(reward.corruption, cap - pl.corruption);
   const hand = pl.hand.filter((hid) => hid !== troopId);
-  const players = [...state.players];
-  players[player] = {
+  const players2 = [...state.players];
+  players2[player] = {
     ...pl,
     hand,
     essenceIds: [...pl.essenceIds, ...newEssenceIds],
@@ -3242,7 +3242,7 @@ function sacrificeEssence(state, troopId) {
   const rewardLabel = parts.join(" + ") || "Ess\xEAncia";
   return sanitizePlayerHands({
     ...state,
-    players,
+    players: players2,
     troops,
     essencePool,
     nextInstanceId: idCounter,
@@ -3524,13 +3524,13 @@ function useLeaderAbility(state, player, targetTroopId) {
     let next = paid.state;
     const troops = { ...next.troops };
     troops[targetTroopId] = { ...target, shielded: true };
-    const players = [...next.players];
-    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true, leaderExhausted: true };
+    const players2 = [...next.players];
+    players2[player] = { ...players2[player], leaderAbilityUsedThisTurn: true, leaderExhausted: true };
     const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
     return {
       ...next,
       troops,
-      players,
+      players: players2,
       log: appendLog(
         next,
         `Jogador ${player + 1} usou Escudo do L\xEDder em ${troopName} (\u22122 Ess\xEAncia) \u2014 pr\xF3ximo dano ser\xE1 absorvido.`
@@ -3566,13 +3566,13 @@ function useLeaderAbility(state, player, targetTroopId) {
     let next = paid.state;
     const troops = { ...next.troops };
     troops[targetTroopId] = { ...target, isFrostborn: true };
-    const players = [...next.players];
-    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true, leaderExhausted: true };
+    const players2 = [...next.players];
+    players2[player] = { ...players2[player], leaderAbilityUsedThisTurn: true, leaderExhausted: true };
     const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
     return {
       ...next,
       troops,
-      players,
+      players: players2,
       log: appendLog(
         next,
         `Jogador ${player + 1} transformou ${troopName} em Cria do Inverno (\u22122 Ess\xEAncia) \u2014 ganha comportamento de gelo.`
@@ -3608,13 +3608,13 @@ function useLeaderAbility(state, player, targetTroopId) {
     let next = paid.state;
     const troops = { ...next.troops };
     troops[targetTroopId] = { ...target, hasEmpathy: true, shielded: true };
-    const players = [...next.players];
-    players[player] = { ...players[player], leaderAbilityUsedThisTurn: true, leaderExhausted: true };
+    const players2 = [...next.players];
+    players2[player] = { ...players2[player], leaderAbilityUsedThisTurn: true, leaderExhausted: true };
     const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
     return {
       ...next,
       troops,
-      players,
+      players: players2,
       log: appendLog(
         next,
         `Jogador ${player + 1} marcou ${troopName} com Empatia (\u22121 Ess\xEAncia) \u2014 ganha Protetor + Escudo.`
@@ -3641,8 +3641,8 @@ function useLeaderAbility(state, player, targetTroopId) {
       };
       newEssenceIds.push(essenceId);
     }
-    const players = [...state.players];
-    players[player] = {
+    const players2 = [...state.players];
+    players2[player] = {
       ...pl,
       essenceIds: [...pl.essenceIds, ...newEssenceIds],
       leaderAbilityUsedThisTurn: true,
@@ -3650,7 +3650,7 @@ function useLeaderAbility(state, player, targetTroopId) {
     };
     return {
       ...state,
-      players,
+      players: players2,
       essencePool,
       nextInstanceId: idCounter,
       log: appendLog(
@@ -3699,8 +3699,8 @@ function evolveLeader(state, player, formId, formInstanceId) {
   const hand = pl.hand.filter((id) => id !== formInstanceId);
   const troops = { ...state.troops };
   delete troops[formInstanceId];
-  const players = [...state.players];
-  players[player] = {
+  const players2 = [...state.players];
+  players2[player] = {
     ...pl,
     hand,
     leaderId: formId,
@@ -3708,7 +3708,7 @@ function evolveLeader(state, player, formId, formInstanceId) {
   };
   return sanitizePlayerHands({
     ...state,
-    players,
+    players: players2,
     troops,
     log: appendLog(
       state,
@@ -3737,8 +3737,8 @@ function playArtifact(state, troopId, player, def) {
     next = paid.state;
   }
   const hand = next.players[player].hand.filter((id) => id !== troopId);
-  const players = [...next.players];
-  players[player] = { ...next.players[player], hand };
+  const players2 = [...next.players];
+  players2[player] = { ...next.players[player], hand };
   const troops = { ...next.troops };
   const troopInst = state.troops[troopId];
   const cardId = troopInst ? troopInst.cardId : def.id;
@@ -3750,7 +3750,7 @@ function playArtifact(state, troopId, player, def) {
   };
   return sanitizePlayerHands({
     ...next,
-    players,
+    players: players2,
     troops,
     artifacts,
     nextInstanceId: next.nextInstanceId + 1,
@@ -3805,8 +3805,8 @@ function equipTroop(state, equipmentInstanceId, targetTroopId) {
     next = paid.state;
   }
   const hand = next.players[player].hand.filter((id) => id !== equipmentInstanceId);
-  const players = [...next.players];
-  players[player] = { ...next.players[player], hand };
+  const players2 = [...next.players];
+  players2[player] = { ...next.players[player], hand };
   const troops = { ...next.troops };
   delete troops[equipmentInstanceId];
   const bonusAtk = eqDef.attack;
@@ -3832,7 +3832,7 @@ function equipTroop(state, equipmentInstanceId, targetTroopId) {
   const bonusLabel = bonusAtk > 0 || bonusHp > 0 ? ` (+${bonusAtk}/+${bonusHp})` : "";
   return sanitizePlayerHands({
     ...next,
-    players,
+    players: players2,
     troops,
     equipments,
     nextInstanceId: next.nextInstanceId + 1,
@@ -3868,9 +3868,9 @@ function activateArtifact(state, artifactId, sacrificeTroopId) {
     const troopName = state.catalog[troop.cardId]?.name ?? "Tropa";
     const troops = { ...state.troops };
     delete troops[sacrificeTroopId];
-    const players = [...state.players];
-    const pl = players[player];
-    players[player] = {
+    const players2 = [...state.players];
+    const pl = players2[player];
+    players2[player] = {
       ...pl,
       hand: pl.hand.filter((id) => id !== sacrificeTroopId),
       discard: [...pl.discard, troop.cardId],
@@ -3881,7 +3881,7 @@ function activateArtifact(state, artifactId, sacrificeTroopId) {
     return sanitizePlayerHands({
       ...state,
       troops,
-      players,
+      players: players2,
       artifacts,
       log: appendLog(state, `Jogador ${player + 1} sacrificou ${troopName} no artefato \u2192 +1 Corrup\xE7\xE3o (${Math.min(cap, cur + 1)}/${cap}). Artefato exausto.`)
     });
@@ -4087,9 +4087,9 @@ function toPlayerView(state, seat, meta) {
     state.players[1].deck.length
   ];
   const oppHandIds = state.players[opp].hand;
-  const players = structuredClone(state.players);
-  players[opp] = {
-    ...players[opp],
+  const players2 = structuredClone(state.players);
+  players2[opp] = {
+    ...players2[opp],
     hand: [],
     deck: []
   };
@@ -4108,7 +4108,7 @@ function toPlayerView(state, seat, meta) {
     deckCounts,
     state: {
       ...state,
-      players,
+      players: players2,
       troops,
       cpuPlayer: null
     }
@@ -5186,13 +5186,258 @@ async function saveRoom2(room) {
   }
   await saveRoom(room);
 }
+
+// src/net/player-service.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+
+// src/net/player-store-memory.ts
+var players = globalThis.__rrPlayers ?? /* @__PURE__ */ new Map();
+var tokens = globalThis.__rrPlayerTokens ?? /* @__PURE__ */ new Map();
+var playerIndex = globalThis.__rrPlayerIndex ?? [];
+globalThis.__rrPlayers = players;
+globalThis.__rrPlayerTokens = tokens;
+globalThis.__rrPlayerIndex = playerIndex;
+async function getPlayerByNickKey(nickKey) {
+  return players.get(nickKey) ?? null;
+}
+async function getNickKeyByToken(token) {
+  return tokens.get(token) ?? null;
+}
+async function savePlayerRecord(player) {
+  players.set(player.nickKey, player);
+  tokens.set(player.token, player.nickKey);
+}
+async function deleteTokenMapping(token) {
+  tokens.delete(token);
+}
+async function readPlayerIndex() {
+  return [...playerIndex];
+}
+async function writePlayerIndex(keys) {
+  playerIndex = [...keys];
+  globalThis.__rrPlayerIndex = playerIndex;
+}
+
+// src/net/player-store.ts
+var PLAYER_PREFIX = "rr-player:";
+var TOKEN_PREFIX = "rr-player-token:";
+var INDEX_KEY = "rr-player-index";
+async function kvGet(key) {
+  try {
+    const { kv } = await import("@vercel/kv");
+    return await kv.get(key) ?? null;
+  } catch (err) {
+    console.error("KV get failed:", err);
+    return null;
+  }
+}
+async function kvSet(key, value) {
+  try {
+    const { kv } = await import("@vercel/kv");
+    await kv.set(key, value);
+  } catch (err) {
+    console.error("KV set failed:", err);
+  }
+}
+async function kvDel(key) {
+  try {
+    const { kv } = await import("@vercel/kv");
+    await kv.del(key);
+  } catch (err) {
+    console.error("KV del failed:", err);
+  }
+}
+async function getPlayerByNickKey2(nickKey) {
+  if (isPersistentStore()) {
+    const fromKv = await kvGet(`${PLAYER_PREFIX}${nickKey}`);
+    if (fromKv) return fromKv;
+  }
+  return getPlayerByNickKey(nickKey);
+}
+async function getNickKeyByToken2(token) {
+  if (isPersistentStore()) {
+    const fromKv = await kvGet(`${TOKEN_PREFIX}${token}`);
+    if (fromKv) return fromKv;
+  }
+  return getNickKeyByToken(token);
+}
+async function savePlayerRecord2(player) {
+  if (isPersistentStore()) {
+    await kvSet(`${PLAYER_PREFIX}${player.nickKey}`, player);
+    await kvSet(`${TOKEN_PREFIX}${player.token}`, player.nickKey);
+  }
+  await savePlayerRecord(player);
+}
+async function deleteTokenMapping2(token) {
+  if (isPersistentStore()) {
+    await kvDel(`${TOKEN_PREFIX}${token}`);
+  }
+  await deleteTokenMapping(token);
+}
+async function readPlayerIndex2() {
+  if (isPersistentStore()) {
+    const fromKv = await kvGet(INDEX_KEY);
+    if (fromKv) return fromKv;
+  }
+  return readPlayerIndex();
+}
+async function writePlayerIndex2(keys) {
+  if (isPersistentStore()) {
+    await kvSet(INDEX_KEY, keys);
+  }
+  await writePlayerIndex(keys);
+}
+
+// src/net/player-service.ts
+var MAX_TEST_PLAYERS = 5;
+function newToken2() {
+  return randomBytes2(16).toString("hex");
+}
+function defaultDeckForNewPlayer() {
+  const catalog = loadCatalogSync();
+  const map = buildCatalogMap(catalog.cards);
+  const leaderId = catalog.presetDecks?.[0]?.leaderId ?? "noah-lider-base";
+  return {
+    leaderId,
+    cardIds: catalog.starterDeck.filter((id) => !map[id]?.leaderFormOf)
+  };
+}
+function normalizeNickKey(nickname) {
+  return nickname.trim().normalize("NFD").replace(new RegExp("\\p{M}", "gu"), "").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "");
+}
+function validateNickname(nickname) {
+  const trimmed = nickname.trim();
+  if (trimmed.length < 2 || trimmed.length > 20) {
+    return "Nick deve ter entre 2 e 20 caracteres.";
+  }
+  if (!/^[\p{L}\p{N} _-]+$/u.test(trimmed)) {
+    return "Use s\xF3 letras, n\xFAmeros, espa\xE7o, _ ou -.";
+  }
+  if (!normalizeNickKey(trimmed)) {
+    return "Nick inv\xE1lido.";
+  }
+  return null;
+}
+function validateStoredDeck(deck, minDeckSize = 0) {
+  const catalog = loadCatalogSync();
+  const map = buildCatalogMap(catalog.cards);
+  const result = validateDeck(deck, map, { minDeckSize });
+  if (!result.valid) return result.errors[0]?.message ?? "Baralho inv\xE1lido.";
+  return null;
+}
+function parseActiveSlot(raw) {
+  if (raw === "preset-noah" || raw === "preset-klaus" || raw === "custom") return raw;
+  return void 0;
+}
+async function listTestPlayers() {
+  const index = await readPlayerIndex2();
+  const players2 = [];
+  for (const nickKey of index) {
+    const record = await getPlayerByNickKey2(nickKey);
+    if (record) {
+      players2.push({ nickname: record.nickname, updatedAt: record.updatedAt });
+    }
+  }
+  players2.sort((a, b) => a.nickname.localeCompare(b.nickname, "pt"));
+  return { players: players2, max: MAX_TEST_PLAYERS };
+}
+async function loginTestPlayer(nickname) {
+  const nickError = validateNickname(nickname);
+  if (nickError) return { error: nickError };
+  const nickKey = normalizeNickKey(nickname);
+  const displayName = nickname.trim();
+  let index = await readPlayerIndex2();
+  let record = await getPlayerByNickKey2(nickKey);
+  if (!record) {
+    if (!index.includes(nickKey) && index.length >= MAX_TEST_PLAYERS) {
+      return {
+        error: `Limite de ${MAX_TEST_PLAYERS} contas de teste. Pe\xE7a para algu\xE9m liberar um nick ou reutilize um existente.`
+      };
+    }
+    const now = Date.now();
+    record = {
+      nickKey,
+      nickname: displayName,
+      token: newToken2(),
+      customDeck: defaultDeckForNewPlayer(),
+      activeSlot: "custom",
+      createdAt: now,
+      updatedAt: now
+    };
+    if (!index.includes(nickKey)) {
+      index = [...index, nickKey];
+      await writePlayerIndex2(index);
+    }
+  } else {
+    if (record.token) {
+      await deleteTokenMapping2(record.token);
+    }
+    record = {
+      ...record,
+      nickname: displayName,
+      token: newToken2(),
+      updatedAt: Date.now()
+    };
+  }
+  await savePlayerRecord2(record);
+  return {
+    nickname: record.nickname,
+    token: record.token,
+    customDeck: record.customDeck,
+    activeSlot: record.activeSlot
+  };
+}
+async function getPlayerSession(token) {
+  if (!token) return { error: "Sess\xE3o inv\xE1lida." };
+  const nickKey = await getNickKeyByToken2(token);
+  if (!nickKey) return { error: "Sess\xE3o expirada \u2014 entre de novo com seu nick." };
+  const record = await getPlayerByNickKey2(nickKey);
+  if (!record || record.token !== token) {
+    return { error: "Sess\xE3o expirada \u2014 entre de novo com seu nick." };
+  }
+  return {
+    nickname: record.nickname,
+    token: record.token,
+    customDeck: record.customDeck,
+    activeSlot: record.activeSlot
+  };
+}
+async function savePlayerDeck(token, deck, activeSlotRaw) {
+  const session = await getPlayerSession(token);
+  if ("error" in session) return session;
+  if (!deck.leaderId || !Array.isArray(deck.cardIds)) {
+    return { error: "Baralho malformado." };
+  }
+  const deckError = validateStoredDeck(deck, 0);
+  if (deckError) return { error: deckError };
+  const nickKey = normalizeNickKey(session.nickname);
+  const record = await getPlayerByNickKey2(nickKey);
+  if (!record || record.token !== token) {
+    return { error: "Sess\xE3o expirada \u2014 entre de novo com seu nick." };
+  }
+  const next = {
+    ...record,
+    customDeck: {
+      leaderId: deck.leaderId,
+      cardIds: [...deck.cardIds]
+    },
+    activeSlot: parseActiveSlot(activeSlotRaw) ?? record.activeSlot,
+    updatedAt: Date.now()
+  };
+  await savePlayerRecord2(next);
+  return { ok: true };
+}
 export {
   applyRoomAction,
   createRoom,
+  getPlayerSession,
   getRoom2 as getRoom,
   getRoomView,
   joinRoom,
+  listTestPlayers,
+  loginTestPlayer,
   parseDeckCardIds,
+  savePlayerDeck,
   saveRoom2 as saveRoom
 };
 //# sourceMappingURL=rr-server.mjs.map

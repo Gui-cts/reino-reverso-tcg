@@ -113,6 +113,12 @@ export function saveCustomDeck(deck: DeckDefinition): void {
   }
 }
 
+/** Aplica deck e slot vindos da conta de teste (Redis). */
+export function importPlayerCloudData(deck: DeckDefinition, activeSlot?: DeckSlotKind): void {
+  saveCustomDeck(deck);
+  if (activeSlot) saveActiveDeckSlot(activeSlot);
+}
+
 export function resolveActiveDeck(catalog: CardCatalog): ActiveDeckConfig {
   const kind = loadActiveDeckSlot();
   if (kind === "custom") {

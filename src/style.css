@@ -1201,6 +1201,37 @@ header {
   text-align: center;
 }
 
+.menu-panel__warn {
+  margin: 0.5rem 0 0;
+  color: var(--warn);
+  font-size: 0.85rem;
+}
+
+.player-login-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.65rem;
+}
+
+.player-login-form__input {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.player-login-form__list {
+  margin: 0.65rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 .deck-editor {
   padding: 1rem;
   margin-bottom: 1rem;

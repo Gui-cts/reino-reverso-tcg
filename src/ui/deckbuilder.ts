@@ -14,6 +14,7 @@ import {
   type DeckSlotKind,
   validateDeckForCatalog,
 } from "./deck-selection";
+import { syncCustomDeckToCloud, syncPlayerDeckState } from "./player-session";
 
 export type DeckbuilderCallbacks = {
   onBack: () => void;
@@ -212,6 +213,7 @@ export function renderDeckbuilderScreen(
     captureEditorScroll(root);
     saveCustomDeck(next);
     saveActiveDeckSlot("custom");
+    syncCustomDeckToCloud(next);
     renderDeckbuilderScreen(root, catalog, callbacks);
   }
 
@@ -253,6 +255,7 @@ export function renderDeckbuilderScreen(
 
   function selectSlot(kind: DeckSlotKind): void {
     saveActiveDeckSlot(kind);
+    syncPlayerDeckState(catalog);
     renderDeckbuilderScreen(root, catalog, callbacks);
   }
 

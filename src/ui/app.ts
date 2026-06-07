@@ -61,6 +61,15 @@ import {
   type ActiveDeckConfig,
 } from "./deck-selection";
 import { appendDeckSlotPicker } from "./deck-slot-picker";
+import {
+  fetchTestPlayerList,
+  getStoredPlayerSession,
+  loginWithNickname,
+  logoutPlayer,
+  restorePlayerSession,
+  syncPlayerDeckState,
+  type PlayerSessionState,
+} from "./player-session";
 import { cardFromDef, createCardEl, createEssenceTokenEl, createHiddenCardEl } from "./card-view";
 import {
   bindDropZone,
@@ -120,6 +129,10 @@ export class GameApp {
   private onlineStatus = "";
   private onlineBusy = false;
   private pendingJoinRoomId: string | null = null;
+  private playerSession: PlayerSessionState | null = null;
+  private playerLoginStatus = "";
+  private playerLoginBusy = false;
+  private testPlayerNames: string[] = [];
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -154,6 +167,8 @@ export class GameApp {
 
   async init(): Promise<void> {
     this.catalog = await loadCardCatalog();
+    this.playerSession = await restorePlayerSession();
+    void this.refreshTestPlayerList();
     this.screen = "menu";
     this.render();
 
@@ -226,6 +241,111 @@ export class GameApp {
     }
   }
 
+  private async refreshTestPlayerList(): Promise<void> {
+    try {
+      const list = await fetchTestPlayerList();
+      this.testPlayerNames = list.players.map((p) => p.nickname);
+      if (this.screen === "menu") this.render();
+    } catch {
+      /* Redis indisponível localmente */
+    }
+  }
+
+  private async submitPlayerLogin(nickname: string): Promise<void> {
+    if (this.playerLoginBusy) return;
+    this.playerLoginBusy = true;
+    this.playerLoginStatus = "Entrando…";
+    this.render();
+    try {
+      await loginWithNickname(nickname);
+      this.playerSession = getStoredPlayerSession();
+      this.playerLoginStatus = "";
+      void this.refreshTestPlayerList();
+      this.render();
+    } catch (err) {
+      this.playerLoginStatus = err instanceof Error ? err.message : "Erro ao entrar";
+      this.render();
+    } finally {
+      this.playerLoginBusy = false;
+    }
+  }
+
+  private renderPlayerLoginPanel(container: HTMLElement): void {
+    const panel = document.createElement("section");
+    panel.className = "menu-panel menu-panel--wide panel menu-panel--login";
+
+    if (this.playerSession) {
+      panel.innerHTML = `
+        <h2 class="menu-panel__title">Conta de teste</h2>
+        <p class="menu-panel__deck">
+          <span class="menu-panel__deck-label">Logado como</span>
+          <strong>${this.playerSession.nickname}</strong>
+        </p>
+        <p class="menu-panel__hint">Seu deck personalizado é salvo neste nick (sem senha).</p>
+      `;
+      const actions = document.createElement("div");
+      actions.className = "menu-panel__actions";
+      const logoutBtn = document.createElement("button");
+      logoutBtn.type = "button";
+      logoutBtn.className = "secondary";
+      logoutBtn.textContent = "Trocar nick";
+      logoutBtn.onclick = () => {
+        logoutPlayer();
+        this.playerSession = null;
+        this.playerLoginStatus = "";
+        this.render();
+      };
+      actions.appendChild(logoutBtn);
+      panel.appendChild(actions);
+      container.appendChild(panel);
+      return;
+    }
+
+    panel.innerHTML = `
+      <h2 class="menu-panel__title">Conta de teste</h2>
+      <p class="menu-panel__hint">Entre só com um nick (sem senha) para salvar seu deck personalizado no Redis — máx. 5 contas.</p>
+      ${this.playerLoginStatus ? `<p class="menu-panel__warn">${this.playerLoginStatus}</p>` : ""}
+    `;
+
+    const form = document.createElement("div");
+    form.className = "player-login-form";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "player-login-form__input";
+    input.placeholder = "Seu nick (ex.: Gui)";
+    input.maxLength = 20;
+    input.autocomplete = "username";
+    input.disabled = this.playerLoginBusy;
+
+    const submit = document.createElement("button");
+    submit.type = "button";
+    submit.textContent = "Entrar";
+    submit.disabled = this.playerLoginBusy;
+    submit.onclick = () => {
+      const nick = input.value.trim();
+      if (nick) void this.submitPlayerLogin(nick);
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const nick = input.value.trim();
+        if (nick) void this.submitPlayerLogin(nick);
+      }
+    });
+
+    form.append(input, submit);
+    panel.appendChild(form);
+
+    if (this.testPlayerNames.length > 0) {
+      const list = document.createElement("p");
+      list.className = "player-login-form__list";
+      list.textContent = `Nicks já usados: ${this.testPlayerNames.join(" · ")}`;
+      panel.appendChild(list);
+    }
+
+    container.appendChild(panel);
+  }
+
   private baseLeaderChoices() {
     return this.catalog
       ? this.catalog.cards.filter((c) => c.cardType === "leader" && !c.leaderFormOf)
@@ -262,7 +382,10 @@ export class GameApp {
       "Escolha Noah, Klaus ou deck personalizado — vale para criar e entrar na sala.";
     container.appendChild(hint);
 
-    appendDeckSlotPicker(container, this.catalog, () => this.render());
+    appendDeckSlotPicker(container, this.catalog, () => {
+      syncPlayerDeckState(this.catalog!);
+      this.render();
+    });
 
     const active = resolveActiveDeck(this.catalog);
     const activeLine = document.createElement("p");
@@ -912,6 +1035,8 @@ export class GameApp {
 
     const grid = document.createElement("div");
     grid.className = "menu-grid";
+
+    this.renderPlayerLoginPanel(grid);
 
     const playPanel = document.createElement("section");
     playPanel.className = "menu-panel menu-panel--primary panel";
