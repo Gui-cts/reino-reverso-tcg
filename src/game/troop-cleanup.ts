@@ -23,6 +23,7 @@ export function buryDeadTroops(state: GameState): GameState {
 
   const troops = { ...next.troops };
   const players = [...next.players] as GameState["players"];
+  let equipments = { ...next.equipments };
   const buriedNames: string[] = [];
   const exiledNames: string[] = [];
 
@@ -31,6 +32,15 @@ export function buryDeadTroops(state: GameState): GameState {
     const pl = { ...players[p] };
     pl.hand = pl.hand.filter((id) => id !== t.instanceId);
     const name = getTroopName(next, t);
+
+    if (t.equipmentId) {
+      const eq = equipments[t.equipmentId];
+      if (eq) {
+        pl.discard = [...pl.discard, eq.cardId];
+        delete equipments[t.equipmentId];
+      }
+    }
+
     const exiled =
       t.arenaId !== null && arenaExilesDeadTroops(state, t.arenaId);
     if (exiled) {
@@ -44,7 +54,7 @@ export function buryDeadTroops(state: GameState): GameState {
     delete troops[t.instanceId];
   }
 
-  next = { ...next, troops, players };
+  next = { ...next, troops, players, equipments };
   if (buriedNames.length === 1) {
     next = {
       ...next,

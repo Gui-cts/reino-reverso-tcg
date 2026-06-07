@@ -20,7 +20,7 @@ import {
   getTroopsInZone,
   opponent,
 } from "../game/helpers";
-import { canAffordCardCost, getEssenceCost, isLeaderFormCard } from "../game/card-meta";
+import { canAffordCardCost, getEssenceCost, getCardType, isLeaderFormCard } from "../game/card-meta";
 import { spellRequiresTarget } from "../game/spell-stack";
 import type {
   ArenaDefinition,
@@ -626,6 +626,36 @@ function pickBestCombatAttack(
   };
 }
 
+function pickEquipTroop(state: GameState, cpu: PlayerId): GameAction | null {
+  if (state.turnPhase !== "main" || state.combat || state.activePlayer !== cpu) return null;
+
+  for (const id of state.players[cpu].hand) {
+    const inst = state.troops[id];
+    if (!inst || inst.owner !== cpu) continue;
+    const def = state.catalog[inst.cardId];
+    if (!def || getCardType(def) !== "equipment") continue;
+    if (!canAffordCardCost(state, cpu, def)) continue;
+
+    const allies = Object.values(state.troops)
+      .filter(
+        (t) =>
+          t.owner === cpu &&
+          (t.zone === "base" || t.zone === "arena") &&
+          t.currentHealth > 0 &&
+          !t.equipmentId,
+      )
+      .sort((a, b) => b.attack + b.currentHealth - (a.attack + a.currentHealth));
+
+    if (allies.length === 0) continue;
+    return {
+      type: "EQUIP_TROOP",
+      equipmentInstanceId: id,
+      targetTroopId: allies[0]!.instanceId,
+    };
+  }
+  return null;
+}
+
 function pickActivateArtifact(state: GameState, cpu: PlayerId): GameAction | null {
   if (state.turnPhase !== "main" || state.combat) return null;
 
@@ -667,6 +697,7 @@ function hasMainPhaseWork(state: GameState, cpu: PlayerId): boolean {
   if (pickSacrificeForEssence(state, cpu)) return true;
   if (pickPlaySpell(state, cpu)) return true;
   if (pickPlayTroop(state, cpu)) return true;
+  if (pickEquipTroop(state, cpu)) return true;
   if (pickMoveTroop(state, cpu)) return true;
   if (pickDeclareCombat(state, cpu)) return true;
   if (pickActivateArtifact(state, cpu)) return true;
@@ -693,6 +724,9 @@ function pickMainTurnAction(state: GameState, cpu: PlayerId): GameAction | null 
 
   const play = pickPlayTroop(state, cpu);
   if (play) return play;
+
+  const equip = pickEquipTroop(state, cpu);
+  if (equip) return equip;
 
   const move = pickMoveTroop(state, cpu);
   if (move) return move;

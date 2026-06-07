@@ -335,28 +335,14 @@ export function troopBlocksEnchantments(
   return troopHasKeyword(state, target, "silencio");
 }
 
+import { destroyEnemyRelic } from "./equipment";
+
 export function applyLandingEffect(state: GameState, troop: TroopInstance): GameState {
   const def = state.catalog[troop.cardId];
   if (!def?.landingEffect || !cardHasKeyword(def, "aterrisagem")) return state;
 
   if (def.landingEffect === "destroy-enemy-artifact") {
-    const enemy = opponent(troop.owner);
-    const enemyArtifacts = Object.values(state.artifacts).filter(a => a.owner === enemy);
-    if (enemyArtifacts.length === 0) {
-      return { ...state, log: appendLog(state, `Aterrisagem — nenhum artefato inimigo para destruir.`) };
-    }
-    const target = enemyArtifacts[0]!;
-    const targetName = state.catalog[target.cardId]?.name ?? "Artefato";
-    const artifacts = { ...state.artifacts };
-    delete artifacts[target.instanceId];
-    const players = [...state.players] as GameState["players"];
-    players[enemy] = { ...players[enemy], discard: [...players[enemy].discard, target.cardId] };
-    return {
-      ...state,
-      artifacts,
-      players,
-      log: appendLog(state, `Aterrisagem — ${def.name} destruiu ${targetName}!`),
-    };
+    return destroyEnemyRelic(state, troop.owner);
   }
   return state;
 }

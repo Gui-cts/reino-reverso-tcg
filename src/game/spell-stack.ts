@@ -1,4 +1,5 @@
 import { checkCombatEndAfterDamage } from "./combat";
+import { destroyEnemyRelic } from "./equipment";
 import { drawFromDeck } from "./state";
 import {
   appendLog,
@@ -73,6 +74,7 @@ function tutorFromDeck(
       exhausted: false,
       pinned: false,
       movementLocked: false,
+      equipmentId: null,
       zone: "hand" as const,
       arenaId: null,
     },
@@ -102,6 +104,7 @@ export function applySpellEffect(
   spellName: string,
   targetArtifactId?: string | null,
 ): GameState {
+  void targetArtifactId;
   const arenaId = state.combat?.arenaId ?? null;
 
   switch (effect) {
@@ -270,28 +273,7 @@ export function applySpellEffect(
       return state;
     }
     case "destroy-artifact": {
-      const enemy = opponent(caster);
-      const enemyArtifacts = Object.values(state.artifacts).filter(a => a.owner === enemy);
-      if (enemyArtifacts.length === 0) {
-        return { ...state, log: appendLog(state, "Nenhum artefato/equipamento inimigo para destruir.") };
-      }
-      const target = targetArtifactId
-        ? state.artifacts[targetArtifactId]
-        : enemyArtifacts[0]!;
-      if (!target || target.owner !== enemy) {
-        return { ...state, log: appendLog(state, "Artefato alvo inválido.") };
-      }
-      const targetName = state.catalog[target.cardId]?.name ?? "Artefato";
-      const artifacts = { ...state.artifacts };
-      delete artifacts[target.instanceId];
-      const players = [...state.players] as GameState["players"];
-      players[enemy] = { ...players[enemy], discard: [...players[enemy].discard, target.cardId] };
-      return {
-        ...state,
-        artifacts,
-        players,
-        log: appendLog(state, `${targetName} do Jogador ${enemy + 1} foi destruído!`),
-      };
+      return destroyEnemyRelic(state, caster);
     }
     default:
       return state;

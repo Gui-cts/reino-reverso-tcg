@@ -33,6 +33,7 @@ import {
   getCorruptionCost,
   getEssenceCost,
 } from "./card-meta";
+import { isEquipmentCard } from "./equipment";
 import { applyLandingEffect, cardHasKeyword, troopCanFlyBetweenArenas, troopEntersReadyOnDeploy } from "./keywords";
 import {
   isSpellCard,
@@ -185,6 +186,13 @@ function playTroop(state: GameState, troopId: string): GameState {
 
   if (getCardType(def) === "artifact") {
     return playArtifact(state, troopId, player, def);
+  }
+
+  if (isEquipmentCard(def)) {
+    return {
+      ...state,
+      log: appendLog(state, `${def.name} — selecione a carta e clique em uma tropa aliada para equipar.`),
+    };
   }
 
   if (!isTroopCard(def)) {
@@ -964,6 +972,111 @@ function playArtifact(
   });
 }
 
+function equipTroop(
+  state: GameState,
+  equipmentInstanceId: string,
+  targetTroopId: string,
+): GameState {
+  if (state.matchPhase !== "playing" || state.turnPhase !== "main" || state.combat) {
+    return state;
+  }
+
+  const player = state.activePlayer;
+  const pl = state.players[player];
+  if (!pl.hand.includes(equipmentInstanceId)) {
+    return { ...state, log: appendLog(state, "Equipamento não está na sua mão.") };
+  }
+
+  const eqInst = state.troops[equipmentInstanceId];
+  if (!eqInst || eqInst.owner !== player) return state;
+
+  const eqDef = state.catalog[eqInst.cardId];
+  if (!isEquipmentCard(eqDef)) {
+    return { ...state, log: appendLog(state, "Esta carta não é um equipamento.") };
+  }
+
+  const target = state.troops[targetTroopId];
+  if (!target || target.owner !== player) {
+    return { ...state, log: appendLog(state, "Escolha uma tropa aliada como alvo.") };
+  }
+  if (target.zone !== "base" && target.zone !== "arena") {
+    return { ...state, log: appendLog(state, "Só é possível equipar tropas na base ou arena.") };
+  }
+  if (target.currentHealth <= 0) {
+    return { ...state, log: appendLog(state, "Alvo inválido.") };
+  }
+  if (target.equipmentId) {
+    return { ...state, log: appendLog(state, "Esta tropa já tem um equipamento.") };
+  }
+
+  const payment = getEssenceCost(eqDef);
+  const corruptionCost = getCorruptionCost(eqDef);
+  if (!canAffordCardCost(state, player, eqDef, payment)) {
+    return {
+      ...state,
+      log: appendLog(state, `Recursos insuficientes para ${eqDef.name} (${formatCardCost(eqDef)}).`),
+    };
+  }
+
+  let next = state;
+  if (payment.exhaust > 0) {
+    const paid = payEssenceCost(next, player, payment);
+    if (!paid.ok) return { ...state, log: appendLog(state, "Essência insuficiente.") };
+    next = paid.state;
+  }
+  if (corruptionCost > 0) {
+    const paid = payCorruptionCost(next, player, corruptionCost);
+    if (!paid.ok) return { ...state, log: appendLog(state, "Corrupção insuficiente.") };
+    next = paid.state;
+  }
+
+  const hand = next.players[player].hand.filter((id) => id !== equipmentInstanceId);
+  const players = [...next.players] as GameState["players"];
+  players[player] = { ...next.players[player], hand };
+
+  const troops = { ...next.troops };
+  delete troops[equipmentInstanceId];
+
+  const bonusAtk = eqDef.attack;
+  const bonusHp = eqDef.health;
+  const eqId = `equip-${next.nextInstanceId}`;
+  const equipments = {
+    ...next.equipments,
+    [eqId]: {
+      instanceId: eqId,
+      cardId: eqInst.cardId,
+      owner: player,
+      troopId: targetTroopId,
+    },
+  };
+
+  troops[targetTroopId] = {
+    ...target,
+    equipmentId: eqId,
+    attack: target.attack + bonusAtk,
+    healthBonus: target.healthBonus + bonusHp,
+    currentHealth: target.currentHealth + bonusHp,
+  };
+
+  const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
+  const bonusLabel =
+    bonusAtk > 0 || bonusHp > 0
+      ? ` (+${bonusAtk}/+${bonusHp})`
+      : "";
+
+  return sanitizePlayerHands({
+    ...next,
+    players,
+    troops,
+    equipments,
+    nextInstanceId: next.nextInstanceId + 1,
+    log: appendLog(
+      next,
+      `Jogador ${player + 1} equipou ${eqDef.name} em ${troopName}${bonusLabel}. Custo: ${formatCardCost(eqDef)}.`,
+    ),
+  });
+}
+
 function activateArtifact(state: GameState, artifactId: string, sacrificeTroopId?: string): GameState {
   if (state.turnPhase !== "main" || state.combat) return state;
   const player = state.activePlayer;
@@ -1084,6 +1197,9 @@ function applyAction(state: GameState, action: GameAction): GameState {
 
     case "ACTIVATE_ARTIFACT":
       return activateArtifact(state, action.artifactId, action.sacrificeTroopId);
+
+    case "EQUIP_TROOP":
+      return equipTroop(state, action.equipmentInstanceId, action.targetTroopId);
 
     default:
       return state;

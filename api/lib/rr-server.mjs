@@ -156,7 +156,7 @@ function isDeckableCard(def) {
   if (!def || def.isToken) return false;
   if (def.leaderFormOf) return true;
   const type = getCardType(def);
-  return type === "troop" || type === "spell" || type === "artifact";
+  return type === "troop" || type === "spell" || type === "artifact" || type === "equipment";
 }
 function isLeaderFormCard(def) {
   return Boolean(def?.leaderFormOf);
@@ -777,6 +777,89 @@ function applyDeckoutLoss(state, player) {
   };
 }
 
+// src/game/equipment.ts
+function isEquipmentCard(def) {
+  return Boolean(def && getCardType(def) === "equipment");
+}
+function getEnemyEquippedTroops(state, player) {
+  const enemy = player === 0 ? 1 : 0;
+  return Object.values(state.troops).filter(
+    (t) => t.owner === enemy && t.equipmentId !== null && (t.zone === "base" || t.zone === "arena") && t.currentHealth > 0
+  );
+}
+function destroyEquipmentOnTroop(state, troopId, logPrefix) {
+  const troop = state.troops[troopId];
+  if (!troop?.equipmentId) return state;
+  const eq = state.equipments[troop.equipmentId];
+  if (!eq) {
+    const troops2 = { ...state.troops, [troopId]: { ...troop, equipmentId: null } };
+    return { ...state, troops: troops2 };
+  }
+  const eqDef = state.catalog[eq.cardId];
+  const bonusAtk = eqDef?.attack ?? 0;
+  const bonusHp = eqDef?.health ?? 0;
+  const troops = { ...state.troops };
+  troops[troopId] = {
+    ...troop,
+    equipmentId: null,
+    attack: Math.max(0, troop.attack - bonusAtk),
+    healthBonus: Math.max(0, troop.healthBonus - bonusHp),
+    currentHealth: Math.max(1, troop.currentHealth - bonusHp)
+  };
+  const equipments = { ...state.equipments };
+  delete equipments[eq.instanceId];
+  const owner = troop.owner;
+  const players = [...state.players];
+  players[owner] = {
+    ...players[owner],
+    discard: [...players[owner].discard, eq.cardId]
+  };
+  const eqName = eqDef?.name ?? eq.cardId;
+  return {
+    ...state,
+    troops,
+    equipments,
+    players,
+    log: appendLog(state, `${logPrefix} \u2014 ${eqName} foi destru\xEDdo.`)
+  };
+}
+function destroyEnemyRelic(state, caster) {
+  const enemy = caster === 0 ? 1 : 0;
+  const enemyArtifacts = Object.values(state.artifacts).filter((a) => a.owner === enemy);
+  if (enemyArtifacts.length > 0) {
+    const target = enemyArtifacts[0];
+    const targetName = state.catalog[target.cardId]?.name ?? "Artefato";
+    const artifacts = { ...state.artifacts };
+    delete artifacts[target.instanceId];
+    const players = [...state.players];
+    players[enemy] = {
+      ...players[enemy],
+      discard: [...players[enemy].discard, target.cardId]
+    };
+    return {
+      ...state,
+      artifacts,
+      players,
+      log: appendLog(state, `${targetName} do Jogador ${enemy + 1} foi destru\xEDdo!`)
+    };
+  }
+  const equipped = getEnemyEquippedTroops(state, caster);
+  if (equipped.length === 0) {
+    return {
+      ...state,
+      log: appendLog(state, "Nenhum artefato/equipamento inimigo para destruir.")
+    };
+  }
+  const victim = equipped[0];
+  const eq = state.equipments[victim.equipmentId];
+  const eqName = eq ? state.catalog[eq.cardId]?.name ?? "Equipamento" : "Equipamento";
+  return destroyEquipmentOnTroop(
+    state,
+    victim.instanceId,
+    `${eqName} em ${getTroopName(state, victim)}`
+  );
+}
+
 // src/game/keywords.ts
 function cardHasKeyword(def, keyword) {
   return def?.keywords?.includes(keyword) ?? false;
@@ -961,23 +1044,7 @@ function applyLandingEffect(state, troop) {
   const def = state.catalog[troop.cardId];
   if (!def?.landingEffect || !cardHasKeyword(def, "aterrisagem")) return state;
   if (def.landingEffect === "destroy-enemy-artifact") {
-    const enemy = opponent(troop.owner);
-    const enemyArtifacts = Object.values(state.artifacts).filter((a) => a.owner === enemy);
-    if (enemyArtifacts.length === 0) {
-      return { ...state, log: appendLog(state, `Aterrisagem \u2014 nenhum artefato inimigo para destruir.`) };
-    }
-    const target = enemyArtifacts[0];
-    const targetName = state.catalog[target.cardId]?.name ?? "Artefato";
-    const artifacts = { ...state.artifacts };
-    delete artifacts[target.instanceId];
-    const players = [...state.players];
-    players[enemy] = { ...players[enemy], discard: [...players[enemy].discard, target.cardId] };
-    return {
-      ...state,
-      artifacts,
-      players,
-      log: appendLog(state, `Aterrisagem \u2014 ${def.name} destruiu ${targetName}!`)
-    };
+    return destroyEnemyRelic(state, troop.owner);
   }
   return state;
 }
@@ -1023,6 +1090,7 @@ function tutorFromDeck(state, player, match, notFoundMsg) {
       exhausted: false,
       pinned: false,
       movementLocked: false,
+      equipmentId: null,
       zone: "hand",
       arenaId: null
     }
@@ -1042,6 +1110,7 @@ function tutorFromDeck(state, player, match, notFoundMsg) {
   };
 }
 function applySpellEffect(state, caster, effect, targetTroopId, spellName, targetArtifactId) {
+  void targetArtifactId;
   const arenaId = state.combat?.arenaId ?? null;
   switch (effect) {
     case "draw-two": {
@@ -1205,26 +1274,7 @@ function applySpellEffect(state, caster, effect, targetTroopId, spellName, targe
       return state;
     }
     case "destroy-artifact": {
-      const enemy = opponent(caster);
-      const enemyArtifacts = Object.values(state.artifacts).filter((a) => a.owner === enemy);
-      if (enemyArtifacts.length === 0) {
-        return { ...state, log: appendLog(state, "Nenhum artefato/equipamento inimigo para destruir.") };
-      }
-      const target = targetArtifactId ? state.artifacts[targetArtifactId] : enemyArtifacts[0];
-      if (!target || target.owner !== enemy) {
-        return { ...state, log: appendLog(state, "Artefato alvo inv\xE1lido.") };
-      }
-      const targetName = state.catalog[target.cardId]?.name ?? "Artefato";
-      const artifacts = { ...state.artifacts };
-      delete artifacts[target.instanceId];
-      const players = [...state.players];
-      players[enemy] = { ...players[enemy], discard: [...players[enemy].discard, target.cardId] };
-      return {
-        ...state,
-        artifacts,
-        players,
-        log: appendLog(state, `${targetName} do Jogador ${enemy + 1} foi destru\xEDdo!`)
-      };
+      return destroyEnemyRelic(state, caster);
     }
     default:
       return state;
@@ -1335,7 +1385,8 @@ function defaultTroopFields(def) {
       currentHealth: 1,
       attachedSpell: null,
       healthBonus: 0,
-      movementLocked: false
+      movementLocked: false,
+      equipmentId: null
     };
   }
   return {
@@ -1343,7 +1394,8 @@ function defaultTroopFields(def) {
     currentHealth: def.health,
     attachedSpell: null,
     healthBonus: 0,
-    movementLocked: false
+    movementLocked: false,
+    equipmentId: null
   };
 }
 function rollD6() {
@@ -1645,6 +1697,7 @@ function drawCards(player, count, troops, catalog, owner, nextId) {
       exhausted: false,
       pinned: false,
       movementLocked: false,
+      equipmentId: null,
       zone: "hand",
       arenaId: null
     };
@@ -1700,6 +1753,7 @@ function createInitialGame(catalogData, options = {}) {
     troops: {},
     essencePool: {},
     artifacts: {},
+    equipments: {},
     players,
     arenas: [],
     activePlayer: 0,
@@ -1845,7 +1899,8 @@ function spawnTroopInArena(state, owner, arenaId, cardId, attack, health, opts) 
     arenaId,
     attachedSpell: null,
     healthBonus: 0,
-    movementLocked: false
+    movementLocked: false,
+    equipmentId: null
   };
   return {
     ...state,
@@ -2319,16 +2374,18 @@ function alliesInCombatArena(state, player) {
   if (!state.combat) return [];
   return livingTroops(getTroopsInZone(state, player, "arena", state.combat.arenaId));
 }
-function allStrikeTroopsAttacked(state, player) {
-  if (!state.combat) return false;
+function canTroopAttackInStrike(combat, troop) {
+  return !combat.attackedThisStrike.includes(troop.instanceId) && !troop.exhausted && !troop.attackSuppressed;
+}
+function hasAttackableAlliesInStrike(state, player) {
+  if (!state.combat || state.combat.subPhase !== "strike") return false;
   const allies = alliesInCombatArena(state, player);
-  if (allies.length === 0) return true;
-  return allies.every((t) => state.combat.attackedThisStrike.includes(t.instanceId));
+  return allies.some((t) => canTroopAttackInStrike(state.combat, t));
 }
 function tryAutoEndStrike(state) {
   if (!state.combat || state.combat.subPhase !== "strike") return state;
   const striker = state.combat.strikingPlayer;
-  if (!allStrikeTroopsAttacked(state, striker)) return state;
+  if (hasAttackableAlliesInStrike(state, striker)) return state;
   return endCombatStrike({
     ...state,
     log: appendLog(
@@ -2867,6 +2924,7 @@ function buryDeadTroops(state) {
   }
   const troops = { ...next.troops };
   const players = [...next.players];
+  let equipments = { ...next.equipments };
   const buriedNames = [];
   const exiledNames = [];
   for (const t of dead) {
@@ -2874,6 +2932,13 @@ function buryDeadTroops(state) {
     const pl = { ...players[p] };
     pl.hand = pl.hand.filter((id) => id !== t.instanceId);
     const name = getTroopName(next, t);
+    if (t.equipmentId) {
+      const eq = equipments[t.equipmentId];
+      if (eq) {
+        pl.discard = [...pl.discard, eq.cardId];
+        delete equipments[t.equipmentId];
+      }
+    }
     const exiled = t.arenaId !== null && arenaExilesDeadTroops(state, t.arenaId);
     if (exiled) {
       pl.exile = [...pl.exile, t.cardId];
@@ -2885,7 +2950,7 @@ function buryDeadTroops(state) {
     players[p] = pl;
     delete troops[t.instanceId];
   }
-  next = { ...next, troops, players };
+  next = { ...next, troops, players, equipments };
   if (buriedNames.length === 1) {
     next = {
       ...next,
@@ -3028,6 +3093,12 @@ function playTroop(state, troopId) {
   }
   if (getCardType(def) === "artifact") {
     return playArtifact(state, troopId, player, def);
+  }
+  if (isEquipmentCard(def)) {
+    return {
+      ...state,
+      log: appendLog(state, `${def.name} \u2014 selecione a carta e clique em uma tropa aliada para equipar.`)
+    };
   }
   if (!isTroopCard(def)) {
     return {
@@ -3669,6 +3740,91 @@ function playArtifact(state, troopId, player, def) {
     log: appendLog(next, `Jogador ${player + 1} colocou ${def.name} em jogo (artefato). Custo: ${formatCardCost(def)}.`)
   });
 }
+function equipTroop(state, equipmentInstanceId, targetTroopId) {
+  if (state.matchPhase !== "playing" || state.turnPhase !== "main" || state.combat) {
+    return state;
+  }
+  const player = state.activePlayer;
+  const pl = state.players[player];
+  if (!pl.hand.includes(equipmentInstanceId)) {
+    return { ...state, log: appendLog(state, "Equipamento n\xE3o est\xE1 na sua m\xE3o.") };
+  }
+  const eqInst = state.troops[equipmentInstanceId];
+  if (!eqInst || eqInst.owner !== player) return state;
+  const eqDef = state.catalog[eqInst.cardId];
+  if (!isEquipmentCard(eqDef)) {
+    return { ...state, log: appendLog(state, "Esta carta n\xE3o \xE9 um equipamento.") };
+  }
+  const target = state.troops[targetTroopId];
+  if (!target || target.owner !== player) {
+    return { ...state, log: appendLog(state, "Escolha uma tropa aliada como alvo.") };
+  }
+  if (target.zone !== "base" && target.zone !== "arena") {
+    return { ...state, log: appendLog(state, "S\xF3 \xE9 poss\xEDvel equipar tropas na base ou arena.") };
+  }
+  if (target.currentHealth <= 0) {
+    return { ...state, log: appendLog(state, "Alvo inv\xE1lido.") };
+  }
+  if (target.equipmentId) {
+    return { ...state, log: appendLog(state, "Esta tropa j\xE1 tem um equipamento.") };
+  }
+  const payment = getEssenceCost(eqDef);
+  const corruptionCost = getCorruptionCost(eqDef);
+  if (!canAffordCardCost(state, player, eqDef, payment)) {
+    return {
+      ...state,
+      log: appendLog(state, `Recursos insuficientes para ${eqDef.name} (${formatCardCost(eqDef)}).`)
+    };
+  }
+  let next = state;
+  if (payment.exhaust > 0) {
+    const paid = payEssenceCost(next, player, payment);
+    if (!paid.ok) return { ...state, log: appendLog(state, "Ess\xEAncia insuficiente.") };
+    next = paid.state;
+  }
+  if (corruptionCost > 0) {
+    const paid = payCorruptionCost(next, player, corruptionCost);
+    if (!paid.ok) return { ...state, log: appendLog(state, "Corrup\xE7\xE3o insuficiente.") };
+    next = paid.state;
+  }
+  const hand = next.players[player].hand.filter((id) => id !== equipmentInstanceId);
+  const players = [...next.players];
+  players[player] = { ...next.players[player], hand };
+  const troops = { ...next.troops };
+  delete troops[equipmentInstanceId];
+  const bonusAtk = eqDef.attack;
+  const bonusHp = eqDef.health;
+  const eqId = `equip-${next.nextInstanceId}`;
+  const equipments = {
+    ...next.equipments,
+    [eqId]: {
+      instanceId: eqId,
+      cardId: eqInst.cardId,
+      owner: player,
+      troopId: targetTroopId
+    }
+  };
+  troops[targetTroopId] = {
+    ...target,
+    equipmentId: eqId,
+    attack: target.attack + bonusAtk,
+    healthBonus: target.healthBonus + bonusHp,
+    currentHealth: target.currentHealth + bonusHp
+  };
+  const troopName = next.catalog[target.cardId]?.name ?? targetTroopId;
+  const bonusLabel = bonusAtk > 0 || bonusHp > 0 ? ` (+${bonusAtk}/+${bonusHp})` : "";
+  return sanitizePlayerHands({
+    ...next,
+    players,
+    troops,
+    equipments,
+    nextInstanceId: next.nextInstanceId + 1,
+    log: appendLog(
+      next,
+      `Jogador ${player + 1} equipou ${eqDef.name} em ${troopName}${bonusLabel}. Custo: ${formatCardCost(eqDef)}.`
+    )
+  });
+}
 function activateArtifact(state, artifactId, sacrificeTroopId) {
   if (state.turnPhase !== "main" || state.combat) return state;
   const player = state.activePlayer;
@@ -3762,6 +3918,8 @@ function applyAction(state, action) {
       return evolveLeader(state, action.player, action.formId, action.formInstanceId);
     case "ACTIVATE_ARTIFACT":
       return activateArtifact(state, action.artifactId, action.sacrificeTroopId);
+    case "EQUIP_TROOP":
+      return equipTroop(state, action.equipmentInstanceId, action.targetTroopId);
     default:
       return state;
   }
@@ -3873,6 +4031,10 @@ function inferActionPlayer(state, action) {
     case "ACTIVATE_ARTIFACT": {
       const artifact = state.artifacts[action.artifactId];
       return artifact?.owner ?? null;
+    }
+    case "EQUIP_TROOP": {
+      const inst = state.troops[action.equipmentInstanceId];
+      return inst?.owner ?? null;
     }
     default:
       return null;
@@ -4677,6 +4839,47 @@ var cards_default = {
       faction: "neutra"
     },
     {
+      id: "equip-lamina-pacto",
+      name: "L\xE2mina do Pacto",
+      cardType: "equipment",
+      faction: "neutra",
+      cost: 2,
+      attack: 2,
+      health: 0,
+      hasEssenceSymbol: false
+    },
+    {
+      id: "equip-escudo-delta",
+      name: "Escudo Delta",
+      cardType: "equipment",
+      faction: "delta",
+      cost: 2,
+      attack: 0,
+      health: 2,
+      hasEssenceSymbol: false
+    },
+    {
+      id: "equip-amuleto-sombrio",
+      name: "Amuleto Sombrio",
+      cardType: "equipment",
+      faction: "neutra",
+      cost: 1,
+      corruptionCost: 1,
+      attack: 1,
+      health: 1,
+      hasEssenceSymbol: false
+    },
+    {
+      id: "equip-corrente-ferro",
+      name: "Corrente de Ferro",
+      cardType: "equipment",
+      faction: "neutra",
+      cost: 1,
+      attack: 0,
+      health: 1,
+      hasEssenceSymbol: false
+    },
+    {
       id: "altar-sombrio",
       name: "Altar Sombrio",
       cardType: "artifact",
@@ -4778,6 +4981,13 @@ var cards_default = {
     "noah-vampiro-inverno",
     "noah-delta-empatia",
     "altar-sombrio",
+    "equip-lamina-pacto",
+    "equip-lamina-pacto",
+    "equip-escudo-delta",
+    "equip-escudo-delta",
+    "equip-amuleto-sombrio",
+    "equip-corrente-ferro",
+    "equip-corrente-ferro",
     "destruidor-reliquias",
     "fragmentar"
   ]

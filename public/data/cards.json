@@ -738,6 +738,47 @@
       "faction": "neutra"
     },
     {
+      "id": "equip-lamina-pacto",
+      "name": "Lâmina do Pacto",
+      "cardType": "equipment",
+      "faction": "neutra",
+      "cost": 2,
+      "attack": 2,
+      "health": 0,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "equip-escudo-delta",
+      "name": "Escudo Delta",
+      "cardType": "equipment",
+      "faction": "delta",
+      "cost": 2,
+      "attack": 0,
+      "health": 2,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "equip-amuleto-sombrio",
+      "name": "Amuleto Sombrio",
+      "cardType": "equipment",
+      "faction": "neutra",
+      "cost": 1,
+      "corruptionCost": 1,
+      "attack": 1,
+      "health": 1,
+      "hasEssenceSymbol": false
+    },
+    {
+      "id": "equip-corrente-ferro",
+      "name": "Corrente de Ferro",
+      "cardType": "equipment",
+      "faction": "neutra",
+      "cost": 1,
+      "attack": 0,
+      "health": 1,
+      "hasEssenceSymbol": false
+    },
+    {
       "id": "altar-sombrio",
       "name": "Altar Sombrio",
       "cardType": "artifact",
@@ -839,6 +880,13 @@
     "noah-vampiro-inverno",
     "noah-delta-empatia",
     "altar-sombrio",
+    "equip-lamina-pacto",
+    "equip-lamina-pacto",
+    "equip-escudo-delta",
+    "equip-escudo-delta",
+    "equip-amuleto-sombrio",
+    "equip-corrente-ferro",
+    "equip-corrente-ferro",
     "destruidor-reliquias",
     "fragmentar"
   ]

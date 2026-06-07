@@ -10,7 +10,7 @@ Documento de design alinhado ao código (`src/game/types.ts`, `public/data/cards
 |------|------|----------------|
 | **Tropa** | `"troop"` | Convoca na base, move, combate |
 | **Feitiço** | `"spell"` | Lança da mão (Encore, Pele, Omega, etc.) |
-| **Equipamento** | `"equipment"` | *Em breve* — não entra no baralho ainda |
+| **Equipamento** | `"equipment"` | Equipa em tropa aliada (base/arena); +ATK/+HP; 1 por tropa |
 | **Artefato** | `"artifact"` | Jogável na base; efeito piloto: sacrificar tropa → +1 Corrupção |
 | **Líder** | `"leader"` | Fora do baralho; define o deck e habilidades ativas |
 

@@ -240,6 +240,18 @@ h1 {
   position: relative;
 }
 
+.board-card-wrap--equipped::before {
+  content: "⚔";
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 0.65rem;
+  color: #93c5fd;
+  text-shadow: 0 0 4px rgba(59, 130, 246, 0.8);
+  pointer-events: none;
+  z-index: 5;
+}
+
 .board-card-wrap--shielded::after {
   content: "";
   position: absolute;

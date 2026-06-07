@@ -30,6 +30,7 @@ export function spawnTroopInArena(
     attachedSpell: null,
     healthBonus: 0,
     movementLocked: false,
+    equipmentId: null,
   };
 
   return {

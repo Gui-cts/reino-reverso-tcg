@@ -34,9 +34,16 @@ export {
   getCombatAssigningPlayer,
   getContestedArenaNames,
   hasAttackedThisStrike,
+  hasAttackableAlliesInStrike,
   isCombatMagicPhase,
   isCombatStrikePhase,
 } from "./combat";
+export {
+  destroyEnemyRelic,
+  getEquipmentDef,
+  isEquipmentCard,
+  troopHasEquipment,
+} from "./equipment";
 export {
   arenaBlocksNormalExit,
   arenaUsesRandomCombatTargets,

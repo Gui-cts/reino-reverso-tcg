@@ -62,6 +62,7 @@ export function drawCards(
       exhausted: false,
       pinned: false,
       movementLocked: false,
+      equipmentId: null,
       zone: "hand",
       arenaId: null,
     };
@@ -147,6 +148,7 @@ export function createInitialGame(
     troops: {},
     essencePool: {},
     artifacts: {},
+    equipments: {},
     players,
     arenas: [],
     activePlayer: 0,

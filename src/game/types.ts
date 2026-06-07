@@ -199,6 +199,16 @@ export interface TroopInstance {
   isFrostborn?: boolean;
   /** Marca de Empatia — tropa marcada pela habilidade empathy-mark. */
   hasEmpathy?: boolean;
+  /** Equipamento preso nesta tropa (id em `GameState.equipments`). */
+  equipmentId: string | null;
+}
+
+/** Equipamento em jogo — anexado a uma tropa aliada. */
+export interface EquipmentInstance {
+  instanceId: string;
+  cardId: string;
+  owner: PlayerId;
+  troopId: string;
 }
 
 /** Artefato permanente em jogo na base do jogador. */
@@ -326,6 +336,8 @@ export interface GameState {
   essencePool: Record<string, EssenceInstance>;
   /** Artefatos em jogo (permanentes na base). */
   artifacts: Record<string, ArtifactInstance>;
+  /** Equipamentos anexados a tropas. */
+  equipments: Record<string, EquipmentInstance>;
   players: [PlayerState, PlayerState];
   arenas: ArenaState[];
   activePlayer: PlayerId;
@@ -384,4 +396,5 @@ export type GameAction =
     }
   | { type: "USE_LEADER_ABILITY"; player: PlayerId; targetTroopId: string }
   | { type: "EVOLVE_LEADER"; player: PlayerId; formId: string; formInstanceId: string }
-  | { type: "ACTIVATE_ARTIFACT"; artifactId: string; sacrificeTroopId?: string };
+  | { type: "ACTIVATE_ARTIFACT"; artifactId: string; sacrificeTroopId?: string }
+  | { type: "EQUIP_TROOP"; equipmentInstanceId: string; targetTroopId: string };

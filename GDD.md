@@ -294,7 +294,7 @@ Pool de **4** arenas; vencedor do Abismo escolhe **1** e **começa** a fase.
 | **Tropa** | v1 — ataque, vida, custo em Essência; algumas com ✦ |
 | **Magia** | Piloto v1 — Encore, Pele de Ferro, Caldeirão de Sangue (ver §11.1) |
 | **Artefato** | Planejado (ex.: Poço de Essência, Estandarte…) |
-| **Equipamento** | Planejado (ex.: Espada do Noah, Canino de Gelo e Chamas…) |
+| **Equipamento** | Equipa em tropa aliada na fase principal (+ATK/+HP) |
 | **Líder** | Fora do campo; define baralho |
 
 Recursos planejados além de Essência: **Corrupção** (cartas mais agressivas).
@@ -382,7 +382,7 @@ Checklist do que o código atual cobre:
 
 Fora do protótipo atual:
 
-- [ ] Equipamentos
+- [x] Equipamentos piloto (Lâmina do Pacto, Escudo Delta, Amuleto Sombrio, Corrente de Ferro)
 - [ ] UI de deckbuilder com validação por Líder
 - [ ] Pools completos de arenas Abismo/RR além do piloto
 

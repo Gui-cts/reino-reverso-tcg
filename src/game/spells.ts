@@ -74,7 +74,7 @@ export function defaultTroopFields(
   def: CardDefinition,
 ): Pick<
   TroopInstance,
-  "attack" | "currentHealth" | "attachedSpell" | "healthBonus" | "movementLocked"
+  "attack" | "currentHealth" | "attachedSpell" | "healthBonus" | "movementLocked" | "equipmentId"
 > {
   if (isSpellCard(def)) {
     return {
@@ -83,6 +83,7 @@ export function defaultTroopFields(
       attachedSpell: null,
       healthBonus: 0,
       movementLocked: false,
+      equipmentId: null,
     };
   }
   return {
@@ -91,6 +92,7 @@ export function defaultTroopFields(
     attachedSpell: null,
     healthBonus: 0,
     movementLocked: false,
+    equipmentId: null,
   };
 }
 

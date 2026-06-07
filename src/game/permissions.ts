@@ -129,6 +129,10 @@ export function inferActionPlayer(state: GameState, action: GameAction): PlayerI
       const artifact = state.artifacts[action.artifactId];
       return artifact?.owner ?? null;
     }
+    case "EQUIP_TROOP": {
+      const inst = state.troops[action.equipmentInstanceId];
+      return inst?.owner ?? null;
+    }
     default:
       return null;
   }

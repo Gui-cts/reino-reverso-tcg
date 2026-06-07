@@ -31,9 +31,12 @@ import {
   canAffordSpellCost,
   canPlaySpellNow,
   canTargetSpell,
+  canAffordCardCost,
   formatCardCost,
   describeSpellEffect,
   getCardSpeed,
+  getEquipmentDef,
+  isEquipmentCard,
   isSpellCard,
   spellEffectLabel,
   spellRequiresTarget,
@@ -66,6 +69,8 @@ type UiSelection = {
   leaderAbilityTargetingPlayer: PlayerId | null;
   /** Artefato selecionado para ativação — próximo clique em tropa sacrifica. */
   artifactTargetingId: string | null;
+  /** Equipamento selecionado na mão — próximo clique em tropa aliada equipa. */
+  equipInstanceId: string | null;
 };
 
 type AppScreen = "menu" | "game" | "online-wait";
@@ -84,6 +89,7 @@ export class GameApp {
     spellInstanceId: null,
     leaderAbilityTargetingPlayer: null,
     artifactTargetingId: null,
+    equipInstanceId: null,
     mulliganIndices: new Set(),
   };
   private root: HTMLElement;
@@ -271,8 +277,9 @@ export class GameApp {
       spellInstanceId: null,
       mulliganIndices: new Set(),
       leaderAbilityTargetingPlayer: null,
-      artifactTargetingId: null,
-    };
+    artifactTargetingId: null,
+    equipInstanceId: null,
+  };
     this.render();
     void this.runCpuLoop();
   }
@@ -315,16 +322,27 @@ export class GameApp {
     this.selection.mulliganIndices = new Set();
     this.selection.leaderAbilityTargetingPlayer = null;
     this.selection.artifactTargetingId = null;
+    this.selection.equipInstanceId = null;
     this.cpuLoopGeneration++;
+    if (view.state.matchPhase === "finished") {
+      this.stopOnlinePolling();
+    }
     this.render();
   }
 
   private async pollOnlineRoom(): Promise<void> {
     if (!this.onlineRoomId || !this.onlineToken || this.onlineBusy) return;
+    if (this.state?.matchPhase === "finished") {
+      this.stopOnlinePolling();
+      return;
+    }
     try {
       const view = await apiFetchRoom(this.onlineRoomId, this.onlineToken);
       if (view.version > this.stateVersion) {
         this.applyOnlineView(view);
+      }
+      if (view.state.matchPhase === "finished") {
+        this.stopOnlinePolling();
       }
       if (this.screen === "online-wait" && view.bothConnected) {
         this.screen = "game";
@@ -444,6 +462,7 @@ export class GameApp {
     this.selection.spellInstanceId = null;
     this.selection.leaderAbilityTargetingPlayer = null;
     this.selection.artifactTargetingId = null;
+    this.selection.equipInstanceId = null;
     this.cpuLoopGeneration++;
     this.render();
     void this.runCpuLoop();
@@ -1555,19 +1574,38 @@ export class GameApp {
       if (!def) return;
 
       const isSpell = isSpellCard(def);
+      const isEquip = isEquipmentCard(def);
       const canSelectSpell =
         isSpell &&
         canInteractHand &&
         this.isLocalHumanSeat(s, player) &&
         canPlaySpellNow(s, player, def!) &&
         canAffordSpellCost(s, player, def!);
+      const canSelectEquip =
+        isEquip &&
+        canInteractHand &&
+        this.isLocalHumanSeat(s, player) &&
+        canAffordCardCost(s, player, def!);
       const chip = cardFromDef(def!, {
             cost: def!.cost,
             attack: def!.attack,
             health: def!.health,
             hasEssenceSymbol: def!.hasEssenceSymbol,
-            selected: this.selection.spellInstanceId === troopId || this.selection.troopId === troopId,
-            onClick: canSelectSpell
+            selected:
+              this.selection.spellInstanceId === troopId ||
+              this.selection.troopId === troopId ||
+              this.selection.equipInstanceId === troopId,
+            onClick: canSelectEquip
+              ? () => {
+                  this.selection.equipInstanceId =
+                    this.selection.equipInstanceId === troopId ? null : troopId;
+                  this.selection.spellInstanceId = null;
+                  this.selection.troopId = null;
+                  this.selection.leaderAbilityTargetingPlayer = null;
+                  this.selection.artifactTargetingId = null;
+                  this.render();
+                }
+              : canSelectSpell
               ? () => {
                   const effect = def!.spellEffect;
                   if (
@@ -1810,6 +1848,27 @@ export class GameApp {
       }
     }
 
+    if (this.selection.equipInstanceId && s.matchPhase === "playing") {
+      const eqInst = s.troops[this.selection.equipInstanceId];
+      const eqDef = eqInst ? s.catalog[eqInst.cardId] : undefined;
+      if (eqInst?.owner === human && eqDef && isEquipmentCard(eqDef)) {
+        const eqHint = document.createElement("p");
+        eqHint.className = "mulligan-hint";
+        eqHint.style.color = "#93c5fd";
+        eqHint.textContent = `${eqDef.name} (+${eqDef.attack}/+${eqDef.health}) — clique em tropa aliada na base ou arena.`;
+        actions.appendChild(eqHint);
+
+        const cancelEq = document.createElement("button");
+        cancelEq.className = "secondary";
+        cancelEq.textContent = "Cancelar equipamento";
+        cancelEq.onclick = () => {
+          this.selection.equipInstanceId = null;
+          this.render();
+        };
+        btns.appendChild(cancelEq);
+      }
+    }
+
     if (this.humanPassResolve) {
       const passHint = document.createElement("p");
       passHint.className = "mulligan-hint";
@@ -1853,6 +1912,15 @@ export class GameApp {
           ? "Combate: vez da CPU…"
           : `Combate: vez do Jogador ${striker + 1}…`;
       actions.appendChild(combatHint);
+
+      if (this.canControlPlayer(s, striker)) {
+        const endStrikeBtn = document.createElement("button");
+        endStrikeBtn.className = "secondary";
+        endStrikeBtn.textContent = "Encerrar golpe";
+        endStrikeBtn.title = "Passa a vez mesmo com tropas que ainda poderiam atacar.";
+        endStrikeBtn.onclick = () => this.dispatchAction({ type: "END_COMBAT_STRIKE" });
+        btns.appendChild(endStrikeBtn);
+      }
 
     } else if (canAct && s.turnPhase === "main" && !s.combat) {
       const essencePanel = document.createElement("div");
@@ -2098,6 +2166,7 @@ export class GameApp {
           if (def.artifactEffect === "sacrifice-for-corruption") {
             if (this.selection.artifactTargetingId === art.instanceId) {
               this.selection.artifactTargetingId = null;
+    this.selection.equipInstanceId = null;
             } else {
               this.selection.artifactTargetingId = art.instanceId;
               this.selection.spellInstanceId = null;
@@ -2171,6 +2240,7 @@ export class GameApp {
       onClick = (e) => {
         e.stopPropagation();
         this.selection.artifactTargetingId = null;
+    this.selection.equipInstanceId = null;
         this.dispatchAction({
           type: "ACTIVATE_ARTIFACT",
           artifactId: artId,
@@ -2179,6 +2249,26 @@ export class GameApp {
       };
       subLabel = "clique — sacrificar no artefato";
       selected = true;
+      }
+    } else if (
+      this.selection.equipInstanceId &&
+      (troop.zone === "base" || troop.zone === "arena") &&
+      troop.currentHealth > 0
+    ) {
+      const eqInst = s.troops[this.selection.equipInstanceId];
+      if (eqInst && troop.owner === eqInst.owner && !troop.equipmentId) {
+        const eqId = this.selection.equipInstanceId;
+        onClick = (e) => {
+          e.stopPropagation();
+          this.selection.equipInstanceId = null;
+          this.dispatchAction({
+            type: "EQUIP_TROOP",
+            equipmentInstanceId: eqId,
+            targetTroopId: troop.instanceId,
+          });
+        };
+        subLabel = "clique — equipar";
+        selected = true;
       }
     } else if (inCombatArena && combat && isCombatStrikePhase(s)) {
       const assigningPlayer = getCombatAssigningPlayer(combat);
@@ -2287,6 +2377,12 @@ export class GameApp {
       }
     }
 
+    const eqDef = getEquipmentDef(s, troop);
+    if (eqDef) {
+      const eqLabel = `⚔ ${eqDef.name}`;
+      subLabel = subLabel ? `${eqLabel} · ${subLabel}` : eqLabel;
+    }
+
     const boardOpts = {
       attack: troop.attack,
       health: troop.currentHealth,
@@ -2313,10 +2409,11 @@ export class GameApp {
     };
 
     let chip: HTMLElement;
-    if (def) {
+      if (def) {
       const mini = cardFromDef(def, { ...boardOpts, miniature: true });
       const wrap = document.createElement("div");
       wrap.className = "board-card-wrap";
+      if (troop.equipmentId) wrap.classList.add("board-card-wrap--equipped");
       wrap.appendChild(mini);
       attachCardHoverPreview(wrap, () =>
         cardFromDef(def, {

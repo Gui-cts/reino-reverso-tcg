@@ -56,10 +56,26 @@ export function allStrikeTroopsAttacked(state: GameState, player: PlayerId): boo
   return allies.every((t) => state.combat!.attackedThisStrike.includes(t.instanceId));
 }
 
+/** Tropa ainda pode atacar neste golpe. */
+export function canTroopAttackInStrike(combat: import("./types").CombatState, troop: TroopInstance): boolean {
+  return (
+    !combat.attackedThisStrike.includes(troop.instanceId) &&
+    !troop.exhausted &&
+    !troop.attackSuppressed
+  );
+}
+
+/** Há tropa aliada que ainda pode atacar neste golpe. */
+export function hasAttackableAlliesInStrike(state: GameState, player: PlayerId): boolean {
+  if (!state.combat || state.combat.subPhase !== "strike") return false;
+  const allies = alliesInCombatArena(state, player);
+  return allies.some((t) => canTroopAttackInStrike(state.combat!, t));
+}
+
 function tryAutoEndStrike(state: GameState): GameState {
   if (!state.combat || state.combat.subPhase !== "strike") return state;
   const striker = state.combat.strikingPlayer;
-  if (!allStrikeTroopsAttacked(state, striker)) return state;
+  if (hasAttackableAlliesInStrike(state, striker)) return state;
   return endCombatStrike({
     ...state,
     log: appendLog(
