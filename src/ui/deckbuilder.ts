@@ -441,6 +441,10 @@ export function renderDeckbuilderScreen(
     const deckCol = document.createElement("div");
     deckCol.className = "deck-editor__col";
     deckCol.innerHTML = `<h3 class="deck-editor__col-title">Seu baralho (${customDeck.cardIds.length})</h3>`;
+    const deckSearchSpacer = document.createElement("div");
+    deckSearchSpacer.className = "deck-editor__search-spacer";
+    deckSearchSpacer.setAttribute("aria-hidden", "true");
+    deckCol.appendChild(deckSearchSpacer);
     const deckList = document.createElement("div");
     deckList.className = "deck-editor__card-grid";
 
@@ -501,7 +505,7 @@ export function renderDeckbuilderScreen(
     editor.appendChild(main);
 
     const editorActions = document.createElement("div");
-    editorActions.className = "menu-panel__actions";
+    editorActions.className = "menu-panel__actions deck-editor__footer";
 
     const resetBtn = document.createElement("button");
     resetBtn.type = "button";

@@ -1204,6 +1204,9 @@ header {
 .deck-editor {
   padding: 1rem;
   margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
 }
 
 .deck-editor__label {
@@ -1215,7 +1218,7 @@ header {
 }
 
 .deck-editor__status {
-  margin: 0.5rem 0 0.75rem;
+  margin: 0;
   font-size: 0.85rem;
   color: var(--warn);
 }
@@ -1225,7 +1228,7 @@ header {
 }
 
 .deck-editor__preview-hint {
-  margin: 0 0 0.75rem;
+  margin: 0;
   font-size: 0.78rem;
   color: var(--muted);
   line-height: 1.4;
@@ -1271,6 +1274,16 @@ header {
   display: flex;
   gap: 0.65rem;
   align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  max-height: min(54vh, 500px);
+}
+
+.deck-editor__footer {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--panel-border);
 }
 
 .deck-editor__filters {
@@ -1330,18 +1343,39 @@ header {
   gap: 0.75rem;
   flex: 1;
   min-width: 0;
-  max-height: min(62vh, 520px);
+  min-height: 0;
+  height: 100%;
+}
+
+.deck-editor__col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .deck-editor__col-title {
   margin: 0 0 0.5rem;
   font-size: 0.88rem;
+  flex-shrink: 0;
+}
+
+.deck-editor__search-row,
+.deck-editor__search-spacer {
+  flex-shrink: 0;
+  margin-bottom: 0.55rem;
+}
+
+.deck-editor__search-spacer {
+  min-height: 2.45rem;
 }
 
 .deck-editor__list,
 .deck-editor__card-grid {
   overflow-y: auto;
-  max-height: min(58vh, 480px);
+  flex: 1;
+  min-height: 0;
   padding-right: 0.25rem;
 }
 
@@ -1426,6 +1460,7 @@ header {
 
   .deck-editor__main {
     flex-direction: column;
+    max-height: none;
   }
 
   .deck-editor__filters {
@@ -1436,12 +1471,17 @@ header {
 
   .deck-editor__columns {
     grid-template-columns: 1fr;
-    max-height: none;
+    height: auto;
+  }
+
+  .deck-editor__search-spacer {
+    display: none;
   }
 
   .deck-editor__list,
   .deck-editor__card-grid {
-    max-height: 280px;
+    max-height: 240px;
+    flex: none;
   }
 
   .deck-editor__card-grid {
