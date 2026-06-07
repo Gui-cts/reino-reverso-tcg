@@ -155,7 +155,7 @@ function beginCombatStrikePhase(state: GameState): GameState {
   const role =
     combat.strikingPlayer === combat.declaredBy ? "atacante" : "defensor";
 
-  return {
+  const next: GameState = {
     ...state,
     combat: {
       ...combat,
@@ -168,6 +168,7 @@ function beginCombatStrikePhase(state: GameState): GameState {
       `Golpe ${combat.strike} em ${arena.name} — Jogador ${combat.strikingPlayer + 1} (${role}): um ataque por vez.`,
     ),
   };
+  return tryAutoEndStrike(next);
 }
 
 function beginCombatMagicPhase(
@@ -380,6 +381,16 @@ export function endCombatStrike(state: GameState): GameState {
   }
 
   const { strikingPlayer, strike } = state.combat;
+  if (hasAttackableAlliesInStrike(state, strikingPlayer)) {
+    return {
+      ...state,
+      log: appendLog(
+        state,
+        "Ainda há tropas que podem atacar neste golpe — ataque com todas antes de passar.",
+      ),
+    };
+  }
+
   return advanceToNextStrike({
     ...state,
     log: appendLog(state, `Jogador ${strikingPlayer + 1} encerrou o golpe ${strike}.`),

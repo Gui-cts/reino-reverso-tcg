@@ -16,6 +16,7 @@ import {
   getRRUnansweredArenaNames,
   getPlayerEssence,
   hasAttackedThisStrike,
+  hasAttackableAlliesInStrike,
   isCombatMagicPhase,
   isCombatStrikePhase,
   isLegalCombatTarget,
@@ -1934,17 +1935,22 @@ export class GameApp {
       combatHint.className = "mulligan-hint";
       const striker = getCombatAssigningPlayer(s.combat);
       combatHint.textContent = this.canControlPlayer(s, striker)
-        ? "Golpe de combate: selecione sua tropa e clique no inimigo."
+        ? hasAttackableAlliesInStrike(s, striker)
+          ? "Golpe de combate: ataque com todas as tropas disponíveis antes de passar."
+          : "Golpe de combate: selecione sua tropa e clique no inimigo."
         : this.isCpuPlayer(s, striker)
           ? "Combate: vez da CPU…"
           : `Combate: vez do Jogador ${striker + 1}…`;
       actions.appendChild(combatHint);
 
-      if (this.canControlPlayer(s, striker)) {
+      if (
+        this.canControlPlayer(s, striker) &&
+        !hasAttackableAlliesInStrike(s, striker)
+      ) {
         const endStrikeBtn = document.createElement("button");
         endStrikeBtn.className = "secondary";
         endStrikeBtn.textContent = "Encerrar golpe";
-        endStrikeBtn.title = "Passa a vez mesmo com tropas que ainda poderiam atacar.";
+        endStrikeBtn.title = "Passa a vez após todas as tropas atacarem (ou ficarem impedidas).";
         endStrikeBtn.onclick = () => this.dispatchAction({ type: "END_COMBAT_STRIKE" });
         btns.appendChild(endStrikeBtn);
       }
