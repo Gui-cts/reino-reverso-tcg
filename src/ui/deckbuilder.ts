@@ -75,10 +75,26 @@ const CATALOG_FILTER_OPTIONS: {
 
 let pendingEditorScroll: EditorScrollState | null = null;
 let activeCatalogFilter: CatalogTypeFilter = "all";
+let catalogNameSearch = "";
+let restoreSearchFocus = false;
+
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .trim();
+}
 
 function matchesCatalogFilter(def: CardDefinition, filter: CatalogTypeFilter): boolean {
   if (filter === "all") return true;
   return getCardType(def) === filter;
+}
+
+function matchesNameSearch(def: CardDefinition, query: string): boolean {
+  const q = normalizeSearchText(query);
+  if (!q) return true;
+  return normalizeSearchText(def.name).includes(q);
 }
 
 const DECK_CARD_PREVIEW_MS = 550;
@@ -330,11 +346,14 @@ export function renderDeckbuilderScreen(
     editor.appendChild(previewHint);
 
     const catalogCards = deckableCards(catalog).filter((c) => !c.leaderFormOf);
-    const filteredCatalogCards = catalogCards.filter((c) =>
-      matchesCatalogFilter(c, activeCatalogFilter),
+    const filteredCatalogCards = catalogCards.filter(
+      (c) => matchesCatalogFilter(c, activeCatalogFilter) && matchesNameSearch(c, catalogNameSearch),
     );
     const activeFilterLabel =
       CATALOG_FILTER_OPTIONS.find((f) => f.id === activeCatalogFilter)?.label ?? "Todas";
+    const searchSuffix = catalogNameSearch.trim()
+      ? ` · busca “${catalogNameSearch.trim()}”`
+      : "";
 
     const main = document.createElement("div");
     main.className = "deck-editor__main";
@@ -369,7 +388,53 @@ export function renderDeckbuilderScreen(
 
     const catalogCol = document.createElement("div");
     catalogCol.className = "deck-editor__col";
-    catalogCol.innerHTML = `<h3 class="deck-editor__col-title">Catálogo — ${activeFilterLabel} (${filteredCatalogCards.length})</h3>`;
+    catalogCol.innerHTML = `<h3 class="deck-editor__col-title">Catálogo — ${activeFilterLabel}${searchSuffix} (${filteredCatalogCards.length})</h3>`;
+
+    const searchRow = document.createElement("div");
+    searchRow.className = "deck-editor__search-row";
+
+    const searchInput = document.createElement("input");
+    searchInput.type = "search";
+    searchInput.className = "deck-editor__search";
+    searchInput.placeholder = "Buscar carta por nome…";
+    searchInput.value = catalogNameSearch;
+    searchInput.setAttribute("aria-label", "Buscar carta por nome");
+    searchInput.autocomplete = "off";
+    searchInput.addEventListener("input", () => {
+      catalogNameSearch = searchInput.value;
+      restoreSearchFocus = true;
+      captureEditorScroll(root);
+      pendingEditorScroll = {
+        catalog: 0,
+        deck: pendingEditorScroll?.deck ?? 0,
+      };
+      renderDeckbuilderScreen(root, catalog, callbacks);
+    });
+    searchRow.appendChild(searchInput);
+
+    if (catalogNameSearch.trim()) {
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "secondary deck-editor__search-clear";
+      clearBtn.textContent = "×";
+      clearBtn.title = "Limpar busca";
+      clearBtn.setAttribute("aria-label", "Limpar busca");
+      clearBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        catalogNameSearch = "";
+        restoreSearchFocus = true;
+        captureEditorScroll(root);
+        pendingEditorScroll = {
+          catalog: 0,
+          deck: pendingEditorScroll?.deck ?? 0,
+        };
+        renderDeckbuilderScreen(root, catalog, callbacks);
+      });
+      searchRow.appendChild(clearBtn);
+    }
+
+    catalogCol.appendChild(searchRow);
+
     const catalogList = document.createElement("div");
     catalogList.className = "deck-editor__card-grid";
 
@@ -382,7 +447,9 @@ export function renderDeckbuilderScreen(
     if (filteredCatalogCards.length === 0) {
       const empty = document.createElement("p");
       empty.className = "deck-editor__empty";
-      empty.textContent = "Nenhuma carta deste tipo no catálogo piloto.";
+      empty.textContent = catalogNameSearch.trim()
+        ? `Nenhuma carta encontrada para “${catalogNameSearch.trim()}”.`
+        : "Nenhuma carta deste tipo no catálogo piloto.";
       catalogList.appendChild(empty);
     }
 
@@ -477,5 +544,16 @@ export function renderDeckbuilderScreen(
 
   if (editingCustom && pendingEditorScroll) {
     requestAnimationFrame(() => restoreEditorScroll(root));
+  }
+
+  if (editingCustom && restoreSearchFocus) {
+    restoreSearchFocus = false;
+    requestAnimationFrame(() => {
+      const input = root.querySelector<HTMLInputElement>(".deck-editor__search");
+      if (!input) return;
+      input.focus();
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    });
   }
 }

@@ -1231,6 +1231,42 @@ header {
   line-height: 1.4;
 }
 
+.deck-editor__search-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.55rem;
+}
+
+.deck-editor__search {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--bg) 70%, var(--panel-bg));
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.deck-editor__search::placeholder {
+  color: var(--muted);
+}
+
+.deck-editor__search:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--panel-border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.deck-editor__search-clear {
+  flex-shrink: 0;
+  width: 2.25rem;
+  padding: 0.35rem 0;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 .deck-editor__main {
   display: flex;
   gap: 0.65rem;
