@@ -672,6 +672,7 @@ function beginPhaseEndChoice(state, winner, completedPhase) {
     matchPhase: "phase_end_choice_p0",
     phaseWinner: winner,
     combat: null,
+    pendingSpell: null,
     turnPhase: "main",
     log: appendLog(
       state,
@@ -3991,7 +3992,6 @@ function isStrikeReactionAction(state, player, action) {
   }
 }
 function canControlPlayer(s, player) {
-  if (s.pendingSpell) return false;
   if (s.matchPhase === "setup_arenas_p0") return player === 0;
   if (s.matchPhase === "setup_arenas_p1") return player === 1;
   if (s.matchPhase === "mulligan_p0") return player === 0;
@@ -4004,6 +4004,7 @@ function canControlPlayer(s, player) {
     if (s.matchPhase === "setup_abismo_loser") return player === opponent(winner);
     if (s.matchPhase === "setup_rr_winner") return player === winner;
   }
+  if (s.pendingSpell) return false;
   if (s.matchPhase === "playing") {
     if (s.combat) {
       if (s.combat.subPhase === "magic" && !s.combat.magicPassed[player]) {
@@ -4062,6 +4063,10 @@ function inferActionPlayer(state, action) {
 function canSubmitAction(state, seat, action) {
   const actor = inferActionPlayer(state, action);
   if (actor === null || actor !== seat) return false;
+  if (action.type === "POST_PHASE_CHOICE") {
+    const expected = action.player === 0 ? "phase_end_choice_p0" : "phase_end_choice_p1";
+    if (state.matchPhase === expected && seat === action.player) return true;
+  }
   if (state.pendingSpell) {
     if (state.pendingSpell.counterWindowOpen && seat === opponent(state.pendingSpell.caster)) {
       if (action.type === "PASS_SPELL_COUNTER") return true;

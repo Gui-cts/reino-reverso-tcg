@@ -222,6 +222,7 @@ export function beginPhaseEndChoice(
     matchPhase: "phase_end_choice_p0",
     phaseWinner: winner,
     combat: null,
+    pendingSpell: null,
     turnPhase: "main",
     log: appendLog(
       state,

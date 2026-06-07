@@ -15,6 +15,22 @@ describe("canControlPlayer with pending spell", () => {
     expect(canControlPlayer(state, 1)).toBe(false);
   });
 
+  it("still allows post-phase choice even with stale pending spell", () => {
+    const state = minimalPlayingState({
+      matchPhase: "phase_end_choice_p0",
+      phaseWinner: 0,
+      pendingSpell: pendingSpellFixture(1, "encore"),
+    });
+    expect(canControlPlayer(state, 0)).toBe(true);
+    expect(
+      canSubmitAction(state, 0, {
+        type: "POST_PHASE_CHOICE",
+        player: 0,
+        choice: "essence",
+      }),
+    ).toBe(true);
+  });
+
   it("allows opponent to respond during counter window", () => {
     const state = minimalPlayingState({
       pendingSpell: pendingSpellFixture(1, "encore"),

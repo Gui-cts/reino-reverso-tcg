@@ -78,8 +78,6 @@ export function canRespondToPendingSpell(s: GameState, player: PlayerId): boolea
 
 /** Quem pode agir neste momento (hotseat / online — não inclui CPU). */
 export function canControlPlayer(s: GameState, player: PlayerId): boolean {
-  if (s.pendingSpell) return false;
-
   if (s.matchPhase === "setup_arenas_p0") return player === 0;
   if (s.matchPhase === "setup_arenas_p1") return player === 1;
   if (s.matchPhase === "mulligan_p0") return player === 0;
@@ -93,6 +91,8 @@ export function canControlPlayer(s: GameState, player: PlayerId): boolean {
     if (s.matchPhase === "setup_abismo_loser") return player === opponent(winner);
     if (s.matchPhase === "setup_rr_winner") return player === winner;
   }
+
+  if (s.pendingSpell) return false;
 
   if (s.matchPhase === "playing") {
     if (s.combat) {
@@ -160,6 +160,12 @@ export function canSubmitAction(
 ): boolean {
   const actor = inferActionPlayer(state, action);
   if (actor === null || actor !== seat) return false;
+
+  if (action.type === "POST_PHASE_CHOICE") {
+    const expected =
+      action.player === 0 ? "phase_end_choice_p0" : "phase_end_choice_p1";
+    if (state.matchPhase === expected && seat === action.player) return true;
+  }
 
   if (state.pendingSpell) {
     if (

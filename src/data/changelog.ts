@@ -11,6 +11,11 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-05-19",
+    title: "Escolha pós-fase",
+    summary: "Corrigido bloqueio das opções Essência/Corrupção/Reciclar na transição MN → Abismo (feitiço pendente não trava mais).",
+  },
+  {
+    date: "2026-05-19",
     title: "Testes e polish",
     summary: "Vitest (permissões, feitiços, combate); CPU mais esperta na Contramagia; banner de feitiço pendente, toasts e tutorial no menu.",
   },
