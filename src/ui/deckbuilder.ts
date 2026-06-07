@@ -180,9 +180,7 @@ function buildOwnedCardTile(
 }
 
 function captureEditorScroll(root: HTMLElement): void {
-  const lists = root.querySelectorAll<HTMLElement>(
-    ".deck-editor__columns .deck-editor__card-grid, .deck-editor__columns .deck-editor__list",
-  );
+  const lists = root.querySelectorAll<HTMLElement>(".deck-editor__columns .deck-editor__scroll");
   if (lists.length === 0) return;
   pendingEditorScroll = {
     catalog: lists[0]?.scrollTop ?? 0,
@@ -194,9 +192,7 @@ function restoreEditorScroll(root: HTMLElement): void {
   if (!pendingEditorScroll) return;
   const { catalog, deck } = pendingEditorScroll;
   pendingEditorScroll = null;
-  const lists = root.querySelectorAll<HTMLElement>(
-    ".deck-editor__columns .deck-editor__card-grid, .deck-editor__columns .deck-editor__list",
-  );
+  const lists = root.querySelectorAll<HTMLElement>(".deck-editor__columns .deck-editor__scroll");
   if (lists[0]) lists[0].scrollTop = catalog;
   if (lists[1]) lists[1].scrollTop = deck;
 }
@@ -498,8 +494,15 @@ export function renderDeckbuilderScreen(
       );
     }
 
-    catalogCol.appendChild(catalogList);
-    deckCol.appendChild(deckList);
+    const catalogScroll = document.createElement("div");
+    catalogScroll.className = "deck-editor__scroll";
+    catalogScroll.appendChild(catalogList);
+    catalogCol.appendChild(catalogScroll);
+
+    const deckScroll = document.createElement("div");
+    deckScroll.className = "deck-editor__scroll";
+    deckScroll.appendChild(deckList);
+    deckCol.appendChild(deckScroll);
     columns.append(catalogCol, deckCol);
     main.append(filters, columns);
     editor.appendChild(main);

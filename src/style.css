@@ -1207,6 +1207,7 @@ header {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  overflow: hidden;
 }
 
 .deck-editor__label {
@@ -1274,9 +1275,11 @@ header {
   display: flex;
   gap: 0.65rem;
   align-items: stretch;
-  flex: 1;
-  min-height: 0;
-  max-height: min(54vh, 500px);
+  flex-shrink: 0;
+  height: clamp(300px, 46vh, 440px);
+  min-height: 300px;
+  max-height: clamp(300px, 46vh, 440px);
+  overflow: hidden;
 }
 
 .deck-editor__footer {
@@ -1284,6 +1287,9 @@ header {
   margin-top: 0.15rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--panel-border);
+  position: relative;
+  z-index: 2;
+  background: var(--panel);
 }
 
 .deck-editor__filters {
@@ -1345,6 +1351,7 @@ header {
   min-width: 0;
   min-height: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 .deck-editor__col {
@@ -1352,7 +1359,17 @@ header {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+  height: 100%;
   overflow: hidden;
+}
+
+.deck-editor__scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+  scrollbar-gutter: stable;
 }
 
 .deck-editor__col-title {
@@ -1371,33 +1388,40 @@ header {
   min-height: 2.45rem;
 }
 
-.deck-editor__list,
-.deck-editor__card-grid {
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-  padding-right: 0.25rem;
+.deck-editor__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .deck-editor__card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 0.55rem;
   align-content: start;
+  width: 100%;
 }
 
 .deck-editor__card-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.3rem;
+  min-width: 0;
+  width: 100%;
 }
 
 .deck-editor__card-tile .game-card--framed-mini {
-  --fc-w: 148px;
+  --fc-w: min(100%, 128px);
   width: 100%;
-  max-width: 168px;
+  max-width: 128px;
   cursor: help;
+  transform: none !important;
+  margin: 0 !important;
+}
+
+.deck-editor__card-tile .game-card--framed-mini:hover {
+  transform: none !important;
 }
 
 .deck-editor__tile-actions {
@@ -1460,7 +1484,9 @@ header {
 
   .deck-editor__main {
     flex-direction: column;
+    height: auto;
     max-height: none;
+    min-height: 0;
   }
 
   .deck-editor__filters {
@@ -1474,18 +1500,21 @@ header {
     height: auto;
   }
 
+  .deck-editor__col {
+    height: auto;
+    max-height: 320px;
+  }
+
   .deck-editor__search-spacer {
     display: none;
   }
 
-  .deck-editor__list,
-  .deck-editor__card-grid {
-    max-height: 240px;
-    flex: none;
+  .deck-editor__scroll {
+    max-height: 260px;
   }
 
   .deck-editor__card-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
   }
 
   .menu-test-grid {
