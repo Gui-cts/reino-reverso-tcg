@@ -573,7 +573,20 @@ export class GameApp {
         if (!cpuControlsPhase(latest, latest.cpuPlayer)) break;
 
         const action = pickCpuAction(latest, latest.cpuPlayer);
-        if (!action) break;
+        if (!action) {
+          if (
+            latest.matchPhase === "playing" &&
+            latest.turnPhase === "main" &&
+            latest.activePlayer === cpu &&
+            !latest.combat
+          ) {
+            const endAfter = dispatch(latest, { type: "END_TURN" });
+            if (endAfter !== latest) {
+              this.applyCpuActionResult(endAfter);
+            }
+          }
+          break;
+        }
 
         const after = dispatch(latest, action);
         const logOnly =
@@ -587,7 +600,21 @@ export class GameApp {
           after.arenaSetupPicks === latest.arenaSetupPicks &&
           after.pendingSpell === latest.pendingSpell &&
           after.artifacts === latest.artifacts;
-        if ((after === latest || logOnly) && action.type !== "END_TURN") break;
+        if (after === latest || logOnly) {
+          if (
+            action.type !== "END_TURN" &&
+            latest.matchPhase === "playing" &&
+            latest.turnPhase === "main" &&
+            latest.activePlayer === cpu &&
+            !latest.combat
+          ) {
+            const endAfter = dispatch(latest, { type: "END_TURN" });
+            if (endAfter !== latest) {
+              this.applyCpuActionResult(endAfter);
+            }
+          }
+          break;
+        }
 
         this.applyCpuActionResult(after);
         this.cpuLoopGeneration++;

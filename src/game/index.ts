@@ -13,6 +13,7 @@ export {
   cardTypeLabel,
   factionLabel,
   canAffordCardCost,
+  canAffordTroopCost,
   formatCardCost,
   formatCorruptionCost,
   formatEssenceCost,

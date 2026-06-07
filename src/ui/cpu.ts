@@ -20,7 +20,13 @@ import {
   getTroopsInZone,
   opponent,
 } from "../game/helpers";
-import { canAffordCardCost, getEssenceCost, getCardType, isLeaderFormCard } from "../game/card-meta";
+import {
+  canAffordCardCost,
+  canAffordTroopCost,
+  getEssenceCost,
+  getCardType,
+  isLeaderFormCard,
+} from "../game/card-meta";
 import { spellRequiresTarget } from "../game/spell-stack";
 import type {
   ArenaDefinition,
@@ -308,7 +314,9 @@ function pickSacrificeForEssence(state: GameState, cpu: PlayerId): GameAction | 
 
   const canPlaySomething = hand.some((h) => {
     const def = state.catalog[h.cardId];
-    return def ? canAffordCardCost(state, cpu, def) : false;
+    if (!def) return false;
+    if (isSpellCard(def)) return canAffordCardCost(state, cpu, def);
+    return canAffordTroopCost(state, cpu, def);
   });
 
   if (!canPlaySomething) {
@@ -328,7 +336,7 @@ function pickPlayTroop(state: GameState, cpu: PlayerId): GameAction | null {
   const affordable = handTroopDefs(state, cpu)
     .filter((h) => {
       const def = state.catalog[h.cardId];
-      return def ? canAffordCardCost(state, cpu, def) : false;
+      return def ? canAffordTroopCost(state, cpu, def) : false;
     })
     .sort((a, b) => b.cost - a.cost || b.power - a.power);
 
@@ -634,7 +642,7 @@ function pickEquipTroop(state: GameState, cpu: PlayerId): GameAction | null {
     if (!inst || inst.owner !== cpu) continue;
     const def = state.catalog[inst.cardId];
     if (!def || getCardType(def) !== "equipment") continue;
-    if (!canAffordCardCost(state, cpu, def)) continue;
+    if (!canAffordTroopCost(state, cpu, def)) continue;
 
     const allies = Object.values(state.troops)
       .filter(
@@ -693,17 +701,6 @@ function pickActivateArtifact(state: GameState, cpu: PlayerId): GameAction | nul
   };
 }
 
-function hasMainPhaseWork(state: GameState, cpu: PlayerId): boolean {
-  if (pickSacrificeForEssence(state, cpu)) return true;
-  if (pickPlaySpell(state, cpu)) return true;
-  if (pickPlayTroop(state, cpu)) return true;
-  if (pickEquipTroop(state, cpu)) return true;
-  if (pickMoveTroop(state, cpu)) return true;
-  if (pickDeclareCombat(state, cpu)) return true;
-  if (pickActivateArtifact(state, cpu)) return true;
-  return false;
-}
-
 function pickMainTurnAction(state: GameState, cpu: PlayerId): GameAction | null {
   if (state.matchPhase !== "playing" || state.turnPhase !== "main" || state.combat) {
     return null;
@@ -747,8 +744,6 @@ function pickMainTurnAction(state: GameState, cpu: PlayerId): GameAction | null 
   if (contested.length > 0) {
     return pickDeclareCombatFallback(state, cpu);
   }
-
-  if (hasMainPhaseWork(state, cpu)) return null;
 
   return { type: "END_TURN" };
 }

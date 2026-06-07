@@ -1,5 +1,9 @@
 import { CARD_FRAME_URLS, type CardFrameKind } from "./card-frames";
-import { canPayCorruptionCost, canPayEssenceCost } from "./helpers";
+import {
+  canPayCorruptionCost,
+  canPayEssenceCost,
+  getAvailableNonTempEssence,
+} from "./helpers";
 import type {
   CardDefinition,
   CardRole,
@@ -132,6 +136,20 @@ export function canAffordCardCost(
     canPayEssenceCost(state, player, payment) &&
     canPayCorruptionCost(state, player, getCorruptionCost(def))
   );
+}
+
+/** Tropas e equipamentos não podem usar Essência temporária (ex.: Melodia Arcana). */
+export function canAffordTroopCost(
+  state: GameState,
+  player: PlayerId,
+  def: CardDefinition,
+  essencePayment?: EssenceCost,
+): boolean {
+  const payment = essencePayment ?? getEssenceCost(def);
+  const sacrifice = payment.sacrifice ?? 0;
+  const nonTemp = getAvailableNonTempEssence(state, player);
+  if (nonTemp.length < payment.exhaust || sacrifice > payment.exhaust) return false;
+  return canPayCorruptionCost(state, player, getCorruptionCost(def));
 }
 
 export function resolveCardFrameKind(def: CardDefinition): CardFrameKind {
