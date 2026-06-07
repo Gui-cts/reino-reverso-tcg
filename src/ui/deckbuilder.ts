@@ -36,6 +36,28 @@ function baseLeaders(catalog: CardCatalog): CardDefinition[] {
   return catalog.cards.filter((c) => c.cardType === "leader" && !c.leaderFormOf);
 }
 
+type EditorScrollState = { catalog: number; deck: number };
+
+let pendingEditorScroll: EditorScrollState | null = null;
+
+function captureEditorScroll(root: HTMLElement): void {
+  const lists = root.querySelectorAll<HTMLElement>(".deck-editor__columns .deck-editor__list");
+  if (lists.length === 0) return;
+  pendingEditorScroll = {
+    catalog: lists[0]?.scrollTop ?? 0,
+    deck: lists[1]?.scrollTop ?? 0,
+  };
+}
+
+function restoreEditorScroll(root: HTMLElement): void {
+  if (!pendingEditorScroll) return;
+  const { catalog, deck } = pendingEditorScroll;
+  pendingEditorScroll = null;
+  const lists = root.querySelectorAll<HTMLElement>(".deck-editor__columns .deck-editor__list");
+  if (lists[0]) lists[0].scrollTop = catalog;
+  if (lists[1]) lists[1].scrollTop = deck;
+}
+
 export function renderDeckbuilderScreen(
   root: HTMLElement,
   catalog: CardCatalog,
@@ -48,6 +70,7 @@ export function renderDeckbuilderScreen(
   const presets = getCatalogPresets(catalog);
 
   function persistCustomAndRerender(next: DeckDefinition): void {
+    captureEditorScroll(root);
     saveCustomDeck(next);
     saveActiveDeckSlot("custom");
     renderDeckbuilderScreen(root, catalog, callbacks);
@@ -292,4 +315,8 @@ export function renderDeckbuilderScreen(
   shell.appendChild(footer);
 
   root.appendChild(shell);
+
+  if (editingCustom && pendingEditorScroll) {
+    requestAnimationFrame(() => restoreEditorScroll(root));
+  }
 }
