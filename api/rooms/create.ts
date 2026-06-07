@@ -14,9 +14,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
-    const { createRoom, saveRoom } = await import("../lib/rr-server.mjs");
+    const { createRoom, parseDeckCardIds, saveRoom } = await import("../lib/rr-server.mjs");
     const body = await readJsonBody(req);
-    const result = createRoom(typeof body.leaderId === "string" ? body.leaderId : undefined);
+    const leaderId = typeof body.leaderId === "string" ? body.leaderId : undefined;
+    const deckCardIds = parseDeckCardIds(body.deckCardIds);
+    const result = createRoom(leaderId, deckCardIds);
+    if ("error" in result) {
+      sendJson(res, 400, { error: result.error });
+      return;
+    }
     await saveRoom(result.room);
     sendJson(res, 200, {
       roomId: result.roomId,

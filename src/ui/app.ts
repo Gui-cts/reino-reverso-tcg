@@ -54,7 +54,13 @@ import type { PlayerViewPayload } from "../net/player-view";
 import { pickCpuAction, cpuControlsPhase } from "./cpu";
 import { attachCardHoverPreview } from "./card-hover-preview";
 import { renderDeckbuilderScreen } from "./deckbuilder";
-import { resolveActiveDeck } from "./deck-selection";
+import {
+  loadActiveDeckSlot,
+  resolveActiveDeck,
+  validateDeckForCatalog,
+  type ActiveDeckConfig,
+} from "./deck-selection";
+import { appendDeckSlotPicker } from "./deck-slot-picker";
 import { cardFromDef, createCardEl, createEssenceTokenEl, createHiddenCardEl } from "./card-view";
 import {
   bindDropZone,
@@ -113,7 +119,6 @@ export class GameApp {
   private pollTimer: number | null = null;
   private onlineStatus = "";
   private onlineBusy = false;
-  private onlineLeaderId: string | null = null;
   private pendingJoinRoomId: string | null = null;
 
   constructor(root: HTMLElement) {
@@ -160,10 +165,9 @@ export class GameApp {
         void this.resumeOnlineRoom(roomId, saved.token, saved.seat);
       } else {
         this.pendingJoinRoomId = roomId;
-        this.onlineStatus = `Sala ${roomId} — escolha seu Líder e clique em Entrar.`;
+        this.onlineStatus = `Sala ${roomId} — escolha seu baralho e clique em Entrar.`;
       }
     }
-    this.ensureOnlineLeaderDefault();
     this.render();
   }
 
@@ -215,7 +219,7 @@ export class GameApp {
     } catch {
       this.clearOnlineSession(roomId);
       this.pendingJoinRoomId = roomId;
-      this.onlineStatus = `Sala ${roomId} — escolha seu Líder e clique em Entrar.`;
+      this.onlineStatus = `Sala ${roomId} — escolha seu baralho e clique em Entrar.`;
       this.render();
     } finally {
       this.onlineBusy = false;
@@ -228,39 +232,61 @@ export class GameApp {
       : [];
   }
 
-  private ensureOnlineLeaderDefault(): void {
-    if (this.onlineLeaderId) return;
-    const leaders = this.baseLeaderChoices();
-    if (leaders.length > 0) this.onlineLeaderId = leaders[0]!.id;
+  private resolveOnlineDeckConfig():
+    | ActiveDeckConfig
+    | { error: string } {
+    if (!this.catalog) return { error: "Catálogo não carregado." };
+    const active = resolveActiveDeck(this.catalog);
+    if (loadActiveDeckSlot() === "custom") {
+      const validation = validateDeckForCatalog(this.catalog, {
+        leaderId: active.leaderId,
+        cardIds: active.cardIds,
+      });
+      if (!validation.valid) {
+        return {
+          error:
+            validation.errors[0]?.message ??
+            "Deck personalizado incompleto — abra o deckbuilder e complete 40 cartas.",
+        };
+      }
+    }
+    return active;
   }
 
-  private renderOnlineLeaderPicker(container: HTMLElement): void {
-    const leaders = this.baseLeaderChoices();
-    if (leaders.length === 0) return;
+  private renderOnlineDeckPicker(container: HTMLElement): void {
+    if (!this.catalog) return;
 
-    this.ensureOnlineLeaderDefault();
+    const hint = document.createElement("p");
+    hint.className = "menu-panel__hint";
+    hint.textContent =
+      "Escolha Noah, Klaus ou deck personalizado — vale para criar e entrar na sala.";
+    container.appendChild(hint);
 
-    const pick = document.createElement("div");
-    pick.className = "menu-leader-pick";
-    pick.innerHTML = `<p class="menu-tagline">Escolha seu Líder:</p>`;
+    appendDeckSlotPicker(container, this.catalog, () => this.render());
 
-    const row = document.createElement("div");
-    row.className = "menu-actions menu-leader-pick__row";
+    const active = resolveActiveDeck(this.catalog);
+    const activeLine = document.createElement("p");
+    activeLine.className = "menu-panel__deck";
+    activeLine.innerHTML = `
+      <span class="menu-panel__deck-label">Baralho online</span>
+      <strong>${active.label}</strong>
+    `;
+    container.appendChild(activeLine);
 
-    for (const leader of leaders) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = this.onlineLeaderId === leader.id ? "menu-leader-pick__btn--active" : "secondary";
-      btn.textContent = leader.name;
-      btn.onclick = () => {
-        this.onlineLeaderId = leader.id;
+    if (loadActiveDeckSlot() === "custom") {
+      const editRow = document.createElement("div");
+      editRow.className = "menu-panel__actions";
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "secondary";
+      editBtn.textContent = "Editar deck personalizado";
+      editBtn.onclick = () => {
+        this.screen = "deckbuilder";
         this.render();
       };
-      row.appendChild(btn);
+      editRow.appendChild(editBtn);
+      container.appendChild(editRow);
     }
-
-    pick.appendChild(row);
-    container.appendChild(pick);
   }
 
   private lastLeaderId: string | null = null;
@@ -366,9 +392,9 @@ export class GameApp {
 
   private async createOnlineRoom(): Promise<void> {
     if (this.onlineBusy) return;
-    this.ensureOnlineLeaderDefault();
-    if (!this.onlineLeaderId) {
-      this.onlineStatus = "Escolha um Líder antes de criar a sala.";
+    const deckConfig = this.resolveOnlineDeckConfig();
+    if ("error" in deckConfig) {
+      this.onlineStatus = deckConfig.error;
       this.render();
       return;
     }
@@ -376,7 +402,7 @@ export class GameApp {
     this.onlineStatus = "Criando sala…";
     this.render();
     try {
-      const result = await apiCreateRoom(this.onlineLeaderId);
+      const result = await apiCreateRoom(deckConfig.leaderId, deckConfig.cardIds);
       this.onlineRoomId = result.roomId;
       this.onlineToken = result.token;
       this.onlineSeat = result.seat;
@@ -403,9 +429,9 @@ export class GameApp {
     const code = roomId.trim().toUpperCase();
     if (!code) return;
 
-    this.ensureOnlineLeaderDefault();
-    if (!this.onlineLeaderId) {
-      this.onlineStatus = "Escolha um Líder antes de entrar na sala.";
+    const deckConfig = this.resolveOnlineDeckConfig();
+    if ("error" in deckConfig) {
+      this.onlineStatus = deckConfig.error;
       this.render();
       return;
     }
@@ -415,7 +441,7 @@ export class GameApp {
     this.screen = "menu";
     this.render();
     try {
-      const result = await apiJoinRoom(code, this.onlineLeaderId);
+      const result = await apiJoinRoom(code, deckConfig.leaderId, deckConfig.cardIds);
       this.onlineRoomId = code;
       this.onlineToken = result.token;
       this.onlineSeat = result.seat;
@@ -935,9 +961,9 @@ export class GameApp {
     grid.appendChild(deckPanel);
 
     const onlinePanel = document.createElement("section");
-    onlinePanel.className = "menu-panel panel";
+    onlinePanel.className = "menu-panel menu-panel--wide panel";
     onlinePanel.innerHTML = `<h2 class="menu-panel__title">1v1 online</h2>`;
-    this.renderOnlineLeaderPicker(onlinePanel);
+    this.renderOnlineDeckPicker(onlinePanel);
     const onlineActions = document.createElement("div");
     onlineActions.className = "menu-panel__actions";
 

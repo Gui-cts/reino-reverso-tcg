@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { dispatch } from "../game/actions";
+import { buildCatalogMap } from "../game/cards";
+import { validateDeck } from "../game/deck-rules";
 import { canSubmitAction } from "../game/permissions";
 import { createInitialGame, reassignPlayerLeader } from "../game/state";
 import { toPlayerView } from "./player-view";
@@ -46,6 +48,25 @@ function seatFromToken(room: RoomRecord, token: string): PlayerId | null {
   return null;
 }
 
+export function parseDeckCardIds(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const ids = raw.filter((id): id is string => typeof id === "string" && id.length > 0);
+  return ids.length > 0 ? ids : undefined;
+}
+
+function validateOnlineDeck(
+  leaderId: string | undefined,
+  deckCardIds: string[] | undefined,
+): string | null {
+  if (!deckCardIds?.length) return null;
+  if (!leaderId) return "Líder obrigatório ao enviar um baralho personalizado.";
+  const catalog = loadCatalogSync();
+  const map = buildCatalogMap(catalog.cards);
+  const result = validateDeck({ leaderId, cardIds: deckCardIds }, map);
+  if (!result.valid) return result.errors[0]?.message ?? "Baralho inválido.";
+  return null;
+}
+
 function viewFor(room: RoomRecord, seat: PlayerId) {
   return toPlayerView(room.state, seat, {
     version: room.version,
@@ -63,9 +84,13 @@ function viewFor(room: RoomRecord, seat: PlayerId) {
   });
 }
 
-export function buildNewRoom(leaderId?: string): RoomRecord {
+export function buildNewRoom(leaderId?: string, deckCardIds?: string[]): RoomRecord {
   const catalog = loadCatalogSync();
-  const state = createInitialGame(catalog, { cpuPlayer: null, leaderId });
+  const state = createInitialGame(catalog, {
+    cpuPlayer: null,
+    leaderId,
+    deckCardIds: deckCardIds?.length ? deckCardIds : undefined,
+  });
   const roomId = newRoomId();
   const token = newToken();
   return {
@@ -77,8 +102,14 @@ export function buildNewRoom(leaderId?: string): RoomRecord {
   };
 }
 
-export function createRoom(leaderId?: string): RoomCreateResult {
-  const room = buildNewRoom(leaderId);
+export function createRoom(
+  leaderId?: string,
+  deckCardIds?: string[],
+): RoomCreateResult | { error: string } {
+  const deckError = validateOnlineDeck(leaderId, deckCardIds);
+  if (deckError) return { error: deckError };
+
+  const room = buildNewRoom(leaderId, deckCardIds);
   const token = room.tokens[0]!;
   return {
     roomId: room.id,
@@ -92,12 +123,17 @@ export function createRoom(leaderId?: string): RoomCreateResult {
 export function joinRoom(
   room: RoomRecord,
   leaderId?: string,
+  deckCardIds?: string[],
 ): RoomJoinResult | { error: string } {
   if (room.tokens[1]) return { error: "Sala cheia." };
 
+  const deckError = validateOnlineDeck(leaderId, deckCardIds);
+  if (deckError) return { error: deckError };
+
   if (leaderId) {
     const catalog = loadCatalogSync();
-    const next = reassignPlayerLeader(room.state, 1, leaderId, catalog.starterDeck);
+    const deckSource = deckCardIds?.length ? deckCardIds : catalog.starterDeck;
+    const next = reassignPlayerLeader(room.state, 1, leaderId, deckSource);
     if ("error" in next) return { error: next.error };
     room.state = next;
     room.version += 1;

@@ -20,7 +20,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
-    const { joinRoom, getRoom, saveRoom } = await import("../../lib/rr-server.mjs");
+    const { joinRoom, getRoom, parseDeckCardIds, saveRoom } = await import("../../lib/rr-server.mjs");
     const room = await getRoom(roomId);
     if (!room) {
       sendJson(res, 404, { error: "Sala não encontrada" });
@@ -29,7 +29,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     const body = await readJsonBody(req);
     const leaderId = typeof body.leaderId === "string" ? body.leaderId : undefined;
-    const joined = joinRoom(room, leaderId);
+    const deckCardIds = parseDeckCardIds(body.deckCardIds);
+    const joined = joinRoom(room, leaderId, deckCardIds);
     if ("error" in joined) {
       sendJson(res, 409, { error: joined.error });
       return;

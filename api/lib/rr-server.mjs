@@ -5044,6 +5044,20 @@ function seatFromToken(room, token) {
   if (room.tokens[1] === token) return 1;
   return null;
 }
+function parseDeckCardIds(raw) {
+  if (!Array.isArray(raw)) return void 0;
+  const ids = raw.filter((id) => typeof id === "string" && id.length > 0);
+  return ids.length > 0 ? ids : void 0;
+}
+function validateOnlineDeck(leaderId, deckCardIds) {
+  if (!deckCardIds?.length) return null;
+  if (!leaderId) return "L\xEDder obrigat\xF3rio ao enviar um baralho personalizado.";
+  const catalog = loadCatalogSync();
+  const map = buildCatalogMap(catalog.cards);
+  const result = validateDeck({ leaderId, cardIds: deckCardIds }, map);
+  if (!result.valid) return result.errors[0]?.message ?? "Baralho inv\xE1lido.";
+  return null;
+}
 function viewFor(room, seat) {
   return toPlayerView(room.state, seat, {
     version: room.version,
@@ -5060,9 +5074,13 @@ function viewFor(room, seat) {
     roomId: room.id
   });
 }
-function buildNewRoom(leaderId) {
+function buildNewRoom(leaderId, deckCardIds) {
   const catalog = loadCatalogSync();
-  const state = createInitialGame(catalog, { cpuPlayer: null, leaderId });
+  const state = createInitialGame(catalog, {
+    cpuPlayer: null,
+    leaderId,
+    deckCardIds: deckCardIds?.length ? deckCardIds : void 0
+  });
   const roomId = newRoomId();
   const token = newToken();
   return {
@@ -5073,8 +5091,10 @@ function buildNewRoom(leaderId) {
     updatedAt: Date.now()
   };
 }
-function createRoom(leaderId) {
-  const room = buildNewRoom(leaderId);
+function createRoom(leaderId, deckCardIds) {
+  const deckError = validateOnlineDeck(leaderId, deckCardIds);
+  if (deckError) return { error: deckError };
+  const room = buildNewRoom(leaderId, deckCardIds);
   const token = room.tokens[0];
   return {
     roomId: room.id,
@@ -5084,11 +5104,14 @@ function createRoom(leaderId) {
     room
   };
 }
-function joinRoom(room, leaderId) {
+function joinRoom(room, leaderId, deckCardIds) {
   if (room.tokens[1]) return { error: "Sala cheia." };
+  const deckError = validateOnlineDeck(leaderId, deckCardIds);
+  if (deckError) return { error: deckError };
   if (leaderId) {
     const catalog = loadCatalogSync();
-    const next = reassignPlayerLeader(room.state, 1, leaderId, catalog.starterDeck);
+    const deckSource = deckCardIds?.length ? deckCardIds : catalog.starterDeck;
+    const next = reassignPlayerLeader(room.state, 1, leaderId, deckSource);
     if ("error" in next) return { error: next.error };
     room.state = next;
     room.version += 1;
@@ -5169,6 +5192,7 @@ export {
   getRoom2 as getRoom,
   getRoomView,
   joinRoom,
+  parseDeckCardIds,
   saveRoom2 as saveRoom
 };
 //# sourceMappingURL=rr-server.mjs.map

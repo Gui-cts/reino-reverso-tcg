@@ -36,20 +36,27 @@ async function parseJson<T>(res: Response): Promise<T> {
   return data;
 }
 
-export async function apiCreateRoom(leaderId?: string): Promise<CreateRoomResponse> {
+export async function apiCreateRoom(
+  leaderId?: string,
+  deckCardIds?: string[],
+): Promise<CreateRoomResponse> {
   const res = await fetch(`${API}/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ leaderId }),
+    body: JSON.stringify({ leaderId, deckCardIds }),
   });
   return parseJson(res);
 }
 
-export async function apiJoinRoom(roomId: string, leaderId?: string): Promise<JoinRoomResponse> {
+export async function apiJoinRoom(
+  roomId: string,
+  leaderId?: string,
+  deckCardIds?: string[],
+): Promise<JoinRoomResponse> {
   const res = await fetch(`${API}/${encodeURIComponent(roomId)}/join`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ leaderId }),
+    body: JSON.stringify({ leaderId, deckCardIds }),
   });
   return parseJson(res);
 }
