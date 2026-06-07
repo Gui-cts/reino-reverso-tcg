@@ -14,6 +14,10 @@ export type ActiveDeckConfig = {
 const ACTIVE_SLOT_KEY = "rr-active-deck-slot";
 const CUSTOM_DECK_KEY = "rr-custom-deck";
 
+/** Fallback quando localStorage não está disponível (ex.: modo privado). */
+let memoryActiveSlot: DeckSlotKind | null = null;
+let memoryCustomDeck: DeckDefinition | null = null;
+
 const DEFAULT_PRESETS: PresetDeckDefinition[] = [
   {
     id: "noah",
@@ -57,13 +61,28 @@ export function presetForSlot(catalog: CardCatalog, kind: DeckSlotKind): PresetD
 }
 
 export function loadActiveDeckSlot(): DeckSlotKind {
-  const raw = localStorage.getItem(ACTIVE_SLOT_KEY);
-  if (raw === "preset-klaus" || raw === "custom") return raw;
-  return "preset-noah";
+  try {
+    const raw = localStorage.getItem(ACTIVE_SLOT_KEY);
+    if (raw === "preset-klaus" || raw === "custom") return raw;
+  } catch {
+    /* ignore */
+  }
+  return memoryActiveSlot ?? "preset-noah";
 }
 
 export function saveActiveDeckSlot(kind: DeckSlotKind): void {
-  localStorage.setItem(ACTIVE_SLOT_KEY, kind);
+  memoryActiveSlot = kind;
+  try {
+    localStorage.setItem(ACTIVE_SLOT_KEY, kind);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function defaultCustomDeck(catalog: CardCatalog): DeckDefinition {
+  const presets = getCatalogPresets(catalog);
+  const leaderId = presets[0]?.leaderId ?? "noah-lider-base";
+  return { leaderId, cardIds: [...baseDeckCardIds(catalog)] };
 }
 
 export function loadCustomDeck(catalog: CardCatalog): DeckDefinition {
@@ -72,19 +91,26 @@ export function loadCustomDeck(catalog: CardCatalog): DeckDefinition {
     if (raw) {
       const parsed = JSON.parse(raw) as DeckDefinition;
       if (parsed.leaderId && Array.isArray(parsed.cardIds)) {
+        memoryCustomDeck = parsed;
         return parsed;
       }
     }
   } catch {
     /* ignore */
   }
-  const presets = getCatalogPresets(catalog);
-  const leaderId = presets[0]?.leaderId ?? "noah-lider-base";
-  return { leaderId, cardIds: [...baseDeckCardIds(catalog)] };
+  if (memoryCustomDeck?.leaderId && Array.isArray(memoryCustomDeck.cardIds)) {
+    return memoryCustomDeck;
+  }
+  return defaultCustomDeck(catalog);
 }
 
 export function saveCustomDeck(deck: DeckDefinition): void {
-  localStorage.setItem(CUSTOM_DECK_KEY, JSON.stringify(deck));
+  memoryCustomDeck = deck;
+  try {
+    localStorage.setItem(CUSTOM_DECK_KEY, JSON.stringify(deck));
+  } catch {
+    /* ignore */
+  }
 }
 
 export function resolveActiveDeck(catalog: CardCatalog): ActiveDeckConfig {

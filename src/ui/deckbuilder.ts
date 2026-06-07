@@ -43,9 +43,15 @@ export function renderDeckbuilderScreen(
 ): void {
   root.innerHTML = "";
   const activeSlot = loadActiveDeckSlot();
-  let editingCustom = activeSlot === "custom";
-  let customDeck: DeckDefinition = loadCustomDeck(catalog);
+  const editingCustom = activeSlot === "custom";
+  const customDeck: DeckDefinition = loadCustomDeck(catalog);
   const presets = getCatalogPresets(catalog);
+
+  function persistCustomAndRerender(next: DeckDefinition): void {
+    saveCustomDeck(next);
+    saveActiveDeckSlot("custom");
+    renderDeckbuilderScreen(root, catalog, callbacks);
+  }
 
   const shell = document.createElement("div");
   shell.className = "menu-shell menu-shell--deckbuilder";
@@ -76,16 +82,15 @@ export function renderDeckbuilderScreen(
       <span class="deck-preset-card__desc">${description}</span>
       <span class="deck-preset-card__meta">${meta}</span>
     `;
-    card.onclick = onSelect;
+    card.addEventListener("click", (e) => {
+      e.preventDefault();
+      onSelect();
+    });
     return card;
   }
 
   function selectSlot(kind: DeckSlotKind): void {
     saveActiveDeckSlot(kind);
-    editingCustom = kind === "custom";
-    if (kind === "custom") {
-      customDeck = loadCustomDeck(catalog);
-    }
     renderDeckbuilderScreen(root, catalog, callbacks);
   }
 
@@ -117,6 +122,20 @@ export function renderDeckbuilderScreen(
 
   shell.appendChild(presetGrid);
 
+  if (!editingCustom) {
+    const activePreset = presets.find((p) => slotKindForPreset(p.id) === activeSlot) ?? presets[0];
+    const activeLeader = catalog.cards.find((c) => c.id === activePreset?.leaderId);
+    const hint = document.createElement("p");
+    hint.className = "deck-preset-hint";
+    hint.innerHTML = `
+      <strong>${activePreset?.name ?? "Deck padrão"}</strong> selecionado
+      (${activeLeader?.name ?? "Líder"}).
+      Use <strong>Vs CPU</strong> no menu para jogar com este baralho.
+      Para trocar cartas ou Líder livremente, clique em <strong>Deck personalizado</strong>.
+    `;
+    shell.appendChild(hint);
+  }
+
   if (editingCustom) {
     const editor = document.createElement("div");
     editor.className = "deck-editor panel";
@@ -133,10 +152,10 @@ export function renderDeckbuilderScreen(
       btn.className =
         customDeck.leaderId === leader.id ? "menu-leader-pick__btn--active" : "secondary";
       btn.textContent = leader.name;
-      btn.onclick = () => {
-        customDeck = { ...customDeck, leaderId: leader.id };
-        refreshEditor();
-      };
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        persistCustomAndRerender({ ...customDeck, leaderId: leader.id });
+      });
       leaderBtns.appendChild(btn);
     }
     leaderRow.appendChild(leaderBtns);
@@ -146,9 +165,11 @@ export function renderDeckbuilderScreen(
     const validation = validateDeckForCatalog(catalog, customDeck);
 
     const status = document.createElement("p");
-    status.className = validation.valid ? "deck-editor__status deck-editor__status--ok" : "deck-editor__status";
+    status.className = validation.valid
+      ? "deck-editor__status deck-editor__status--ok"
+      : "deck-editor__status";
     status.textContent = validation.valid
-      ? `Baralho pronto — ${customDeck.cardIds.length} cartas.`
+      ? `Baralho pronto — ${customDeck.cardIds.length} cartas (alterações salvas automaticamente).`
       : validation.errors[0]?.message ?? "Baralho inválido.";
     editor.appendChild(status);
 
@@ -171,10 +192,6 @@ export function renderDeckbuilderScreen(
       return def.cardRole === "captain" ? 1 : 4;
     }
 
-    function refreshEditor(): void {
-      renderDeckbuilderScreen(root, catalog, callbacks);
-    }
-
     for (const def of deckableCards(catalog)) {
       if (def.leaderFormOf) continue;
       const inDeck = counts.get(def.id) ?? 0;
@@ -190,10 +207,14 @@ export function renderDeckbuilderScreen(
       addBtn.className = "secondary deck-editor__row-btn";
       addBtn.textContent = "+";
       addBtn.disabled = inDeck >= max;
-      addBtn.onclick = () => {
-        customDeck = { ...customDeck, cardIds: [...customDeck.cardIds, def.id] };
-        refreshEditor();
-      };
+      addBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        persistCustomAndRerender({
+          ...customDeck,
+          cardIds: [...customDeck.cardIds, def.id],
+        });
+      });
       row.appendChild(addBtn);
       catalogList.appendChild(row);
     }
@@ -212,15 +233,15 @@ export function renderDeckbuilderScreen(
       remBtn.type = "button";
       remBtn.className = "secondary deck-editor__row-btn";
       remBtn.textContent = "−";
-      remBtn.onclick = () => {
+      remBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         const idx = customDeck.cardIds.indexOf(id);
-        if (idx >= 0) {
-          const next = [...customDeck.cardIds];
-          next.splice(idx, 1);
-          customDeck = { ...customDeck, cardIds: next };
-          refreshEditor();
-        }
-      };
+        if (idx < 0) return;
+        const next = [...customDeck.cardIds];
+        next.splice(idx, 1);
+        persistCustomAndRerender({ ...customDeck, cardIds: next });
+      });
       row.appendChild(remBtn);
       deckList.appendChild(row);
     }
@@ -237,34 +258,27 @@ export function renderDeckbuilderScreen(
     resetBtn.type = "button";
     resetBtn.className = "secondary";
     resetBtn.textContent = "Restaurar base piloto";
-    resetBtn.onclick = () => {
-      customDeck = {
+    resetBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      persistCustomAndRerender({
         leaderId: customDeck.leaderId,
         cardIds: [...baseDeckCardIds(catalog)],
-      };
-      refreshEditor();
-    };
+      });
+    });
     editorActions.appendChild(resetBtn);
 
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.textContent = "Salvar deck personalizado";
-    saveBtn.disabled = !validateDeckForCatalog(catalog, customDeck).valid;
-    saveBtn.onclick = () => {
-      saveCustomDeck(customDeck);
-      saveActiveDeckSlot("custom");
+    const doneBtn = document.createElement("button");
+    doneBtn.type = "button";
+    doneBtn.textContent = "Concluir e voltar ao menu";
+    doneBtn.disabled = !validation.valid;
+    doneBtn.addEventListener("click", (e) => {
+      e.preventDefault();
       callbacks.onSaved();
-    };
-    editorActions.appendChild(saveBtn);
+    });
+    editorActions.appendChild(doneBtn);
 
     editor.appendChild(editorActions);
     shell.appendChild(editor);
-  } else {
-    const hint = document.createElement("p");
-    hint.className = "deck-preset-hint";
-    hint.textContent =
-      "Deck padrão selecionado. Use-o ao jogar vs CPU ou no mesmo teclado. Para editar cartas, escolha “Deck personalizado”.";
-    shell.appendChild(hint);
   }
 
   const footer = document.createElement("div");
