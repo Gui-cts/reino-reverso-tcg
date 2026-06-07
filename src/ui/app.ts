@@ -742,14 +742,26 @@ export class GameApp {
 
         const action = pickCpuAction(latest, latest.cpuPlayer);
         if (!action) {
+          const stalled = this.getState();
           if (
-            latest.matchPhase === "playing" &&
-            latest.turnPhase === "main" &&
-            latest.activePlayer === cpu &&
-            !latest.combat
+            stalled.combat?.subPhase === "strike" &&
+            getCombatAssigningPlayer(stalled.combat) === cpu
           ) {
-            const endAfter = dispatch(latest, { type: "END_TURN" });
-            if (endAfter !== latest) {
+            const endAfter = dispatch(stalled, { type: "END_COMBAT_STRIKE" });
+            if (endAfter !== stalled) {
+              this.applyCpuActionResult(endAfter);
+              this.cpuLoopGeneration++;
+              continue;
+            }
+          }
+          if (
+            stalled.matchPhase === "playing" &&
+            stalled.turnPhase === "main" &&
+            stalled.activePlayer === cpu &&
+            !stalled.combat
+          ) {
+            const endAfter = dispatch(stalled, { type: "END_TURN" });
+            if (endAfter !== stalled) {
               this.applyCpuActionResult(endAfter);
             }
           }
@@ -791,14 +803,24 @@ export class GameApp {
 
           if (
             stalled.combat?.subPhase === "strike" &&
-            getCombatAssigningPlayer(stalled.combat) === cpu &&
-            !hasAttackableAlliesInStrike(stalled, cpu)
+            getCombatAssigningPlayer(stalled.combat) === cpu
           ) {
-            const endAfter = dispatch(stalled, { type: "END_COMBAT_STRIKE" });
-            if (endAfter !== stalled) {
-              this.applyCpuActionResult(endAfter);
-              this.cpuLoopGeneration++;
-              continue;
+            const retryAttack = pickCpuAction(stalled, cpu);
+            if (retryAttack?.type === "EXECUTE_COMBAT_ATTACK") {
+              const attackAfter = dispatch(stalled, retryAttack);
+              if (attackAfter !== stalled && attackAfter.troops !== stalled.troops) {
+                this.applyCpuActionResult(attackAfter);
+                this.cpuLoopGeneration++;
+                continue;
+              }
+            }
+            if (!hasAttackableAlliesInStrike(stalled, cpu)) {
+              const endAfter = dispatch(stalled, { type: "END_COMBAT_STRIKE" });
+              if (endAfter !== stalled) {
+                this.applyCpuActionResult(endAfter);
+                this.cpuLoopGeneration++;
+                continue;
+              }
             }
           }
 

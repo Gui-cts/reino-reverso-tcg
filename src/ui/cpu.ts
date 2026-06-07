@@ -10,7 +10,7 @@ import {
   getContestedArenaNames,
   getLegalCombatTargets,
   getRRUnansweredArenaNames,
-  hasAttackedThisStrike,
+  hasAttackableAlliesInStrike,
   isSpellCard,
   troopCanFlyBetweenArenas,
 } from "../game";
@@ -482,15 +482,7 @@ function pickEndCombatStrike(state: GameState, cpu: PlayerId): GameAction | null
   const combat = state.combat;
   if (!combat || combat.subPhase !== "strike") return null;
   if (getCombatAssigningPlayer(combat) !== cpu) return null;
-
-  const allies = livingInArena(state, cpu, combat.arenaId);
-  const canStillAttack = allies.some(
-    (t) =>
-      !hasAttackedThisStrike(combat, t.instanceId) &&
-      !t.attackSuppressed,
-  );
-  if (canStillAttack) return null;
-
+  if (hasAttackableAlliesInStrike(state, cpu)) return null;
   return { type: "END_COMBAT_STRIKE" };
 }
 
@@ -826,6 +818,17 @@ export function pickCpuAction(state: GameState, cpuPlayer: PlayerId): GameAction
     if (magic) return magic;
   }
 
+  if (
+    state.combat?.subPhase === "strike" &&
+    getCombatAssigningPlayer(state.combat) === cpu
+  ) {
+    const combatAction = pickBestCombatAttack(state, cpu);
+    if (combatAction) return combatAction;
+    const endStrike = pickEndCombatStrike(state, cpu);
+    if (endStrike) return endStrike;
+    return null;
+  }
+
   const reactive = pickCpuReactiveSpell(state, cpu);
   if (reactive) return reactive;
 
@@ -874,11 +877,7 @@ export function cpuControlsPhase(state: GameState, cpuPlayer: PlayerId): boolean
       return cpuHasPlayableSpell(state, cpuPlayer);
     }
     if (getCombatAssigningPlayer(state.combat) === cpuPlayer) {
-      return (
-        pickBestCombatAttack(state, cpuPlayer) !== null ||
-        pickEndCombatStrike(state, cpuPlayer) !== null ||
-        cpuHasPlayableSpell(state, cpuPlayer)
-      );
+      return true;
     }
     return cpuHasPlayableSpell(state, cpuPlayer);
   }

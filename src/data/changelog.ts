@@ -11,8 +11,8 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-05-19",
-    title: "CPU no combate",
-    summary: "Corrigido travamento após declarar combate — magias/ataques inválidos não param mais o loop da CPU.",
+    title: "CPU no golpe de combate",
+    summary: "Corrigido travamento no Golpe 1 — CPU prioriza ataques, encerra o golpe sem alvos legais e recupera o loop se uma ação falhar.",
   },
   {
     date: "2026-05-19",
