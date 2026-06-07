@@ -62,6 +62,12 @@ import {
 } from "./deck-selection";
 import { appendDeckSlotPicker } from "./deck-slot-picker";
 import {
+  appendMenuTopbar,
+  createMenuAppRoot,
+  createMenuPageLayout,
+  type MenuTab,
+} from "./menu-shell";
+import {
   fetchTestPlayerList,
   getStoredPlayerSession,
   loginWithNickname,
@@ -133,6 +139,7 @@ export class GameApp {
   private playerLoginStatus = "";
   private playerLoginBusy = false;
   private testPlayerNames: string[] = [];
+  private menuTab: MenuTab = "play";
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -260,6 +267,7 @@ export class GameApp {
       await loginWithNickname(nickname);
       this.playerSession = getStoredPlayerSession();
       this.playerLoginStatus = "";
+      this.menuTab = "account";
       void this.refreshTestPlayerList();
       this.render();
     } catch (err) {
@@ -272,19 +280,19 @@ export class GameApp {
 
   private renderPlayerLoginPanel(container: HTMLElement): void {
     const panel = document.createElement("section");
-    panel.className = "menu-panel menu-panel--wide panel menu-panel--login";
+    panel.className = "menu-page__card panel menu-page__card--account";
 
     if (this.playerSession) {
       panel.innerHTML = `
-        <h2 class="menu-panel__title">Conta de teste</h2>
-        <p class="menu-panel__deck">
-          <span class="menu-panel__deck-label">Logado como</span>
+        <h2 class="menu-page__title">Conta de teste</h2>
+        <p class="menu-page__deck">
+          <span class="menu-page__deck-label">Logado como</span>
           <strong>${this.playerSession.nickname}</strong>
         </p>
-        <p class="menu-panel__hint">Seu deck personalizado é salvo neste nick (sem senha).</p>
+        <p class="menu-page__hint">Seu deck personalizado é salvo neste nick (sem senha).</p>
       `;
       const actions = document.createElement("div");
-      actions.className = "menu-panel__actions";
+      actions.className = "menu-page__actions";
       const logoutBtn = document.createElement("button");
       logoutBtn.type = "button";
       logoutBtn.className = "secondary";
@@ -302,9 +310,9 @@ export class GameApp {
     }
 
     panel.innerHTML = `
-      <h2 class="menu-panel__title">Conta de teste</h2>
-      <p class="menu-panel__hint">Entre só com um nick (sem senha) para salvar seu deck personalizado no Redis — máx. 5 contas.</p>
-      ${this.playerLoginStatus ? `<p class="menu-panel__warn">${this.playerLoginStatus}</p>` : ""}
+      <h2 class="menu-page__title">Conta de teste</h2>
+      <p class="menu-page__hint">Entre só com um nick (sem senha) para salvar seu deck personalizado no Redis — máx. 5 contas.</p>
+      ${this.playerLoginStatus ? `<p class="menu-page__warn">${this.playerLoginStatus}</p>` : ""}
     `;
 
     const form = document.createElement("div");
@@ -377,7 +385,7 @@ export class GameApp {
     if (!this.catalog) return;
 
     const hint = document.createElement("p");
-    hint.className = "menu-panel__hint";
+    hint.className = "menu-page__hint";
     hint.textContent =
       "Escolha Noah, Klaus ou deck personalizado — vale para criar e entrar na sala.";
     container.appendChild(hint);
@@ -389,22 +397,23 @@ export class GameApp {
 
     const active = resolveActiveDeck(this.catalog);
     const activeLine = document.createElement("p");
-    activeLine.className = "menu-panel__deck";
+    activeLine.className = "menu-page__deck";
     activeLine.innerHTML = `
-      <span class="menu-panel__deck-label">Baralho online</span>
+      <span class="menu-page__deck-label">Baralho online</span>
       <strong>${active.label}</strong>
     `;
     container.appendChild(activeLine);
 
     if (loadActiveDeckSlot() === "custom") {
       const editRow = document.createElement("div");
-      editRow.className = "menu-panel__actions";
+      editRow.className = "menu-page__actions";
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "secondary";
       editBtn.textContent = "Editar deck personalizado";
       editBtn.onclick = () => {
         this.screen = "deckbuilder";
+        this.menuTab = "play";
         this.render();
       };
       editRow.appendChild(editBtn);
@@ -899,10 +908,12 @@ export class GameApp {
       renderDeckbuilderScreen(this.root, this.catalog, {
         onBack: () => {
           this.screen = "menu";
+          this.menuTab = "decks";
           this.render();
         },
         onSaved: () => {
           this.screen = "menu";
+          this.menuTab = "decks";
           this.render();
         },
       });
@@ -981,21 +992,32 @@ export class GameApp {
   }
 
   private renderOnlineWait(): void {
-    const screen = document.createElement("div");
-    screen.className = "menu-shell menu-shell--narrow";
+    const app = createMenuAppRoot();
+    appendMenuTopbar(app, {
+      activeTab: "play",
+      onTabChange: (tab) => {
+        this.menuTab = tab;
+        this.returnToMenu();
+      },
+      accountNickname: this.playerSession?.nickname,
+    });
+
+    const { page, main, aside } = createMenuPageLayout();
+    aside.remove();
+    main.className = "menu-page__main menu-page__main--centered";
 
     const card = document.createElement("div");
-    card.className = "menu-panel panel menu-panel--online-wait";
+    card.className = "menu-page__card panel menu-page__card--wait";
     const link = `${window.location.origin}${window.location.pathname}?room=${this.onlineRoomId ?? ""}`;
     card.innerHTML = `
-      <h1 class="menu-panel__title">Sala ${this.onlineRoomId ?? "—"}</h1>
-      <p class="menu-panel__hint">Envie o link ou código para seu amigo entrar.</p>
+      <h1 class="menu-page__title">Sala ${this.onlineRoomId ?? "—"}</h1>
+      <p class="menu-page__hint">Envie o link ou código para seu amigo entrar.</p>
       <p class="online-room-link"><code>${link}</code></p>
-      <p class="menu-panel__hint">${this.onlineStatus || "Aguardando oponente…"}</p>
+      <p class="menu-page__hint">${this.onlineStatus || "Aguardando oponente…"}</p>
     `;
 
     const actions = document.createElement("div");
-    actions.className = "menu-panel__actions";
+    actions.className = "menu-page__actions";
 
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
@@ -1011,67 +1033,83 @@ export class GameApp {
     actions.appendChild(cancelBtn);
 
     card.appendChild(actions);
-    screen.appendChild(card);
-    this.root.appendChild(screen);
+    main.appendChild(card);
+    app.appendChild(page);
+    this.root.appendChild(app);
   }
 
-  private renderMainMenu(): void {
-    if (!this.catalog) return;
-    const activeDeck = resolveActiveDeck(this.catalog);
-    const leaders = this.baseLeaderChoices();
+  private setMenuTab(tab: MenuTab): void {
+    this.menuTab = tab;
+    this.render();
+  }
 
-    const screen = document.createElement("div");
-    screen.className = "menu-shell";
-
-    const hero = document.createElement("header");
-    hero.className = "menu-hero";
-    hero.innerHTML = `
-      <p class="menu-hero__eyebrow">Protótipo v1.1</p>
-      <h1>Reino Reverso</h1>
-      <p class="menu-hero__sub">Fantasia urbana · arenas · domínio territorial</p>
-      ${this.onlineStatus ? `<p class="menu-hero__warn">${this.onlineStatus}</p>` : ""}
-    `;
-    screen.appendChild(hero);
-
-    const grid = document.createElement("div");
-    grid.className = "menu-grid";
-
-    this.renderPlayerLoginPanel(grid);
-
-    const playPanel = document.createElement("section");
-    playPanel.className = "menu-panel menu-panel--primary panel";
-    playPanel.innerHTML = `
-      <h2 class="menu-panel__title">Jogar</h2>
-      <p class="menu-panel__deck">
-        <span class="menu-panel__deck-label">Baralho ativo</span>
+  private renderMenuPlayTab(main: HTMLElement, activeDeck: ReturnType<typeof resolveActiveDeck>): void {
+    const local = document.createElement("section");
+    local.className = "menu-page__card panel menu-page__card--primary";
+    local.innerHTML = `
+      <h2 class="menu-page__title">Partida local</h2>
+      <p class="menu-page__deck">
+        <span class="menu-page__deck-label">Baralho ativo</span>
         <strong>${activeDeck.label}</strong>
       </p>
+      <p class="menu-page__hint">CPU ou dois jogadores no mesmo teclado (hotseat).</p>
     `;
-    const playActions = document.createElement("div");
-    playActions.className = "menu-panel__actions";
-
+    const localActions = document.createElement("div");
+    localActions.className = "menu-page__actions menu-page__actions--row";
     const vsCpu = document.createElement("button");
     vsCpu.type = "button";
     vsCpu.textContent = "Vs CPU";
     vsCpu.onclick = () => this.startGame(1);
-    playActions.appendChild(vsCpu);
-
     const hotseat = document.createElement("button");
     hotseat.type = "button";
     hotseat.className = "secondary";
-    hotseat.textContent = "2 jogadores (hotseat)";
+    hotseat.textContent = "2 jogadores";
     hotseat.onclick = () => this.startGame(null);
-    playActions.appendChild(hotseat);
+    localActions.append(vsCpu, hotseat);
+    local.appendChild(localActions);
+    main.appendChild(local);
 
-    playPanel.appendChild(playActions);
-    grid.appendChild(playPanel);
+    const online = document.createElement("section");
+    online.className = "menu-page__card panel";
+    online.innerHTML = `<h2 class="menu-page__title">1v1 online</h2>`;
+    this.renderOnlineDeckPicker(online);
+    const onlineActions = document.createElement("div");
+    onlineActions.className = "menu-page__actions menu-page__actions--row";
+    const createOnline = document.createElement("button");
+    createOnline.type = "button";
+    createOnline.textContent = "Criar sala";
+    createOnline.disabled = this.onlineBusy;
+    createOnline.onclick = () => void this.createOnlineRoom();
+    const joinOnline = document.createElement("button");
+    joinOnline.type = "button";
+    joinOnline.className = "secondary";
+    joinOnline.textContent = "Entrar com código";
+    joinOnline.disabled = this.onlineBusy;
+    joinOnline.onclick = () => this.promptJoinOnlineRoom();
+    onlineActions.append(createOnline, joinOnline);
+    online.appendChild(onlineActions);
+    main.appendChild(online);
+  }
 
-    const deckPanel = document.createElement("section");
-    deckPanel.className = "menu-panel panel";
-    deckPanel.innerHTML = `
-      <h2 class="menu-panel__title">Baralhos</h2>
-      <p class="menu-panel__hint">3 opções: Noah, Klaus ou deck personalizado.</p>
+  private renderMenuDecksTab(main: HTMLElement, activeDeck: ReturnType<typeof resolveActiveDeck>): void {
+    const intro = document.createElement("section");
+    intro.className = "menu-page__card panel";
+    intro.innerHTML = `
+      <h2 class="menu-page__title">Seus baralhos</h2>
+      <p class="menu-page__hint">Presets dos líderes piloto ou monte um deck personalizado (mín. 40 cartas).</p>
+      <p class="menu-page__deck">
+        <span class="menu-page__deck-label">Selecionado agora</span>
+        <strong>${activeDeck.label}</strong>
+      </p>
     `;
+    if (this.catalog) {
+      appendDeckSlotPicker(intro, this.catalog, () => {
+        syncPlayerDeckState(this.catalog!);
+        this.render();
+      });
+    }
+    const deckActions = document.createElement("div");
+    deckActions.className = "menu-page__actions";
     const deckBtn = document.createElement("button");
     deckBtn.type = "button";
     deckBtn.textContent = "Abrir deckbuilder";
@@ -1079,42 +1117,17 @@ export class GameApp {
       this.screen = "deckbuilder";
       this.render();
     };
-    const deckActions = document.createElement("div");
-    deckActions.className = "menu-panel__actions";
     deckActions.appendChild(deckBtn);
-    deckPanel.appendChild(deckActions);
-    grid.appendChild(deckPanel);
+    intro.appendChild(deckActions);
+    main.appendChild(intro);
+  }
 
-    const onlinePanel = document.createElement("section");
-    onlinePanel.className = "menu-panel menu-panel--wide panel";
-    onlinePanel.innerHTML = `<h2 class="menu-panel__title">1v1 online</h2>`;
-    this.renderOnlineDeckPicker(onlinePanel);
-    const onlineActions = document.createElement("div");
-    onlineActions.className = "menu-panel__actions";
-
-    const createOnline = document.createElement("button");
-    createOnline.type = "button";
-    createOnline.textContent = "Criar sala";
-    createOnline.disabled = this.onlineBusy;
-    createOnline.onclick = () => void this.createOnlineRoom();
-    onlineActions.appendChild(createOnline);
-
-    const joinOnline = document.createElement("button");
-    joinOnline.type = "button";
-    joinOnline.className = "secondary";
-    joinOnline.textContent = "Entrar com código";
-    joinOnline.disabled = this.onlineBusy;
-    joinOnline.onclick = () => this.promptJoinOnlineRoom();
-    onlineActions.appendChild(joinOnline);
-
-    onlinePanel.appendChild(onlineActions);
-    grid.appendChild(onlinePanel);
-
+  private renderMenuTestsTab(main: HTMLElement): void {
     const testPanel = document.createElement("section");
-    testPanel.className = "menu-panel menu-panel--wide panel";
+    testPanel.className = "menu-page__card panel";
     testPanel.innerHTML = `
-      <h2 class="menu-panel__title">Modos de teste</h2>
-      <p class="menu-panel__hint">Pula o Mundo Normal — partida já em Abismo ou Reino Reverso.</p>
+      <h2 class="menu-page__title">Modos de teste</h2>
+      <p class="menu-page__hint">Pula o Mundo Normal — partida já no Abismo ou no Reino Reverso.</p>
     `;
     const testGrid = document.createElement("div");
     testGrid.className = "menu-test-grid";
@@ -1136,19 +1149,52 @@ export class GameApp {
     }
 
     testPanel.appendChild(testGrid);
-    grid.appendChild(testPanel);
+    main.appendChild(testPanel);
+  }
 
-    if (leaders.length > 0) {
-      const leaderHint = document.createElement("p");
-      leaderHint.className = "menu-leaders-footnote";
-      leaderHint.textContent = `Líderes piloto: ${leaders.map((l) => l.name).join(" · ")}`;
-      screen.appendChild(grid);
-      screen.appendChild(leaderHint);
-    } else {
-      screen.appendChild(grid);
+  private renderMenuAccountTab(main: HTMLElement): void {
+    this.renderPlayerLoginPanel(main);
+  }
+
+  private renderMainMenu(): void {
+    if (!this.catalog) return;
+    const activeDeck = resolveActiveDeck(this.catalog);
+    const leaders = this.baseLeaderChoices();
+
+    const app = createMenuAppRoot();
+    appendMenuTopbar(app, {
+      activeTab: this.menuTab,
+      onTabChange: (tab) => this.setMenuTab(tab),
+      accountNickname: this.playerSession?.nickname,
+      statusMessage: this.onlineStatus || undefined,
+    });
+
+    const { page, main } = createMenuPageLayout();
+
+    switch (this.menuTab) {
+      case "play":
+        this.renderMenuPlayTab(main, activeDeck);
+        break;
+      case "decks":
+        this.renderMenuDecksTab(main, activeDeck);
+        break;
+      case "tests":
+        this.renderMenuTestsTab(main);
+        break;
+      case "account":
+        this.renderMenuAccountTab(main);
+        break;
     }
 
-    this.root.appendChild(screen);
+    if (leaders.length > 0 && this.menuTab === "play") {
+      const foot = document.createElement("p");
+      foot.className = "menu-page__footnote";
+      foot.textContent = `Líderes piloto: ${leaders.map((l) => l.name).join(" · ")}`;
+      main.appendChild(foot);
+    }
+
+    app.appendChild(page);
+    this.root.appendChild(app);
   }
 
   private renderGameOver(s: GameState): void {
