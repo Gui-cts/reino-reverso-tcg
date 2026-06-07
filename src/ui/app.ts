@@ -53,6 +53,8 @@ import {
 import type { PlayerViewPayload } from "../net/player-view";
 import { pickCpuAction, cpuControlsPhase } from "./cpu";
 import { attachCardHoverPreview } from "./card-hover-preview";
+import { renderDeckbuilderScreen } from "./deckbuilder";
+import { resolveActiveDeck } from "./deck-selection";
 import { cardFromDef, createCardEl, createEssenceTokenEl, createHiddenCardEl } from "./card-view";
 import {
   bindDropZone,
@@ -74,7 +76,7 @@ type UiSelection = {
   equipInstanceId: string | null;
 };
 
-type AppScreen = "menu" | "game" | "online-wait";
+type AppScreen = "menu" | "deckbuilder" | "game" | "online-wait";
 
 const ONLINE_SESSION_PREFIX = "rr-online-session:";
 
@@ -265,12 +267,19 @@ export class GameApp {
 
   private startGame(cpuPlayer: PlayerId | null, testMode: TestMode | null = null, leaderId?: string): void {
     if (!this.catalog) throw new Error("Catálogo não carregado");
+    const activeDeck = resolveActiveDeck(this.catalog);
+    const resolvedLeader = leaderId ?? activeDeck.leaderId;
     this.lastCpuPlayer = cpuPlayer;
     this.lastTestMode = testMode;
-    this.lastLeaderId = leaderId ?? null;
+    this.lastLeaderId = resolvedLeader;
+    const gameOpts = {
+      cpuPlayer,
+      leaderId: resolvedLeader,
+      deckCardIds: activeDeck.cardIds,
+    };
     this.state = testMode
-      ? createTestGame(this.catalog, { cpuPlayer, testMode, leaderId })
-      : createInitialGame(this.catalog, { cpuPlayer, leaderId });
+      ? createTestGame(this.catalog, { ...gameOpts, testMode })
+      : createInitialGame(this.catalog, gameOpts);
     this.screen = "game";
     this.selection = {
       troopId: null,
@@ -278,9 +287,9 @@ export class GameApp {
       spellInstanceId: null,
       mulliganIndices: new Set(),
       leaderAbilityTargetingPlayer: null,
-    artifactTargetingId: null,
-    equipInstanceId: null,
-  };
+      artifactTargetingId: null,
+      equipInstanceId: null,
+    };
     this.render();
     void this.runCpuLoop();
   }
@@ -736,6 +745,21 @@ export class GameApp {
       return;
     }
 
+    if (this.screen === "deckbuilder") {
+      if (!this.catalog) return;
+      renderDeckbuilderScreen(this.root, this.catalog, {
+        onBack: () => {
+          this.screen = "menu";
+          this.render();
+        },
+        onSaved: () => {
+          this.screen = "menu";
+          this.render();
+        },
+      });
+      return;
+    }
+
     if (this.screen === "online-wait") {
       this.renderOnlineWait();
       return;
@@ -809,20 +833,20 @@ export class GameApp {
 
   private renderOnlineWait(): void {
     const screen = document.createElement("div");
-    screen.className = "menu-screen";
+    screen.className = "menu-shell menu-shell--narrow";
 
     const card = document.createElement("div");
-    card.className = "menu-card panel";
+    card.className = "menu-panel panel menu-panel--online-wait";
     const link = `${window.location.origin}${window.location.pathname}?room=${this.onlineRoomId ?? ""}`;
     card.innerHTML = `
-      <h1>Sala ${this.onlineRoomId ?? "—"}</h1>
-      <p class="menu-tagline">Envie o link ou código para seu amigo entrar.</p>
+      <h1 class="menu-panel__title">Sala ${this.onlineRoomId ?? "—"}</h1>
+      <p class="menu-panel__hint">Envie o link ou código para seu amigo entrar.</p>
       <p class="online-room-link"><code>${link}</code></p>
-      <p class="menu-tagline">${this.onlineStatus || "Aguardando oponente…"}</p>
+      <p class="menu-panel__hint">${this.onlineStatus || "Aguardando oponente…"}</p>
     `;
 
     const actions = document.createElement("div");
-    actions.className = "menu-actions";
+    actions.className = "menu-panel__actions";
 
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
@@ -843,33 +867,83 @@ export class GameApp {
   }
 
   private renderMainMenu(): void {
+    if (!this.catalog) return;
+    const activeDeck = resolveActiveDeck(this.catalog);
+    const leaders = this.baseLeaderChoices();
+
     const screen = document.createElement("div");
-    screen.className = "menu-screen";
+    screen.className = "menu-shell";
 
-    const card = document.createElement("div");
-    card.className = "menu-card panel";
-    card.innerHTML = `
-      <h1>Reino Reverso TCG</h1>
-      <p class="menu-tagline">Protótipo v1.1 — fantasia urbana, arenas e domínio territorial</p>
-      ${this.onlineStatus ? `<p class="menu-tagline" style="color:var(--warn)">${this.onlineStatus}</p>` : ""}
+    const hero = document.createElement("header");
+    hero.className = "menu-hero";
+    hero.innerHTML = `
+      <p class="menu-hero__eyebrow">Protótipo v1.1</p>
+      <h1>Reino Reverso</h1>
+      <p class="menu-hero__sub">Fantasia urbana · arenas · domínio territorial</p>
+      ${this.onlineStatus ? `<p class="menu-hero__warn">${this.onlineStatus}</p>` : ""}
     `;
+    screen.appendChild(hero);
 
-    const actions = document.createElement("div");
-    actions.className = "menu-actions";
+    const grid = document.createElement("div");
+    grid.className = "menu-grid";
 
-    const onlinePanel = document.createElement("div");
-    onlinePanel.className = "menu-test panel";
-    onlinePanel.innerHTML = `
-      <h2 class="menu-test__title">1v1 online</h2>
-      <p class="menu-tagline">Crie uma sala e compartilhe o link — ideal para testar na Vercel com um amigo.</p>
+    const playPanel = document.createElement("section");
+    playPanel.className = "menu-panel menu-panel--primary panel";
+    playPanel.innerHTML = `
+      <h2 class="menu-panel__title">Jogar</h2>
+      <p class="menu-panel__deck">
+        <span class="menu-panel__deck-label">Baralho ativo</span>
+        <strong>${activeDeck.label}</strong>
+      </p>
     `;
+    const playActions = document.createElement("div");
+    playActions.className = "menu-panel__actions";
+
+    const vsCpu = document.createElement("button");
+    vsCpu.type = "button";
+    vsCpu.textContent = "Vs CPU";
+    vsCpu.onclick = () => this.startGame(1);
+    playActions.appendChild(vsCpu);
+
+    const hotseat = document.createElement("button");
+    hotseat.type = "button";
+    hotseat.className = "secondary";
+    hotseat.textContent = "2 jogadores (hotseat)";
+    hotseat.onclick = () => this.startGame(null);
+    playActions.appendChild(hotseat);
+
+    playPanel.appendChild(playActions);
+    grid.appendChild(playPanel);
+
+    const deckPanel = document.createElement("section");
+    deckPanel.className = "menu-panel panel";
+    deckPanel.innerHTML = `
+      <h2 class="menu-panel__title">Baralhos</h2>
+      <p class="menu-panel__hint">3 opções: Noah, Klaus ou deck personalizado.</p>
+    `;
+    const deckBtn = document.createElement("button");
+    deckBtn.type = "button";
+    deckBtn.textContent = "Abrir deckbuilder";
+    deckBtn.onclick = () => {
+      this.screen = "deckbuilder";
+      this.render();
+    };
+    const deckActions = document.createElement("div");
+    deckActions.className = "menu-panel__actions";
+    deckActions.appendChild(deckBtn);
+    deckPanel.appendChild(deckActions);
+    grid.appendChild(deckPanel);
+
+    const onlinePanel = document.createElement("section");
+    onlinePanel.className = "menu-panel panel";
+    onlinePanel.innerHTML = `<h2 class="menu-panel__title">1v1 online</h2>`;
     this.renderOnlineLeaderPicker(onlinePanel);
     const onlineActions = document.createElement("div");
-    onlineActions.className = "menu-actions";
+    onlineActions.className = "menu-panel__actions";
 
     const createOnline = document.createElement("button");
     createOnline.type = "button";
-    createOnline.textContent = "Criar sala online";
+    createOnline.textContent = "Criar sala";
     createOnline.disabled = this.onlineBusy;
     createOnline.onclick = () => void this.createOnlineRoom();
     onlineActions.appendChild(createOnline);
@@ -883,74 +957,46 @@ export class GameApp {
     onlineActions.appendChild(joinOnline);
 
     onlinePanel.appendChild(onlineActions);
-    card.appendChild(onlinePanel);
+    grid.appendChild(onlinePanel);
 
-    const leaderChoices = this.baseLeaderChoices();
+    const testPanel = document.createElement("section");
+    testPanel.className = "menu-panel menu-panel--wide panel";
+    testPanel.innerHTML = `
+      <h2 class="menu-panel__title">Modos de teste</h2>
+      <p class="menu-panel__hint">Pula o Mundo Normal — partida já em Abismo ou Reino Reverso.</p>
+    `;
+    const testGrid = document.createElement("div");
+    testGrid.className = "menu-test-grid";
 
-    for (const leader of leaderChoices) {
+    const testModes: { label: string; cpu: PlayerId | null; mode: TestMode }[] = [
+      { label: "Abismo vs CPU", cpu: 1, mode: "abismo" },
+      { label: "Abismo hotseat", cpu: null, mode: "abismo" },
+      { label: "Reino Reverso vs CPU", cpu: 1, mode: "reino-reverso" },
+      { label: "Reino Reverso hotseat", cpu: null, mode: "reino-reverso" },
+    ];
+
+    for (const t of testModes) {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.textContent = `Jogar vs CPU — ${leader.name}`;
-      btn.onclick = () => this.startGame(1, null, leader.id);
-      actions.appendChild(btn);
+      btn.className = "secondary menu-test-grid__btn";
+      btn.textContent = t.label;
+      btn.onclick = () => this.startGame(t.cpu, t.mode);
+      testGrid.appendChild(btn);
     }
 
-    if (leaderChoices.length === 0) {
-      const vsCpu = document.createElement("button");
-      vsCpu.type = "button";
-      vsCpu.textContent = "Jogar vs CPU (você = Jogador 1)";
-      vsCpu.onclick = () => this.startGame(1);
-      actions.appendChild(vsCpu);
+    testPanel.appendChild(testGrid);
+    grid.appendChild(testPanel);
+
+    if (leaders.length > 0) {
+      const leaderHint = document.createElement("p");
+      leaderHint.className = "menu-leaders-footnote";
+      leaderHint.textContent = `Líderes piloto: ${leaders.map((l) => l.name).join(" · ")}`;
+      screen.appendChild(grid);
+      screen.appendChild(leaderHint);
+    } else {
+      screen.appendChild(grid);
     }
 
-    const hotseat = document.createElement("button");
-    hotseat.type = "button";
-    hotseat.className = "secondary";
-    hotseat.textContent = "2 jogadores no mesmo teclado";
-    hotseat.onclick = () => this.startGame(null);
-    actions.appendChild(hotseat);
-
-    card.appendChild(actions);
-
-    const testPanel = document.createElement("div");
-    testPanel.className = "menu-test panel";
-    testPanel.innerHTML = `
-      <h2 class="menu-test__title">Modos de teste</h2>
-      <p class="menu-tagline">Pula o Mundo Normal — já em jogo com recursos fixos.</p>
-    `;
-    const testActions = document.createElement("div");
-    testActions.className = "menu-actions";
-
-    const testAbismoCpu = document.createElement("button");
-    testAbismoCpu.type = "button";
-    testAbismoCpu.className = "secondary";
-    testAbismoCpu.textContent = "Teste Abismo vs CPU";
-    testAbismoCpu.onclick = () => this.startGame(1, "abismo");
-    testActions.appendChild(testAbismoCpu);
-
-    const testAbismoHot = document.createElement("button");
-    testAbismoHot.type = "button";
-    testAbismoHot.className = "secondary";
-    testAbismoHot.textContent = "Teste Abismo (2 jogadores)";
-    testAbismoHot.onclick = () => this.startGame(null, "abismo");
-    testActions.appendChild(testAbismoHot);
-
-    const testRrCpu = document.createElement("button");
-    testRrCpu.type = "button";
-    testRrCpu.className = "secondary";
-    testRrCpu.textContent = "Teste Reino Reverso vs CPU";
-    testRrCpu.onclick = () => this.startGame(1, "reino-reverso");
-    testActions.appendChild(testRrCpu);
-
-    const testRrHot = document.createElement("button");
-    testRrHot.type = "button";
-    testRrHot.className = "secondary";
-    testRrHot.textContent = "Teste Reino Reverso (2 jogadores)";
-    testRrHot.onclick = () => this.startGame(null, "reino-reverso");
-    testActions.appendChild(testRrHot);
-
-    testPanel.appendChild(testActions);
-    screen.append(card, testPanel);
     this.root.appendChild(screen);
   }
 

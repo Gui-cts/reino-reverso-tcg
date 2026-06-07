@@ -283,14 +283,15 @@ function validateStarterDeck(catalogData) {
 function normalizeCatalog(data) {
   const cards = data.cards.map(normalizeCardDefinition);
   const starterDeck = [...data.starterDeck];
-  const check = validateStarterDeck({ cards, starterDeck });
+  const presetDecks = data.presetDecks?.map((p) => ({ ...p }));
+  const check = validateStarterDeck({ cards, starterDeck, presetDecks });
   if (!check.valid) {
     console.warn(
       "[deck] starterDeck inv\xE1lido:",
       check.errors.map((e) => e.message).join("; ")
     );
   }
-  return { cards, starterDeck };
+  return { cards, starterDeck, presetDecks };
 }
 function buildCatalogMap(cards) {
   return Object.fromEntries(cards.map((c) => [c.id, normalizeCardDefinition(c)]));
@@ -1722,13 +1723,19 @@ function createInitialGame(catalogData, options = {}) {
   const p0LeaderId = chosenLeaderId;
   const p1LeaderId = cpuPlayer !== null ? cpuLeaderId : allBaseLeaders.find((l) => l.id !== p0LeaderId)?.id ?? p0LeaderId;
   const allFormCards = catalogData.cards.filter((c) => c.leaderFormOf);
-  const baseDeck = catalogData.starterDeck.filter((id) => {
-    const def = catalog[id];
-    return !def?.leaderFormOf;
-  });
-  function buildDeckForLeader(leaderId) {
+  const humanDeckSource = options.deckCardIds?.length ? options.deckCardIds : catalogData.starterDeck;
+  function buildDeckForLeader(leaderId, sourceIds) {
     const forms = allFormCards.filter((c) => c.leaderFormOf === leaderId).map((c) => c.id);
-    return shuffle([...baseDeck, ...forms]);
+    const base = sourceIds.filter((id) => {
+      const def = catalog[id];
+      return !def?.leaderFormOf;
+    });
+    return shuffle([...base, ...forms]);
+  }
+  function deckSourceForPlayer(player) {
+    if (cpuPlayer !== null && player === humanIdx) return humanDeckSource;
+    if (cpuPlayer === null && player === 0) return humanDeckSource;
+    return catalogData.starterDeck;
   }
   function leaderForPlayer(player) {
     if (cpuPlayer !== null) {
@@ -1741,8 +1748,14 @@ function createInitialGame(catalogData, options = {}) {
     return def?.leaderMaxHp ?? LEADER_MAX_HP;
   }
   const players = [
-    { ...emptyPlayer(), deck: buildDeckForLeader(leaderForPlayer(0)) },
-    { ...emptyPlayer(), deck: buildDeckForLeader(leaderForPlayer(1)) }
+    {
+      ...emptyPlayer(),
+      deck: buildDeckForLeader(leaderForPlayer(0), deckSourceForPlayer(0))
+    },
+    {
+      ...emptyPlayer(),
+      deck: buildDeckForLeader(leaderForPlayer(1), deckSourceForPlayer(1))
+    }
   ];
   for (const p of [0, 1]) {
     const lid = leaderForPlayer(p);
@@ -4994,6 +5007,20 @@ var cards_default = {
     "equip-corrente-ferro",
     "destruidor-reliquias",
     "fragmentar"
+  ],
+  presetDecks: [
+    {
+      id: "noah",
+      leaderId: "noah-lider-base",
+      name: "Noah \u2014 Controle Delta",
+      description: "Tropas resistentes, equipamentos e evolu\xE7\xF5es do pugilista."
+    },
+    {
+      id: "klaus",
+      leaderId: "klaus-violinista",
+      name: "Klaus \u2014 Melodia Arcana",
+      description: "Feiti\xE7os, ess\xEAncia e formas do violinista."
+    }
   ]
 };
 

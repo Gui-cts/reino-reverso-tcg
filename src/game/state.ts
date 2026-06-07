@@ -81,6 +81,8 @@ export type CreateGameOptions = {
   cpuPlayer?: PlayerId | null;
   /** Líder escolhido pelo jogador humano. */
   leaderId?: string;
+  /** Cartas do baralho do jogador humano (J1 ou seat humano). CPU/oponente usa starter. */
+  deckCardIds?: string[];
 };
 
 export function createInitialGame(
@@ -110,16 +112,25 @@ export function createInitialGame(
       : (allBaseLeaders.find((l) => l.id !== p0LeaderId)?.id ?? p0LeaderId);
 
   const allFormCards = catalogData.cards.filter((c) => c.leaderFormOf);
-  const baseDeck = catalogData.starterDeck.filter((id) => {
-    const def = catalog[id];
-    return !def?.leaderFormOf;
-  });
+  const humanDeckSource = options.deckCardIds?.length
+    ? options.deckCardIds
+    : catalogData.starterDeck;
 
-  function buildDeckForLeader(leaderId: string | null): string[] {
+  function buildDeckForLeader(leaderId: string | null, sourceIds: string[]): string[] {
     const forms = allFormCards
       .filter((c) => c.leaderFormOf === leaderId)
       .map((c) => c.id);
-    return shuffle([...baseDeck, ...forms]);
+    const base = sourceIds.filter((id) => {
+      const def = catalog[id];
+      return !def?.leaderFormOf;
+    });
+    return shuffle([...base, ...forms]);
+  }
+
+  function deckSourceForPlayer(player: PlayerId): string[] {
+    if (cpuPlayer !== null && player === humanIdx) return humanDeckSource;
+    if (cpuPlayer === null && player === 0) return humanDeckSource;
+    return catalogData.starterDeck;
   }
 
   function leaderForPlayer(player: PlayerId): string | null {
@@ -135,8 +146,14 @@ export function createInitialGame(
   }
 
   const players: [PlayerState, PlayerState] = [
-    { ...emptyPlayer(), deck: buildDeckForLeader(leaderForPlayer(0)) },
-    { ...emptyPlayer(), deck: buildDeckForLeader(leaderForPlayer(1)) },
+    {
+      ...emptyPlayer(),
+      deck: buildDeckForLeader(leaderForPlayer(0), deckSourceForPlayer(0)),
+    },
+    {
+      ...emptyPlayer(),
+      deck: buildDeckForLeader(leaderForPlayer(1), deckSourceForPlayer(1)),
+    },
   ];
   for (const p of [0, 1] as PlayerId[]) {
     const lid = leaderForPlayer(p);

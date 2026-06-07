@@ -168,9 +168,19 @@ export interface DeckDefinition {
   cardIds: string[];
 }
 
+export interface PresetDeckDefinition {
+  id: string;
+  leaderId: string;
+  name: string;
+  description: string;
+  /** Omitido = usa `starterDeck` sem cartas de forma de Líder. */
+  cardIds?: string[];
+}
+
 export interface CardCatalog {
   cards: CardDefinition[];
   starterDeck: string[];
+  presetDecks?: PresetDeckDefinition[];
 }
 
 export interface TroopInstance {

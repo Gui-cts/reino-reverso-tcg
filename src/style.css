@@ -1004,6 +1004,305 @@ header {
   padding: 1.5rem 0;
 }
 
+/* —— Menu principal & deckbuilder —— */
+.menu-shell {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 2.5rem;
+}
+
+.menu-shell--narrow {
+  max-width: 520px;
+  min-height: min(72vh, 640px);
+  display: flex;
+  align-items: center;
+}
+
+.menu-shell--deckbuilder {
+  max-width: 980px;
+}
+
+.menu-hero {
+  text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+.menu-hero--compact {
+  margin-bottom: 1.25rem;
+}
+
+.menu-hero__eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.menu-hero h1 {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.85rem, 4vw, 2.45rem);
+  letter-spacing: -0.02em;
+}
+
+.menu-hero__sub {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.menu-hero__warn {
+  margin: 0.75rem 0 0;
+  color: var(--warn);
+  font-size: 0.9rem;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.menu-panel {
+  text-align: left;
+  padding: 1.1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.menu-panel--primary {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--panel-border));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent) 8%, var(--panel-bg)),
+    var(--panel-bg)
+  );
+}
+
+.menu-panel--wide {
+  grid-column: 1 / -1;
+}
+
+.menu-panel__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.menu-panel__hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.menu-panel__deck {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.88rem;
+}
+
+.menu-panel__deck-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.menu-panel__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.menu-panel__actions button {
+  width: 100%;
+}
+
+.menu-test-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.menu-test-grid__btn {
+  font-size: 0.82rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.menu-leaders-footnote {
+  margin: 1rem 0 0;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.menu-footer-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  justify-content: center;
+}
+
+.deck-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.deck-preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0.85rem 0.95rem;
+  text-align: left;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.deck-preset-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--panel-border));
+}
+
+.deck-preset-card--active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.deck-preset-card__title {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.deck-preset-card__desc {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.deck-preset-card__meta {
+  font-size: 0.72rem;
+  color: var(--accent);
+  margin-top: 0.15rem;
+}
+
+.deck-preset-hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.deck-editor {
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.deck-editor__label {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.deck-editor__status {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--warn);
+}
+
+.deck-editor__status--ok {
+  color: var(--success);
+}
+
+.deck-editor__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  max-height: min(52vh, 420px);
+}
+
+.deck-editor__col-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+}
+
+.deck-editor__list {
+  overflow-y: auto;
+  max-height: min(48vh, 380px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-right: 0.25rem;
+}
+
+.deck-editor__row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  font-size: 0.8rem;
+}
+
+.deck-editor__row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deck-editor__row-meta {
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.deck-editor__row-btn {
+  padding: 0.15rem 0.45rem;
+  min-width: 1.75rem;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+@media (max-width: 720px) {
+  .menu-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-panel--wide {
+    grid-column: auto;
+  }
+
+  .deck-preset-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .deck-editor__columns {
+    grid-template-columns: 1fr;
+    max-height: none;
+  }
+
+  .deck-editor__list {
+    max-height: 220px;
+  }
+
+  .menu-test-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .menu-card,
 .gameover-card {
   width: min(100%, 480px);

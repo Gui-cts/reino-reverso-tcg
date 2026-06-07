@@ -12,14 +12,15 @@ export async function loadCardCatalog(): Promise<CardCatalog> {
 export function normalizeCatalog(data: CardCatalog): CardCatalog {
   const cards = data.cards.map(normalizeCardDefinition);
   const starterDeck = [...data.starterDeck];
-  const check = validateStarterDeck({ cards, starterDeck });
+  const presetDecks = data.presetDecks?.map((p) => ({ ...p }));
+  const check = validateStarterDeck({ cards, starterDeck, presetDecks });
   if (!check.valid) {
     console.warn(
       "[deck] starterDeck inválido:",
       check.errors.map((e) => e.message).join("; "),
     );
   }
-  return { cards, starterDeck };
+  return { cards, starterDeck, presetDecks };
 }
 
 export function buildCatalogMap(cards: CardDefinition[]): Record<string, CardDefinition> {

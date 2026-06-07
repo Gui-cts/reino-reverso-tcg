@@ -889,5 +889,19 @@
     "equip-corrente-ferro",
     "destruidor-reliquias",
     "fragmentar"
+  ],
+  "presetDecks": [
+    {
+      "id": "noah",
+      "leaderId": "noah-lider-base",
+      "name": "Noah — Controle Delta",
+      "description": "Tropas resistentes, equipamentos e evoluções do pugilista."
+    },
+    {
+      "id": "klaus",
+      "leaderId": "klaus-violinista",
+      "name": "Klaus — Melodia Arcana",
+      "description": "Feitiços, essência e formas do violinista."
+    }
   ]
 }
