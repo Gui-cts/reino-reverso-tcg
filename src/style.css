@@ -1396,7 +1396,7 @@ header {
 
 .deck-editor__card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
   gap: 0.55rem;
   align-content: start;
   width: 100%;
@@ -1411,13 +1411,23 @@ header {
   width: 100%;
 }
 
+/* --fc-w precisa ser px puro: calc(var(--fc-w) / 13.5) define o tamanho do texto */
 .deck-editor__card-tile .game-card--framed-mini {
-  --fc-w: min(100%, 128px);
-  width: 100%;
-  max-width: 128px;
+  --fc-w: 148px;
+  width: 148px;
+  max-width: 100%;
   cursor: help;
   transform: none !important;
   margin: 0 !important;
+}
+
+.deck-editor__card-tile .game-card--framed-mini .game-card__name,
+.deck-editor__card-tile .game-card--framed-mini .game-card__body,
+.deck-editor__card-tile .game-card--framed-mini .game-card__type,
+.deck-editor__card-tile .game-card--framed-mini .game-card__footer,
+.deck-editor__card-tile .game-card--framed-mini .game-card__orb {
+  opacity: 1;
+  visibility: visible;
 }
 
 .deck-editor__card-tile .game-card--framed-mini:hover {
@@ -1514,7 +1524,12 @@ header {
   }
 
   .deck-editor__card-grid {
-    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  }
+
+  .deck-editor__card-tile .game-card--framed-mini {
+    --fc-w: 132px;
+    width: 132px;
   }
 
   .menu-test-grid {
