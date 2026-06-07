@@ -39,11 +39,19 @@ function positionPreview(anchor: HTMLElement, card: HTMLElement): void {
   previewEl = overlay;
 }
 
-/** Após ~2s com o mouse em cima, mostra a carta em tamanho grande. */
+export type CardHoverPreviewOptions = {
+  /** Padrão 2000ms no tabuleiro; deckbuilder pode usar menos. */
+  delayMs?: number;
+};
+
+/** Após um delay com o mouse em cima, mostra a carta em tamanho grande. */
 export function attachCardHoverPreview(
   anchor: HTMLElement,
   buildFullCard: () => HTMLElement,
+  options: CardHoverPreviewOptions = {},
 ): void {
+  const delayMs = options.delayMs ?? HOVER_DELAY_MS;
+
   anchor.addEventListener("mouseenter", () => {
     if (document.body.classList.contains("is-dragging-card")) return;
 
@@ -56,7 +64,7 @@ export function attachCardHoverPreview(
       full.classList.add("game-card--framed-preview");
       full.classList.remove("exhausted", "game-card--framed-mini");
       positionPreview(anchor, full);
-    }, HOVER_DELAY_MS);
+    }, delayMs);
   });
 
   anchor.addEventListener("mouseleave", () => {

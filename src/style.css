@@ -1224,6 +1224,13 @@ header {
   color: var(--success);
 }
 
+.deck-editor__preview-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .deck-editor__main {
   display: flex;
   gap: 0.65rem;
@@ -1287,7 +1294,7 @@ header {
   gap: 0.75rem;
   flex: 1;
   min-width: 0;
-  max-height: min(52vh, 420px);
+  max-height: min(62vh, 520px);
 }
 
 .deck-editor__col-title {
@@ -1295,13 +1302,46 @@ header {
   font-size: 0.88rem;
 }
 
-.deck-editor__list {
+.deck-editor__list,
+.deck-editor__card-grid {
   overflow-y: auto;
-  max-height: min(48vh, 380px);
+  max-height: min(58vh, 480px);
+  padding-right: 0.25rem;
+}
+
+.deck-editor__card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 0.65rem;
+  align-content: start;
+}
+
+.deck-editor__card-tile {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 0.35rem;
-  padding-right: 0.25rem;
+}
+
+.deck-editor__card-tile .game-card--framed-mini {
+  --fc-w: 148px;
+  width: 100%;
+  max-width: 168px;
+  cursor: help;
+}
+
+.deck-editor__tile-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.deck-editor__copy-badge {
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .deck-editor__row {
@@ -1363,8 +1403,13 @@ header {
     max-height: none;
   }
 
-  .deck-editor__list {
-    max-height: 220px;
+  .deck-editor__list,
+  .deck-editor__card-grid {
+    max-height: 280px;
+  }
+
+  .deck-editor__card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   }
 
   .menu-test-grid {

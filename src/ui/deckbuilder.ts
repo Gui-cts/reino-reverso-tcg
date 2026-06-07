@@ -1,5 +1,7 @@
-import { cardTypeLabel, getCardType, getFaction, isDeckableCard } from "../game/card-meta";
+import { getCardType, isDeckableCard } from "../game/card-meta";
 import type { CardCatalog, CardDefinition, CardType, DeckDefinition } from "../game/types";
+import { attachCardHoverPreview } from "./card-hover-preview";
+import { cardFromDef } from "./card-view";
 import {
   baseDeckCardIds,
   getCatalogPresets,
@@ -79,8 +81,92 @@ function matchesCatalogFilter(def: CardDefinition, filter: CatalogTypeFilter): b
   return getCardType(def) === filter;
 }
 
+const DECK_CARD_PREVIEW_MS = 550;
+
+function attachDeckCardPreview(anchor: HTMLElement, def: CardDefinition): void {
+  attachCardHoverPreview(anchor, () => cardFromDef(def), { delayMs: DECK_CARD_PREVIEW_MS });
+}
+
+function maxCopies(def: CardDefinition): number {
+  return def.cardRole === "captain" ? 1 : 4;
+}
+
+function buildCatalogCardTile(
+  def: CardDefinition,
+  inDeck: number,
+  onAdd: () => void,
+): HTMLElement {
+  const max = maxCopies(def);
+  const tile = document.createElement("div");
+  tile.className = "deck-editor__card-tile";
+
+  const card = cardFromDef(def, { miniature: true });
+  attachDeckCardPreview(card, def);
+  tile.appendChild(card);
+
+  const actions = document.createElement("div");
+  actions.className = "deck-editor__tile-actions";
+
+  const copies = document.createElement("span");
+  copies.className = "deck-editor__copy-badge";
+  copies.textContent = `${inDeck}/${max} no deck`;
+  actions.appendChild(copies);
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "secondary deck-editor__row-btn";
+  addBtn.textContent = "+";
+  addBtn.disabled = inDeck >= max;
+  addBtn.title = inDeck >= max ? "Limite de cópias" : `Adicionar ${def.name}`;
+  addBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onAdd();
+  });
+  actions.appendChild(addBtn);
+
+  tile.appendChild(actions);
+  return tile;
+}
+
+function buildOwnedCardTile(
+  def: CardDefinition,
+  qty: number,
+  onRemove: () => void,
+): HTMLElement {
+  const tile = document.createElement("div");
+  tile.className = "deck-editor__card-tile";
+
+  const card = cardFromDef(def, {
+    miniature: true,
+    subLabel: qty > 1 ? `×${qty} no baralho` : undefined,
+  });
+  attachDeckCardPreview(card, def);
+  tile.appendChild(card);
+
+  const actions = document.createElement("div");
+  actions.className = "deck-editor__tile-actions";
+
+  const remBtn = document.createElement("button");
+  remBtn.type = "button";
+  remBtn.className = "secondary deck-editor__row-btn";
+  remBtn.textContent = "−";
+  remBtn.title = `Remover 1× ${def.name}`;
+  remBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onRemove();
+  });
+  actions.appendChild(remBtn);
+
+  tile.appendChild(actions);
+  return tile;
+}
+
 function captureEditorScroll(root: HTMLElement): void {
-  const lists = root.querySelectorAll<HTMLElement>(".deck-editor__columns .deck-editor__list");
+  const lists = root.querySelectorAll<HTMLElement>(
+    ".deck-editor__columns .deck-editor__card-grid, .deck-editor__columns .deck-editor__list",
+  );
   if (lists.length === 0) return;
   pendingEditorScroll = {
     catalog: lists[0]?.scrollTop ?? 0,
@@ -92,7 +178,9 @@ function restoreEditorScroll(root: HTMLElement): void {
   if (!pendingEditorScroll) return;
   const { catalog, deck } = pendingEditorScroll;
   pendingEditorScroll = null;
-  const lists = root.querySelectorAll<HTMLElement>(".deck-editor__columns .deck-editor__list");
+  const lists = root.querySelectorAll<HTMLElement>(
+    ".deck-editor__columns .deck-editor__card-grid, .deck-editor__columns .deck-editor__list",
+  );
   if (lists[0]) lists[0].scrollTop = catalog;
   if (lists[1]) lists[1].scrollTop = deck;
 }
@@ -235,6 +323,12 @@ export function renderDeckbuilderScreen(
       : validation.errors[0]?.message ?? "Baralho inválido.";
     editor.appendChild(status);
 
+    const previewHint = document.createElement("p");
+    previewHint.className = "deck-editor__preview-hint";
+    previewHint.textContent =
+      "Passe o mouse sobre uma carta para ver nome, efeito e palavras-chave em tamanho grande.";
+    editor.appendChild(previewHint);
+
     const catalogCards = deckableCards(catalog).filter((c) => !c.leaderFormOf);
     const filteredCatalogCards = catalogCards.filter((c) =>
       matchesCatalogFilter(c, activeCatalogFilter),
@@ -277,17 +371,13 @@ export function renderDeckbuilderScreen(
     catalogCol.className = "deck-editor__col";
     catalogCol.innerHTML = `<h3 class="deck-editor__col-title">Catálogo — ${activeFilterLabel} (${filteredCatalogCards.length})</h3>`;
     const catalogList = document.createElement("div");
-    catalogList.className = "deck-editor__list";
+    catalogList.className = "deck-editor__card-grid";
 
     const deckCol = document.createElement("div");
     deckCol.className = "deck-editor__col";
     deckCol.innerHTML = `<h3 class="deck-editor__col-title">Seu baralho (${customDeck.cardIds.length})</h3>`;
     const deckList = document.createElement("div");
-    deckList.className = "deck-editor__list";
-
-    function maxCopies(def: CardDefinition): number {
-      return def.cardRole === "captain" ? 1 : 4;
-    }
+    deckList.className = "deck-editor__card-grid";
 
     if (filteredCatalogCards.length === 0) {
       const empty = document.createElement("p");
@@ -298,55 +388,43 @@ export function renderDeckbuilderScreen(
 
     for (const def of filteredCatalogCards) {
       const inDeck = counts.get(def.id) ?? 0;
-      const max = maxCopies(def);
-      const row = document.createElement("div");
-      row.className = "deck-editor__row";
-      row.innerHTML = `
-        <span class="deck-editor__row-name">${def.name}</span>
-        <span class="deck-editor__row-meta">${cardTypeLabel(getCardType(def))} · ${getFaction(def)} · ${inDeck}/${max}</span>
-      `;
-      const addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "secondary deck-editor__row-btn";
-      addBtn.textContent = "+";
-      addBtn.disabled = inDeck >= max;
-      addBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        persistCustomAndRerender({
-          ...customDeck,
-          cardIds: [...customDeck.cardIds, def.id],
-        });
-      });
-      row.appendChild(addBtn);
-      catalogList.appendChild(row);
+      catalogList.appendChild(
+        buildCatalogCardTile(def, inDeck, () => {
+          persistCustomAndRerender({
+            ...customDeck,
+            cardIds: [...customDeck.cardIds, def.id],
+          });
+        }),
+      );
     }
 
     const deckCounts = countCards(customDeck.cardIds);
-    for (const [id, qty] of deckCounts) {
+    const ownedIds = [...deckCounts.keys()].sort((a, b) => {
+      const na = catalog.cards.find((c) => c.id === a)?.name ?? a;
+      const nb = catalog.cards.find((c) => c.id === b)?.name ?? b;
+      return na.localeCompare(nb, "pt");
+    });
+
+    if (ownedIds.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "deck-editor__empty";
+      empty.textContent = "Nenhuma carta no baralho ainda.";
+      deckList.appendChild(empty);
+    }
+
+    for (const id of ownedIds) {
       const def = catalog.cards.find((c) => c.id === id);
       if (!def) continue;
-      const row = document.createElement("div");
-      row.className = "deck-editor__row";
-      row.innerHTML = `
-        <span class="deck-editor__row-name">${def.name}</span>
-        <span class="deck-editor__row-meta">×${qty}</span>
-      `;
-      const remBtn = document.createElement("button");
-      remBtn.type = "button";
-      remBtn.className = "secondary deck-editor__row-btn";
-      remBtn.textContent = "−";
-      remBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const idx = customDeck.cardIds.indexOf(id);
-        if (idx < 0) return;
-        const next = [...customDeck.cardIds];
-        next.splice(idx, 1);
-        persistCustomAndRerender({ ...customDeck, cardIds: next });
-      });
-      row.appendChild(remBtn);
-      deckList.appendChild(row);
+      const qty = deckCounts.get(id) ?? 0;
+      deckList.appendChild(
+        buildOwnedCardTile(def, qty, () => {
+          const idx = customDeck.cardIds.indexOf(id);
+          if (idx < 0) return;
+          const next = [...customDeck.cardIds];
+          next.splice(idx, 1);
+          persistCustomAndRerender({ ...customDeck, cardIds: next });
+        }),
+      );
     }
 
     catalogCol.appendChild(catalogList);
