@@ -3949,6 +3949,13 @@ function dispatch(state, action) {
 }
 
 // src/game/permissions.ts
+function isCounterspellPlay(state, seat, action) {
+  const inst = state.troops[action.spellInstanceId];
+  if (!inst || inst.owner !== seat) return false;
+  const def = state.catalog[inst.cardId];
+  if (!def) return false;
+  return canRespondWithCounter(state, seat, def);
+}
 function canUseLeaderAbilityReact(state, player) {
   if (!state.combat) return false;
   const pl = state.players[player];
@@ -3984,14 +3991,7 @@ function isStrikeReactionAction(state, player, action) {
   }
 }
 function canControlPlayer(s, player) {
-  if (s.pendingSpell) {
-    if (s.pendingSpell.counterWindowOpen && player === opponent(s.pendingSpell.caster)) {
-      return true;
-    }
-    if (s.pendingSpell.awaitingCounterPayment && player === s.pendingSpell.caster) {
-      return true;
-    }
-  }
+  if (s.pendingSpell) return false;
   if (s.matchPhase === "setup_arenas_p0") return player === 0;
   if (s.matchPhase === "setup_arenas_p1") return player === 1;
   if (s.matchPhase === "mulligan_p0") return player === 0;
@@ -4064,11 +4064,14 @@ function canSubmitAction(state, seat, action) {
   if (actor === null || actor !== seat) return false;
   if (state.pendingSpell) {
     if (state.pendingSpell.counterWindowOpen && seat === opponent(state.pendingSpell.caster)) {
-      return true;
+      if (action.type === "PASS_SPELL_COUNTER") return true;
+      if (action.type === "PLAY_SPELL") return isCounterspellPlay(state, seat, action);
+      return false;
     }
     if (state.pendingSpell.awaitingCounterPayment && seat === state.pendingSpell.caster) {
-      return true;
+      return action.type === "RESOLVE_COUNTER_PAYMENT";
     }
+    return false;
   }
   if (canControlPlayer(state, seat)) return true;
   if (state.combat?.subPhase === "strike" && seat !== getCombatAssigningPlayer(state.combat)) {

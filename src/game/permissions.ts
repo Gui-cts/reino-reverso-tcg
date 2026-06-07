@@ -1,7 +1,20 @@
 import { getCombatAssigningPlayer } from "./combat";
 import { getAvailableEssence, opponent } from "./helpers";
+import { canRespondWithCounter } from "./spell-stack";
 import { canPlaySpellNow, getCardSpeed, isSpellCard } from "./spells";
 import type { GameAction, GameState, PlayerId } from "./types";
+
+function isCounterspellPlay(
+  state: GameState,
+  seat: PlayerId,
+  action: Extract<GameAction, { type: "PLAY_SPELL" }>,
+): boolean {
+  const inst = state.troops[action.spellInstanceId];
+  if (!inst || inst.owner !== seat) return false;
+  const def = state.catalog[inst.cardId];
+  if (!def) return false;
+  return canRespondWithCounter(state, seat, def);
+}
 
 function canUseLeaderAbilityReact(state: GameState, player: PlayerId): boolean {
   if (!state.combat) return false;
@@ -54,16 +67,18 @@ function isStrikeReactionAction(
   }
 }
 
+/** Pode responder ao feitiço pendente (Contramagia, passar ou pagar custo). */
+export function canRespondToPendingSpell(s: GameState, player: PlayerId): boolean {
+  const pending = s.pendingSpell;
+  if (!pending) return false;
+  if (pending.counterWindowOpen && player === opponent(pending.caster)) return true;
+  if (pending.awaitingCounterPayment && player === pending.caster) return true;
+  return false;
+}
+
 /** Quem pode agir neste momento (hotseat / online — não inclui CPU). */
 export function canControlPlayer(s: GameState, player: PlayerId): boolean {
-  if (s.pendingSpell) {
-    if (s.pendingSpell.counterWindowOpen && player === opponent(s.pendingSpell.caster)) {
-      return true;
-    }
-    if (s.pendingSpell.awaitingCounterPayment && player === s.pendingSpell.caster) {
-      return true;
-    }
-  }
+  if (s.pendingSpell) return false;
 
   if (s.matchPhase === "setup_arenas_p0") return player === 0;
   if (s.matchPhase === "setup_arenas_p1") return player === 1;
@@ -147,12 +162,21 @@ export function canSubmitAction(
   if (actor === null || actor !== seat) return false;
 
   if (state.pendingSpell) {
-    if (state.pendingSpell.counterWindowOpen && seat === opponent(state.pendingSpell.caster)) {
-      return true;
+    if (
+      state.pendingSpell.counterWindowOpen &&
+      seat === opponent(state.pendingSpell.caster)
+    ) {
+      if (action.type === "PASS_SPELL_COUNTER") return true;
+      if (action.type === "PLAY_SPELL") return isCounterspellPlay(state, seat, action);
+      return false;
     }
-    if (state.pendingSpell.awaitingCounterPayment && seat === state.pendingSpell.caster) {
-      return true;
+    if (
+      state.pendingSpell.awaitingCounterPayment &&
+      seat === state.pendingSpell.caster
+    ) {
+      return action.type === "RESOLVE_COUNTER_PAYMENT";
     }
+    return false;
   }
 
   if (canControlPlayer(state, seat)) return true;

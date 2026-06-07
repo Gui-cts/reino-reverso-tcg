@@ -11,6 +11,11 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-05-19",
+    title: "Feitiço pendente",
+    summary: "Enquanto um feitiço da CPU aguarda resposta, só Contramagia ou Passar ficam disponíveis — o resto do jogo fica bloqueado.",
+  },
+  {
+    date: "2026-05-19",
     title: "CPU no golpe de combate",
     summary: "Corrigido travamento no Golpe 1 — CPU prioriza ataques, encerra o golpe sem alvos legais e recupera o loop se uma ação falhar.",
   },

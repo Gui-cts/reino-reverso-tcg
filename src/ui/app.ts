@@ -42,7 +42,13 @@ import {
   spellEffectLabel,
   spellRequiresTarget,
 } from "../game";
-import { canControlPlayer as gameCanControlPlayer } from "../game/permissions";
+import {
+  canControlPlayer as gameCanControlPlayer,
+  canRespondToPendingSpell as gameCanRespondToPendingSpell,
+  canSubmitAction,
+  inferActionPlayer,
+} from "../game/permissions";
+import { canRespondWithCounter } from "../game/spell-stack";
 import { opponent } from "../game/helpers";
 import {
   apiCreateRoom,
@@ -170,6 +176,12 @@ export class GameApp {
     if (this.onlineSeat !== null && player !== this.onlineSeat) return false;
     if (this.isCpuPlayer(s, player)) return false;
     return gameCanControlPlayer(s, player);
+  }
+
+  private canRespondToPendingSpell(s: GameState, player: PlayerId): boolean {
+    if (this.onlineSeat !== null && player !== this.onlineSeat) return false;
+    if (this.isCpuPlayer(s, player)) return false;
+    return gameCanRespondToPendingSpell(s, player);
   }
 
   async init(): Promise<void> {
@@ -858,7 +870,10 @@ export class GameApp {
       void this.dispatchOnlineAction(action);
       return;
     }
-    this.update(dispatch(this.getState(), action));
+    const s = this.getState();
+    const actor = inferActionPlayer(s, action);
+    if (actor !== null && !canSubmitAction(s, actor, action)) return;
+    this.update(dispatch(s, action));
   }
 
   private async dispatchOnlineAction(action: GameAction): Promise<void> {
@@ -1901,10 +1916,14 @@ export class GameApp {
 
       const isSpell = isSpellCard(def);
       const isEquip = isEquipmentCard(def);
+      const spellBlockedByPending =
+        !!s.pendingSpell &&
+        !canRespondWithCounter(s, player, def!);
       const canSelectSpell =
         isSpell &&
         canInteractHand &&
         this.isLocalHumanSeat(s, player) &&
+        !spellBlockedByPending &&
         canPlaySpellNow(s, player, def!) &&
         canAffordSpellCost(s, player, def!);
       const canSelectEquip =
@@ -2114,7 +2133,7 @@ export class GameApp {
       if (pending.awaitingCounterPayment) {
         pendHint.textContent = `Contramagia vs ${pendingName}. Lançador (J${pending.caster + 1}): pagar 2 essências exauridas?`;
         actions.appendChild(pendHint);
-        if (this.canControlPlayer(s, pending.caster)) {
+        if (this.canRespondToPendingSpell(s, pending.caster)) {
           const payBtn = document.createElement("button");
           payBtn.textContent = "Pagar 2 essências — feitiço resolve";
           payBtn.onclick = () =>
@@ -2139,7 +2158,7 @@ export class GameApp {
         pendHint.textContent = `${pendingName} pendente — J${opponent(pending.caster) + 1} pode Contramagia ou passar.`;
         actions.appendChild(pendHint);
         const opp = opponent(pending.caster);
-        if (this.canControlPlayer(s, opp)) {
+        if (this.canRespondToPendingSpell(s, opp)) {
           const passBtn = document.createElement("button");
           passBtn.className = "secondary";
           passBtn.textContent = "Passar (resolver feitiço)";
@@ -2147,6 +2166,20 @@ export class GameApp {
             this.dispatchAction({ type: "PASS_SPELL_COUNTER", player: opp });
           btns.appendChild(passBtn);
         }
+        if (this.isLocalHumanSeat(s, opp)) {
+          const blockHint = document.createElement("p");
+          blockHint.className = "mulligan-hint";
+          blockHint.style.color = "#fca5a5";
+          blockHint.textContent =
+            "Resolva o feitiço pendente (Contramagia ou Passar) antes de outras ações.";
+          actions.appendChild(blockHint);
+        }
+      } else if (pending.awaitingCounterPayment && this.isLocalHumanSeat(s, pending.caster)) {
+        const blockHint = document.createElement("p");
+        blockHint.className = "mulligan-hint";
+        blockHint.style.color = "#fca5a5";
+        blockHint.textContent = "Decida se paga o custo da Contramagia antes de continuar.";
+        actions.appendChild(blockHint);
       }
     }
 
