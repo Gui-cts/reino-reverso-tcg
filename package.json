@@ -8,12 +8,15 @@
     "dev:online": "vercel dev",
     "build": "tsc && vite build && node scripts/bundle-api.mjs",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "cards:placeholders": "node scripts/generate-card-placeholders.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
     "typescript": "~5.7.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "@vercel/kv": "^3.0.0",

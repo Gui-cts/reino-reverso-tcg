@@ -58,6 +58,9 @@ import {
 } from "../net/room-client";
 import type { PlayerViewPayload } from "../net/player-view";
 import { pickCpuAction, cpuControlsPhase } from "./cpu";
+import { pushGameLogToasts, clearGameToasts } from "./game-toasts";
+import { renderSpellStackBanner } from "./spell-stack-banner";
+import { openTutorialModal } from "./tutorial";
 import { attachCardHoverPreview } from "./card-hover-preview";
 import { renderDeckbuilderScreen } from "./deckbuilder";
 import {
@@ -475,6 +478,7 @@ export class GameApp {
     this.screen = "menu";
     this.state = null;
     this.cpuRunning = false;
+    clearGameToasts();
     this.render();
   }
 
@@ -492,8 +496,10 @@ export class GameApp {
 
   private applyOnlineView(view: PlayerViewPayload): void {
     if (!this.catalog) return;
+    const prevLog = this.state?.log ?? [];
     this.stateVersion = view.version;
     this.state = repairStaleTurnPhase(view.state);
+    pushGameLogToasts(prevLog, this.state.log);
     this.onlineHandCounts = view.handCounts;
     this.onlineDeckCounts = view.deckCounts;
     this.selection.troopId = null;
@@ -636,7 +642,9 @@ export class GameApp {
   }
 
   private update(next: GameState): void {
+    const prevLog = this.state?.log ?? [];
     this.state = repairStaleTurnPhase(next);
+    pushGameLogToasts(prevLog, this.state.log);
     this.selection.troopId = null;
     this.selection.arenaId = null;
     this.selection.spellInstanceId = null;
@@ -718,7 +726,9 @@ export class GameApp {
   }
 
   private applyCpuActionResult(after: GameState): void {
+    const prevLog = this.state?.log ?? [];
     this.state = repairStaleTurnPhase(after);
+    pushGameLogToasts(prevLog, this.state.log);
     this.selection.troopId = null;
     this.selection.arenaId = null;
     this.selection.spellInstanceId = null;
@@ -1137,6 +1147,14 @@ export class GameApp {
     hotseat.onclick = () => this.startGame(null);
     localActions.append(vsCpu, hotseat);
     local.appendChild(localActions);
+
+    const tutorialBtn = document.createElement("button");
+    tutorialBtn.type = "button";
+    tutorialBtn.className = "secondary menu-page__tutorial-btn";
+    tutorialBtn.textContent = "Como jogar — tutorial rápido";
+    tutorialBtn.onclick = () => openTutorialModal();
+    local.appendChild(tutorialBtn);
+
     main.appendChild(local);
 
     const online = document.createElement("section");
@@ -1580,6 +1598,20 @@ export class GameApp {
 
     const board = document.createElement("div");
     board.className = "board";
+
+    const spellBanner = renderSpellStackBanner(s, {
+      humanPlayer: this.humanPlayer(s),
+      canRespond: (p) => this.canRespondToPendingSpell(s, p),
+      onPassCounter: (p) =>
+        this.dispatchAction({ type: "PASS_SPELL_COUNTER", player: p }),
+      onPayCounter: (p, pay) =>
+        this.dispatchAction({
+          type: "RESOLVE_COUNTER_PAYMENT",
+          player: p,
+          payTwoEssence: pay,
+        }),
+    });
+    if (spellBanner) board.appendChild(spellBanner);
 
     board.appendChild(this.renderPhaseBanner(s));
     board.appendChild(this.renderPlayerZone(s, 1, "top"));

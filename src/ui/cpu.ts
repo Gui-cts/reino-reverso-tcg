@@ -29,6 +29,10 @@ import {
   isLeaderFormCard,
 } from "../game/card-meta";
 import { spellRequiresTarget } from "../game/spell-stack";
+import {
+  shouldCpuCounterSpell,
+  shouldCpuPayCounterCost,
+} from "./cpu-pending-spell";
 import type {
   ArenaDefinition,
   CardDefinition,
@@ -38,7 +42,7 @@ import type {
   SpellEffectId,
   TroopInstance,
 } from "../game/types";
-import { MAX_TROOPS_PER_ZONE, maxCorruptionForPhase } from "../game/types";
+import { MAX_TROOPS_PER_ZONE, maxCorruptionForPhase, LEADER_EVOLUTION_CORRUPTION_COST } from "../game/types";
 
 function pickRandom<T>(arr: T[]): T | undefined {
   if (arr.length === 0) return undefined;
@@ -146,13 +150,33 @@ function handTroopDefs(state: GameState, cpu: PlayerId) {
 }
 
 function pickCpuMulligan(state: GameState, cpu: PlayerId): GameAction {
-  const hand = handTroopDefs(state, cpu);
-  const badIndices = hand
-    .filter((h) => !h.hasEssence && h.cost >= 3)
-    .map((h) => h.index);
+  const hand = state.players[cpu].hand;
+  const badIndices: number[] = [];
 
-  if (badIndices.length >= 2) {
-    return { type: "MULLIGAN", player: cpu, handIndices: badIndices.slice(0, 4) };
+  hand.forEach((troopId, index) => {
+    const troop = state.troops[troopId];
+    if (!troop) return;
+    const def = state.catalog[troop.cardId];
+    if (!def) return;
+
+    if (isSpellCard(def)) {
+      if (def.cost >= 3 && !def.hasEssenceSymbol) badIndices.push(index);
+      return;
+    }
+    if (isLeaderFormCard(def)) return;
+
+    if (!def.hasEssenceSymbol && def.cost >= 3) badIndices.push(index);
+    if (def.cost >= 4) badIndices.push(index);
+  });
+
+  const playableCurve = handTroopDefs(state, cpu).filter((h) => h.cost <= 2).length;
+  const unique = [...new Set(badIndices)];
+
+  if (unique.length >= 2) {
+    return { type: "MULLIGAN", player: cpu, handIndices: unique.slice(0, 4) };
+  }
+  if (unique.length >= 1 && playableCurve === 0) {
+    return { type: "MULLIGAN", player: cpu, handIndices: unique };
   }
   return { type: "SKIP_MULLIGAN", player: cpu };
 }
@@ -692,11 +716,48 @@ function pickActivateArtifact(state: GameState, cpu: PlayerId): GameAction | nul
   };
 }
 
+function pickEvolveLeader(state: GameState, cpu: PlayerId): GameAction | null {
+  if (state.matchPhase !== "playing" || state.turnPhase !== "main" || state.combat) {
+    return null;
+  }
+  if (state.activePlayer !== cpu) return null;
+
+  const pl = state.players[cpu];
+  if (!pl.leaderId || pl.corruption < LEADER_EVOLUTION_CORRUPTION_COST) return null;
+
+  const leader = state.catalog[pl.leaderId];
+  if (!leader?.leaderFormIds?.length) return null;
+
+  const preferred = [...leader.leaderFormIds].sort((a, b) => {
+    const da = state.catalog[a]?.leaderAbilityId ?? "";
+    const db = state.catalog[b]?.leaderAbilityId ?? "";
+    const score = (id: string) =>
+      id === "frost-convert" ? 3 : id === "empathy-mark" ? 2 : id === "arcane-melody" ? 1 : 0;
+    return score(db) - score(da);
+  });
+
+  for (const formId of preferred) {
+    const formInstanceId = pl.hand.find((id) => state.troops[id]?.cardId === formId);
+    if (formInstanceId) {
+      return {
+        type: "EVOLVE_LEADER",
+        player: cpu,
+        formId,
+        formInstanceId,
+      };
+    }
+  }
+  return null;
+}
+
 function pickMainTurnAction(state: GameState, cpu: PlayerId): GameAction | null {
   if (state.matchPhase !== "playing" || state.turnPhase !== "main" || state.combat) {
     return null;
   }
   if (state.activePlayer !== cpu) return null;
+
+  const evolve = pickEvolveLeader(state, cpu);
+  if (evolve) return evolve;
 
   const leaderAb = pickLeaderAbility(state, cpu);
   if (leaderAb) return leaderAb;
@@ -744,7 +805,9 @@ function pickPendingSpellAction(state: GameState, cpuPlayer: PlayerId): GameActi
   if (!pending) return null;
 
   if (pending.awaitingCounterPayment && pending.caster === cpuPlayer) {
-    const pay = canPayEssenceCost(state, cpuPlayer, { exhaust: 2 });
+    const pay =
+      shouldCpuPayCounterCost(state, pending) &&
+      canPayEssenceCost(state, cpuPlayer, { exhaust: 2 });
     return {
       type: "RESOLVE_COUNTER_PAYMENT",
       player: cpuPlayer,
@@ -753,11 +816,14 @@ function pickPendingSpellAction(state: GameState, cpuPlayer: PlayerId): GameActi
   }
 
   if (pending.counterWindowOpen && opponent(pending.caster) === cpuPlayer) {
-    for (const spellId of state.players[cpuPlayer].hand) {
-      const def = state.catalog[state.troops[spellId]?.cardId ?? ""];
-      if (def?.spellEffect === "counterspell" && canPlaySpellNow(state, cpuPlayer, def)) {
-        if (canPayEssenceCost(state, cpuPlayer, getEssenceCost(def))) {
-          return { type: "PLAY_SPELL", player: cpuPlayer, spellInstanceId: spellId };
+    const worthCounter = shouldCpuCounterSpell(state, pending);
+    if (worthCounter) {
+      for (const spellId of state.players[cpuPlayer].hand) {
+        const def = state.catalog[state.troops[spellId]?.cardId ?? ""];
+        if (def?.spellEffect === "counterspell" && canPlaySpellNow(state, cpuPlayer, def)) {
+          if (canPayEssenceCost(state, cpuPlayer, getEssenceCost(def))) {
+            return { type: "PLAY_SPELL", player: cpuPlayer, spellInstanceId: spellId };
+          }
         }
       }
     }
