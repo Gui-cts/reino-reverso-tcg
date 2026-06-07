@@ -1224,10 +1224,69 @@ header {
   color: var(--success);
 }
 
+.deck-editor__main {
+  display: flex;
+  gap: 0.65rem;
+  align-items: stretch;
+}
+
+.deck-editor__filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding: 0.35rem;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--bg) 55%, var(--panel-bg));
+}
+
+.deck-filter-btn {
+  width: 2.65rem;
+  height: 2.65rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.deck-filter-btn:hover {
+  color: var(--text);
+  border-color: var(--panel-border);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.deck-filter-btn--active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--panel-border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.deck-filter-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  display: block;
+}
+
+.deck-editor__empty {
+  margin: 0.5rem 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .deck-editor__columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
   max-height: min(52vh, 420px);
 }
 
@@ -1287,6 +1346,16 @@ header {
 
   .deck-preset-grid {
     grid-template-columns: 1fr;
+  }
+
+  .deck-editor__main {
+    flex-direction: column;
+  }
+
+  .deck-editor__filters {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   .deck-editor__columns {

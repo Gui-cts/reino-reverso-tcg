@@ -1,5 +1,5 @@
 import { cardTypeLabel, getCardType, getFaction, isDeckableCard } from "../game/card-meta";
-import type { CardCatalog, CardDefinition, DeckDefinition } from "../game/types";
+import type { CardCatalog, CardDefinition, CardType, DeckDefinition } from "../game/types";
 import {
   baseDeckCardIds,
   getCatalogPresets,
@@ -37,8 +37,47 @@ function baseLeaders(catalog: CardCatalog): CardDefinition[] {
 }
 
 type EditorScrollState = { catalog: number; deck: number };
+type CatalogTypeFilter = "all" | Extract<CardType, "troop" | "spell" | "equipment" | "artifact">;
+
+const CATALOG_FILTER_OPTIONS: {
+  id: CatalogTypeFilter;
+  label: string;
+  icon: string;
+}[] = [
+  {
+    id: "all",
+    label: "Todas",
+    icon: `<svg class="deck-filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="8" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="13" y="5" width="8" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`,
+  },
+  {
+    id: "troop",
+    label: "Tropas",
+    icon: `<svg class="deck-filter-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M9 11h6" stroke="currentColor" stroke-width="1.5"/></svg>`,
+  },
+  {
+    id: "spell",
+    label: "Magias",
+    icon: `<svg class="deck-filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12a1 1 0 0 1 1 1v14l-4-2-4 2-4-2-4 2V5a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 8h8M8 11h6" stroke="currentColor" stroke-width="1.5"/></svg>`,
+  },
+  {
+    id: "equipment",
+    label: "Equipamentos",
+    icon: `<svg class="deck-filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l2 4v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8l2-4z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M9 12h6M12 9v6" stroke="currentColor" stroke-width="1.5"/></svg>`,
+  },
+  {
+    id: "artifact",
+    label: "Artefatos",
+    icon: `<svg class="deck-filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l1 4H7l1-4z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 7h12v3c0 4-2 7-6 11C8 17 6 14 6 10V7z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`,
+  },
+];
 
 let pendingEditorScroll: EditorScrollState | null = null;
+let activeCatalogFilter: CatalogTypeFilter = "all";
+
+function matchesCatalogFilter(def: CardDefinition, filter: CatalogTypeFilter): boolean {
+  if (filter === "all") return true;
+  return getCardType(def) === filter;
+}
 
 function captureEditorScroll(root: HTMLElement): void {
   const lists = root.querySelectorAll<HTMLElement>(".deck-editor__columns .deck-editor__list");
@@ -196,12 +235,47 @@ export function renderDeckbuilderScreen(
       : validation.errors[0]?.message ?? "Baralho inválido.";
     editor.appendChild(status);
 
+    const catalogCards = deckableCards(catalog).filter((c) => !c.leaderFormOf);
+    const filteredCatalogCards = catalogCards.filter((c) =>
+      matchesCatalogFilter(c, activeCatalogFilter),
+    );
+    const activeFilterLabel =
+      CATALOG_FILTER_OPTIONS.find((f) => f.id === activeCatalogFilter)?.label ?? "Todas";
+
+    const main = document.createElement("div");
+    main.className = "deck-editor__main";
+
+    const filters = document.createElement("aside");
+    filters.className = "deck-editor__filters";
+    filters.setAttribute("aria-label", "Filtrar por tipo de carta");
+
+    for (const opt of CATALOG_FILTER_OPTIONS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `deck-filter-btn${activeCatalogFilter === opt.id ? " deck-filter-btn--active" : ""}`;
+      btn.title = opt.label;
+      btn.setAttribute("aria-label", opt.label);
+      btn.innerHTML = opt.icon;
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (activeCatalogFilter === opt.id) return;
+        activeCatalogFilter = opt.id;
+        captureEditorScroll(root);
+        pendingEditorScroll = {
+          catalog: 0,
+          deck: pendingEditorScroll?.deck ?? 0,
+        };
+        renderDeckbuilderScreen(root, catalog, callbacks);
+      });
+      filters.appendChild(btn);
+    }
+
     const columns = document.createElement("div");
     columns.className = "deck-editor__columns";
 
     const catalogCol = document.createElement("div");
     catalogCol.className = "deck-editor__col";
-    catalogCol.innerHTML = `<h3 class="deck-editor__col-title">Catálogo</h3>`;
+    catalogCol.innerHTML = `<h3 class="deck-editor__col-title">Catálogo — ${activeFilterLabel} (${filteredCatalogCards.length})</h3>`;
     const catalogList = document.createElement("div");
     catalogList.className = "deck-editor__list";
 
@@ -215,8 +289,14 @@ export function renderDeckbuilderScreen(
       return def.cardRole === "captain" ? 1 : 4;
     }
 
-    for (const def of deckableCards(catalog)) {
-      if (def.leaderFormOf) continue;
+    if (filteredCatalogCards.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "deck-editor__empty";
+      empty.textContent = "Nenhuma carta deste tipo no catálogo piloto.";
+      catalogList.appendChild(empty);
+    }
+
+    for (const def of filteredCatalogCards) {
       const inDeck = counts.get(def.id) ?? 0;
       const max = maxCopies(def);
       const row = document.createElement("div");
@@ -272,7 +352,8 @@ export function renderDeckbuilderScreen(
     catalogCol.appendChild(catalogList);
     deckCol.appendChild(deckList);
     columns.append(catalogCol, deckCol);
-    editor.appendChild(columns);
+    main.append(filters, columns);
+    editor.appendChild(main);
 
     const editorActions = document.createElement("div");
     editorActions.className = "menu-panel__actions";
