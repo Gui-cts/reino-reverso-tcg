@@ -146,7 +146,7 @@ Tropas são suas unidades de combate. Cada tropa tem:
 ### Convocando
 
 - Pague o custo em Essência.
-- A tropa entra na sua **Base**, **exausta** (não pode agir neste turno).
+- A tropa entra na sua **Base**, **exausta** (não pode se mover neste turno, mas pode atacar se já estiver na arena).
 - Máximo de **3 tropas** na Base.
 
 ### Movendo
@@ -158,7 +158,7 @@ Tropas são suas unidades de combate. Cada tropa tem:
 
 ### Exaustão
 
-Uma tropa **exausta** (deitada) não pode agir — não ataca, não se move. Ela fica pronta de novo na sua próxima fase de Preparação.
+Uma tropa **exausta** (deitada) **não pode se mover**, mas **pode atacar** no combate. Ela fica pronta de novo na sua próxima fase de Preparação.
 
 ---
 

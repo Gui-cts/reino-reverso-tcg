@@ -100,9 +100,9 @@ Formas do Noah: pugilista (base) → vampiro inverno ou Delta da Empatia.
 
 ### 4.1 Movimento (tropas)
 
-- Da **mão → base**: ao convocar; tropa entra **exausta**.
+- Da **mão → base**: ao convocar; tropa entra **exausta** (pode atacar no combate, mas não se move até desvirar).
 - **Base ↔ arena** apenas (não arena ↔ arena sem efeito).
-- Qualquer movimento **exausta** a tropa.
+- Qualquer movimento **exausta** a tropa (exaustão impede movimento, não ataque).
 - Na **preparação**, tropas e Essência **desviram** (deixam de estar exaustas).
 
 ### 4.2 Tropas presas
@@ -333,7 +333,7 @@ Efeitos ao morrer usam `deathEffect` — **não** são `spellEffect` (Bar do Jo�
 | Palavra | Efeito |
 |---------|--------|
 | **Protetor** | Inimigos devem atacar Protetores na arena antes das outras tropas (só ataques; magias ignoram). Cidade das Curvas: alvo aleatório entre **todas** as tropas inimigas. |
-| **Investida** | Entra na base **pronta** (pode mover no mesmo turno; ainda não ataca no combate no turno em que entrou, salvo regra futura). |
+| **Investida** | Entra na base **pronta** (pode mover no mesmo turno). |
 | **Testamento** | Dispara `deathEffect` ao morrer (ex.: comprar 1, 1 de dano no Líder inimigo). |
 | **Eco** | Ao morrer: uma tropa aliada na **base** fica pronta. |
 | **Vincular** | Ao causar dano em combate: alvo **não pode se mover** até a preparação do dono dele. |

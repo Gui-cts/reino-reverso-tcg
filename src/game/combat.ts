@@ -60,7 +60,6 @@ export function allStrikeTroopsAttacked(state: GameState, player: PlayerId): boo
 export function canTroopAttackInStrike(combat: import("./types").CombatState, troop: TroopInstance): boolean {
   return (
     !combat.attackedThisStrike.includes(troop.instanceId) &&
-    !troop.exhausted &&
     !troop.attackSuppressed
   );
 }
@@ -287,12 +286,6 @@ export function executeCombatAttack(
     return {
       ...state,
       log: appendLog(state, "Esta tropa já atacou neste golpe."),
-    };
-  }
-  if (attacker.exhausted) {
-    return {
-      ...state,
-      log: appendLog(state, `${getTroopName(state, attacker)} está exausta e não pode atacar.`),
     };
   }
   if (attacker.attackSuppressed) {

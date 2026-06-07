@@ -2375,7 +2375,7 @@ function alliesInCombatArena(state, player) {
   return livingTroops(getTroopsInZone(state, player, "arena", state.combat.arenaId));
 }
 function canTroopAttackInStrike(combat, troop) {
-  return !combat.attackedThisStrike.includes(troop.instanceId) && !troop.exhausted && !troop.attackSuppressed;
+  return !combat.attackedThisStrike.includes(troop.instanceId) && !troop.attackSuppressed;
 }
 function hasAttackableAlliesInStrike(state, player) {
   if (!state.combat || state.combat.subPhase !== "strike") return false;
@@ -2554,12 +2554,6 @@ function executeCombatAttack(state, attackerId, targetId) {
     return {
       ...state,
       log: appendLog(state, "Esta tropa j\xE1 atacou neste golpe.")
-    };
-  }
-  if (attacker.exhausted) {
-    return {
-      ...state,
-      log: appendLog(state, `${getTroopName(state, attacker)} est\xE1 exausta e n\xE3o pode atacar.`)
     };
   }
   if (attacker.attackSuppressed) {

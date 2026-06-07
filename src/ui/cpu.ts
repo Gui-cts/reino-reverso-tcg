@@ -487,7 +487,6 @@ function pickEndCombatStrike(state: GameState, cpu: PlayerId): GameAction | null
   const canStillAttack = allies.some(
     (t) =>
       !hasAttackedThisStrike(combat, t.instanceId) &&
-      !t.exhausted &&
       !t.attackSuppressed,
   );
   if (canStillAttack) return null;
