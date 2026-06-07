@@ -95,16 +95,18 @@ export function createInitialGame(
     options.leaderId ??
     allBaseLeaders[0]?.id ??
     null;
-  const chosenLeader = chosenLeaderId ? catalog[chosenLeaderId] : null;
-  const chosenHp = chosenLeader?.leaderMaxHp ?? LEADER_MAX_HP;
 
   const cpuLeader =
     allBaseLeaders.find((l) => l.id !== chosenLeaderId) ?? allBaseLeaders[0];
   const cpuLeaderId = cpuPlayer !== null ? (cpuLeader?.id ?? chosenLeaderId) : chosenLeaderId;
-  const cpuHp = cpuPlayer !== null ? (cpuLeader?.leaderMaxHp ?? LEADER_MAX_HP) : chosenHp;
 
   const humanIdx: PlayerId = cpuPlayer === 0 ? 1 : 0;
-  const cpuIdx: PlayerId = cpuPlayer === 0 ? 0 : 1;
+
+  const p0LeaderId = chosenLeaderId;
+  const p1LeaderId =
+    cpuPlayer !== null
+      ? cpuLeaderId
+      : (allBaseLeaders.find((l) => l.id !== p0LeaderId)?.id ?? p0LeaderId);
 
   const allFormCards = catalogData.cards.filter((c) => c.leaderFormOf);
   const baseDeck = catalogData.starterDeck.filter((id) => {
@@ -119,15 +121,26 @@ export function createInitialGame(
     return shuffle([...baseDeck, ...forms]);
   }
 
-  const humanLeaderId = chosenLeaderId;
-  const cpuLeaderIdFinal = cpuLeaderId;
+  function leaderForPlayer(player: PlayerId): string | null {
+    if (cpuPlayer !== null) {
+      return player === humanIdx ? p0LeaderId : cpuLeaderId;
+    }
+    return player === 0 ? p0LeaderId : p1LeaderId;
+  }
+
+  function hpForLeader(leaderId: string | null): number {
+    const def = leaderId ? catalog[leaderId] : null;
+    return def?.leaderMaxHp ?? LEADER_MAX_HP;
+  }
 
   const players: [PlayerState, PlayerState] = [
-    { ...emptyPlayer(), deck: buildDeckForLeader(humanIdx === 0 ? humanLeaderId : cpuLeaderIdFinal) },
-    { ...emptyPlayer(), deck: buildDeckForLeader(humanIdx === 1 ? humanLeaderId : cpuLeaderIdFinal) },
+    { ...emptyPlayer(), deck: buildDeckForLeader(leaderForPlayer(0)) },
+    { ...emptyPlayer(), deck: buildDeckForLeader(leaderForPlayer(1)) },
   ];
-  players[humanIdx] = { ...players[humanIdx], leaderId: humanLeaderId, leaderHp: chosenHp };
-  players[cpuIdx] = { ...players[cpuIdx], leaderId: cpuLeaderIdFinal, leaderHp: cpuHp };
+  for (const p of [0, 1] as PlayerId[]) {
+    const lid = leaderForPlayer(p);
+    players[p] = { ...players[p], leaderId: lid, leaderHp: hpForLeader(lid) };
+  }
 
   let state: GameState = {
     catalog,
@@ -174,6 +187,67 @@ export function createInitialGame(
   }
 
   return state;
+}
+
+/** Troca o Líder de um jogador e remonta deck/mão (ex.: J2 entrando online). */
+export function reassignPlayerLeader(
+  state: GameState,
+  player: PlayerId,
+  leaderId: string,
+  starterDeck: string[],
+): GameState | { error: string } {
+  const leaderDef = state.catalog[leaderId];
+  if (!leaderDef || leaderDef.cardType !== "leader" || leaderDef.leaderFormOf) {
+    return { error: "Líder inválido." };
+  }
+
+  const opp: PlayerId = player === 0 ? 1 : 0;
+  if (state.players[opp].leaderId === leaderId) {
+    return { error: "Esse Líder já foi escolhido pelo oponente." };
+  }
+
+  let troops = { ...state.troops };
+  const pl = state.players[player];
+  for (const id of pl.hand) {
+    delete troops[id];
+  }
+
+  const forms = Object.values(state.catalog)
+    .filter((c) => c.leaderFormOf === leaderId)
+    .map((c) => c.id);
+  const baseDeck = starterDeck.filter((id) => !state.catalog[id]?.leaderFormOf);
+  const deck = shuffle([...baseDeck, ...forms]);
+
+  let nextPlayer: PlayerState = {
+    ...pl,
+    leaderId,
+    leaderHp: leaderDef.leaderMaxHp ?? LEADER_MAX_HP,
+    deck,
+    hand: [],
+  };
+
+  const drawn = drawCards(
+    nextPlayer,
+    INITIAL_HAND_SIZE,
+    troops,
+    state.catalog,
+    player,
+    state.nextInstanceId,
+  );
+
+  const players = [...state.players] as [PlayerState, PlayerState];
+  players[player] = drawn.player;
+
+  return {
+    ...state,
+    players,
+    troops: drawn.troops,
+    nextInstanceId: drawn.nextId,
+    log: [
+      ...state.log,
+      `Jogador ${player + 1} escolheu ${leaderDef.name} como Líder.`,
+    ],
+  };
 }
 
 export function finalizeArenas(state: GameState): GameState {

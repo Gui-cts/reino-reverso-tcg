@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { dispatch } from "../game/actions";
 import { canSubmitAction } from "../game/permissions";
-import { createInitialGame } from "../game/state";
+import { createInitialGame, reassignPlayerLeader } from "../game/state";
 import { toPlayerView } from "./player-view";
 import { loadCatalogSync } from "../server/load-catalog";
 import type { GameAction, GameState, PlayerId } from "../game/types";
@@ -89,8 +89,20 @@ export function createRoom(leaderId?: string): RoomCreateResult {
   };
 }
 
-export function joinRoom(room: RoomRecord): RoomJoinResult | { error: string } {
+export function joinRoom(
+  room: RoomRecord,
+  leaderId?: string,
+): RoomJoinResult | { error: string } {
   if (room.tokens[1]) return { error: "Sala cheia." };
+
+  if (leaderId) {
+    const catalog = loadCatalogSync();
+    const next = reassignPlayerLeader(room.state, 1, leaderId, catalog.starterDeck);
+    if ("error" in next) return { error: next.error };
+    room.state = next;
+    room.version += 1;
+  }
+
   const token = newToken();
   room.tokens[1] = token;
   room.updatedAt = Date.now();

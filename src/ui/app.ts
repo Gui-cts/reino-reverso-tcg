@@ -101,6 +101,8 @@ export class GameApp {
   private pollTimer: number | null = null;
   private onlineStatus = "";
   private onlineBusy = false;
+  private onlineLeaderId: string | null = null;
+  private pendingJoinRoomId: string | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -140,8 +142,52 @@ export class GameApp {
 
     const roomFromUrl = new URLSearchParams(window.location.search).get("room");
     if (roomFromUrl) {
-      void this.joinOnlineRoom(roomFromUrl.trim().toUpperCase());
+      this.pendingJoinRoomId = roomFromUrl.trim().toUpperCase();
+      this.onlineStatus = `Sala ${this.pendingJoinRoomId} — escolha seu Líder e clique em Entrar.`;
     }
+    this.ensureOnlineLeaderDefault();
+    this.render();
+  }
+
+  private baseLeaderChoices() {
+    return this.catalog
+      ? this.catalog.cards.filter((c) => c.cardType === "leader" && !c.leaderFormOf)
+      : [];
+  }
+
+  private ensureOnlineLeaderDefault(): void {
+    if (this.onlineLeaderId) return;
+    const leaders = this.baseLeaderChoices();
+    if (leaders.length > 0) this.onlineLeaderId = leaders[0]!.id;
+  }
+
+  private renderOnlineLeaderPicker(container: HTMLElement): void {
+    const leaders = this.baseLeaderChoices();
+    if (leaders.length === 0) return;
+
+    this.ensureOnlineLeaderDefault();
+
+    const pick = document.createElement("div");
+    pick.className = "menu-leader-pick";
+    pick.innerHTML = `<p class="menu-tagline">Escolha seu Líder:</p>`;
+
+    const row = document.createElement("div");
+    row.className = "menu-actions menu-leader-pick__row";
+
+    for (const leader of leaders) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = this.onlineLeaderId === leader.id ? "menu-leader-pick__btn--active" : "secondary";
+      btn.textContent = leader.name;
+      btn.onclick = () => {
+        this.onlineLeaderId = leader.id;
+        this.render();
+      };
+      row.appendChild(btn);
+    }
+
+    pick.appendChild(row);
+    container.appendChild(pick);
   }
 
   private lastLeaderId: string | null = null;
@@ -227,11 +273,17 @@ export class GameApp {
 
   private async createOnlineRoom(): Promise<void> {
     if (this.onlineBusy) return;
+    this.ensureOnlineLeaderDefault();
+    if (!this.onlineLeaderId) {
+      this.onlineStatus = "Escolha um Líder antes de criar a sala.";
+      this.render();
+      return;
+    }
     this.onlineBusy = true;
     this.onlineStatus = "Criando sala…";
     this.render();
     try {
-      const result = await apiCreateRoom();
+      const result = await apiCreateRoom(this.onlineLeaderId);
       this.onlineRoomId = result.roomId;
       this.onlineToken = result.token;
       this.onlineSeat = result.seat;
@@ -257,18 +309,26 @@ export class GameApp {
     const code = roomId.trim().toUpperCase();
     if (!code) return;
 
+    this.ensureOnlineLeaderDefault();
+    if (!this.onlineLeaderId) {
+      this.onlineStatus = "Escolha um Líder antes de entrar na sala.";
+      this.render();
+      return;
+    }
+
     this.onlineBusy = true;
     this.onlineStatus = "Entrando na sala…";
     this.screen = "menu";
     this.render();
     try {
-      const result = await apiJoinRoom(code);
+      const result = await apiJoinRoom(code, this.onlineLeaderId);
       this.onlineRoomId = code;
       this.onlineToken = result.token;
       this.onlineSeat = result.seat;
       this.applyOnlineView(result.view);
       this.screen = "game";
       this.onlineStatus = "";
+      this.pendingJoinRoomId = null;
       this.startOnlinePolling();
       const url = new URL(window.location.href);
       url.searchParams.set("room", code);
@@ -284,7 +344,9 @@ export class GameApp {
   }
 
   private promptJoinOnlineRoom(): void {
-    const code = window.prompt("Código da sala (6 caracteres):");
+    const code =
+      this.pendingJoinRoomId ??
+      window.prompt("Código da sala (6 caracteres):")?.trim().toUpperCase();
     if (code) void this.joinOnlineRoom(code);
   }
 
@@ -694,6 +756,7 @@ export class GameApp {
       <h2 class="menu-test__title">1v1 online</h2>
       <p class="menu-tagline">Crie uma sala e compartilhe o link — ideal para testar na Vercel com um amigo.</p>
     `;
+    this.renderOnlineLeaderPicker(onlinePanel);
     const onlineActions = document.createElement("div");
     onlineActions.className = "menu-actions";
 
@@ -715,9 +778,7 @@ export class GameApp {
     onlinePanel.appendChild(onlineActions);
     card.appendChild(onlinePanel);
 
-    const leaderChoices = this.catalog
-      ? this.catalog.cards.filter((c) => c.cardType === "leader" && !c.leaderFormOf)
-      : [];
+    const leaderChoices = this.baseLeaderChoices();
 
     for (const leader of leaderChoices) {
       const btn = document.createElement("button");
@@ -2192,6 +2253,9 @@ export class GameApp {
           miniature: false,
         }),
       );
+      if (troop.shielded) {
+        wrap.classList.add("board-card-wrap--shielded");
+      }
       chip = wrap;
     } else {
       chip = createCardEl("?", { compact: true });

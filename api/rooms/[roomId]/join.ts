@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { getQuery, sendJson, setCors } from "../../http.js";
+import { getQuery, readJsonBody, sendJson, setCors } from "../../http.js";
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   setCors(res);
@@ -27,7 +27,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return;
     }
 
-    const joined = joinRoom(room);
+    const body = await readJsonBody(req);
+    const leaderId = typeof body.leaderId === "string" ? body.leaderId : undefined;
+    const joined = joinRoom(room, leaderId);
     if ("error" in joined) {
       sendJson(res, 409, { error: joined.error });
       return;

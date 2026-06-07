@@ -45,9 +45,11 @@ export async function apiCreateRoom(leaderId?: string): Promise<CreateRoomRespon
   return parseJson(res);
 }
 
-export async function apiJoinRoom(roomId: string): Promise<JoinRoomResponse> {
+export async function apiJoinRoom(roomId: string, leaderId?: string): Promise<JoinRoomResponse> {
   const res = await fetch(`${API}/${encodeURIComponent(roomId)}/join`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ leaderId }),
   });
   return parseJson(res);
 }

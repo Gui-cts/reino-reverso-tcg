@@ -240,6 +240,50 @@ h1 {
   position: relative;
 }
 
+.board-card-wrap--shielded::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 204, 64, 0.82);
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 215, 80, 0.22) 0%,
+    rgba(255, 190, 40, 0.08) 55%,
+    transparent 72%
+  );
+  box-shadow:
+    0 0 10px rgba(255, 200, 60, 0.45),
+    inset 0 0 12px rgba(255, 230, 120, 0.15);
+  pointer-events: none;
+  z-index: 4;
+  animation: shield-ring-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes shield-ring-pulse {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.menu-leader-pick {
+  margin-top: 0.75rem;
+}
+
+.menu-leader-pick__row {
+  margin-top: 0.35rem;
+}
+
+.menu-leader-pick__btn--active {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 14px rgba(160, 120, 255, 0.35);
+}
+
 .arena-row .board-card-wrap,
 .troop-slots .board-card-wrap {
   flex: 0 0 auto;

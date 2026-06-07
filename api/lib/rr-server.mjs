@@ -1669,13 +1669,11 @@ function createInitialGame(catalogData, options = {}) {
     (c) => c.cardType === "leader" && !c.leaderFormOf
   );
   const chosenLeaderId = options.leaderId ?? allBaseLeaders[0]?.id ?? null;
-  const chosenLeader = chosenLeaderId ? catalog[chosenLeaderId] : null;
-  const chosenHp = chosenLeader?.leaderMaxHp ?? LEADER_MAX_HP;
   const cpuLeader = allBaseLeaders.find((l) => l.id !== chosenLeaderId) ?? allBaseLeaders[0];
   const cpuLeaderId = cpuPlayer !== null ? cpuLeader?.id ?? chosenLeaderId : chosenLeaderId;
-  const cpuHp = cpuPlayer !== null ? cpuLeader?.leaderMaxHp ?? LEADER_MAX_HP : chosenHp;
   const humanIdx = cpuPlayer === 0 ? 1 : 0;
-  const cpuIdx = cpuPlayer === 0 ? 0 : 1;
+  const p0LeaderId = chosenLeaderId;
+  const p1LeaderId = cpuPlayer !== null ? cpuLeaderId : allBaseLeaders.find((l) => l.id !== p0LeaderId)?.id ?? p0LeaderId;
   const allFormCards = catalogData.cards.filter((c) => c.leaderFormOf);
   const baseDeck = catalogData.starterDeck.filter((id) => {
     const def = catalog[id];
@@ -1685,14 +1683,24 @@ function createInitialGame(catalogData, options = {}) {
     const forms = allFormCards.filter((c) => c.leaderFormOf === leaderId).map((c) => c.id);
     return shuffle([...baseDeck, ...forms]);
   }
-  const humanLeaderId = chosenLeaderId;
-  const cpuLeaderIdFinal = cpuLeaderId;
+  function leaderForPlayer(player) {
+    if (cpuPlayer !== null) {
+      return player === humanIdx ? p0LeaderId : cpuLeaderId;
+    }
+    return player === 0 ? p0LeaderId : p1LeaderId;
+  }
+  function hpForLeader(leaderId) {
+    const def = leaderId ? catalog[leaderId] : null;
+    return def?.leaderMaxHp ?? LEADER_MAX_HP;
+  }
   const players = [
-    { ...emptyPlayer(), deck: buildDeckForLeader(humanIdx === 0 ? humanLeaderId : cpuLeaderIdFinal) },
-    { ...emptyPlayer(), deck: buildDeckForLeader(humanIdx === 1 ? humanLeaderId : cpuLeaderIdFinal) }
+    { ...emptyPlayer(), deck: buildDeckForLeader(leaderForPlayer(0)) },
+    { ...emptyPlayer(), deck: buildDeckForLeader(leaderForPlayer(1)) }
   ];
-  players[humanIdx] = { ...players[humanIdx], leaderId: humanLeaderId, leaderHp: chosenHp };
-  players[cpuIdx] = { ...players[cpuIdx], leaderId: cpuLeaderIdFinal, leaderHp: cpuHp };
+  for (const p of [0, 1]) {
+    const lid = leaderForPlayer(p);
+    players[p] = { ...players[p], leaderId: lid, leaderHp: hpForLeader(lid) };
+  }
   let state = {
     catalog,
     troops: {},
@@ -1736,6 +1744,51 @@ function createInitialGame(catalogData, options = {}) {
     state = { ...state, players: pl, troops: drawn.troops, nextInstanceId: nextId };
   }
   return state;
+}
+function reassignPlayerLeader(state, player, leaderId, starterDeck) {
+  const leaderDef = state.catalog[leaderId];
+  if (!leaderDef || leaderDef.cardType !== "leader" || leaderDef.leaderFormOf) {
+    return { error: "L\xEDder inv\xE1lido." };
+  }
+  const opp = player === 0 ? 1 : 0;
+  if (state.players[opp].leaderId === leaderId) {
+    return { error: "Esse L\xEDder j\xE1 foi escolhido pelo oponente." };
+  }
+  let troops = { ...state.troops };
+  const pl = state.players[player];
+  for (const id of pl.hand) {
+    delete troops[id];
+  }
+  const forms = Object.values(state.catalog).filter((c) => c.leaderFormOf === leaderId).map((c) => c.id);
+  const baseDeck = starterDeck.filter((id) => !state.catalog[id]?.leaderFormOf);
+  const deck = shuffle([...baseDeck, ...forms]);
+  let nextPlayer = {
+    ...pl,
+    leaderId,
+    leaderHp: leaderDef.leaderMaxHp ?? LEADER_MAX_HP,
+    deck,
+    hand: []
+  };
+  const drawn = drawCards(
+    nextPlayer,
+    INITIAL_HAND_SIZE,
+    troops,
+    state.catalog,
+    player,
+    state.nextInstanceId
+  );
+  const players = [...state.players];
+  players[player] = drawn.player;
+  return {
+    ...state,
+    players,
+    troops: drawn.troops,
+    nextInstanceId: drawn.nextId,
+    log: [
+      ...state.log,
+      `Jogador ${player + 1} escolheu ${leaderDef.name} como L\xEDder.`
+    ]
+  };
 }
 function finalizeArenas(state) {
   const [p0, p1] = state.selectedArenaIds;
@@ -4728,8 +4781,15 @@ function createRoom(leaderId) {
     room
   };
 }
-function joinRoom(room) {
+function joinRoom(room, leaderId) {
   if (room.tokens[1]) return { error: "Sala cheia." };
+  if (leaderId) {
+    const catalog = loadCatalogSync();
+    const next = reassignPlayerLeader(room.state, 1, leaderId, catalog.starterDeck);
+    if ("error" in next) return { error: next.error };
+    room.state = next;
+    room.version += 1;
+  }
   const token = newToken();
   room.tokens[1] = token;
   room.updatedAt = Date.now();
