@@ -769,15 +769,48 @@ export class GameApp {
           after.pendingSpell === latest.pendingSpell &&
           after.artifacts === latest.artifacts;
         if (after === latest || logOnly) {
+          if (after !== latest) {
+            this.applyCpuActionResult(after);
+          }
+
+          const stalled = this.getState();
+          if (
+            stalled.combat?.subPhase === "magic" &&
+            !stalled.combat.magicPassed[cpu]
+          ) {
+            const passAfter = dispatch(stalled, {
+              type: "PASS_COMBAT_MAGIC",
+              player: cpu,
+            });
+            if (passAfter !== stalled) {
+              this.applyCpuActionResult(passAfter);
+              this.cpuLoopGeneration++;
+              continue;
+            }
+          }
+
+          if (
+            stalled.combat?.subPhase === "strike" &&
+            getCombatAssigningPlayer(stalled.combat) === cpu &&
+            !hasAttackableAlliesInStrike(stalled, cpu)
+          ) {
+            const endAfter = dispatch(stalled, { type: "END_COMBAT_STRIKE" });
+            if (endAfter !== stalled) {
+              this.applyCpuActionResult(endAfter);
+              this.cpuLoopGeneration++;
+              continue;
+            }
+          }
+
           if (
             action.type !== "END_TURN" &&
-            latest.matchPhase === "playing" &&
-            latest.turnPhase === "main" &&
-            latest.activePlayer === cpu &&
-            !latest.combat
+            stalled.matchPhase === "playing" &&
+            stalled.turnPhase === "main" &&
+            stalled.activePlayer === cpu &&
+            !stalled.combat
           ) {
-            const endAfter = dispatch(latest, { type: "END_TURN" });
-            if (endAfter !== latest) {
+            const endAfter = dispatch(stalled, { type: "END_TURN" });
+            if (endAfter !== stalled) {
               this.applyCpuActionResult(endAfter);
             }
           }

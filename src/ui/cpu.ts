@@ -3,6 +3,7 @@ import {
   canAffordSpellCost,
   canPlaySpellNow,
   canTargetSpell,
+  canTroopAttackInStrike,
   cardHasKeyword,
   getAvailableEssence,
   getCombatAssigningPlayer,
@@ -268,10 +269,9 @@ function cpuHasPlayableSpell(state: GameState, cpu: PlayerId): boolean {
 function pickCpuCombatMagic(state: GameState, cpu: PlayerId): GameAction | null {
   if (!state.combat || state.combat.subPhase !== "magic") return null;
 
-  const spell = pickPlaySpell(state, cpu);
-  if (spell) return spell;
-
   if (!state.combat.magicPassed[cpu]) {
+    const spell = pickPlaySpell(state, cpu);
+    if (spell) return spell;
     return { type: "PASS_COMBAT_MAGIC", player: cpu };
   }
   return null;
@@ -582,18 +582,18 @@ function pickBestCombatAttack(
   if (getCombatAssigningPlayer(combat) !== cpu) return null;
 
   const { arenaId } = combat;
-  const allies = livingInArena(state, cpu, arenaId).filter(
-    (t) => !hasAttackedThisStrike(combat, t.instanceId),
+  const allies = livingInArena(state, cpu, arenaId).filter((t) =>
+    canTroopAttackInStrike(combat, t),
   );
-  const allEnemies = livingInArena(state, opponent(cpu), arenaId);
-  if (allies.length === 0 || allEnemies.length === 0) return null;
+  const legalTargets = getLegalCombatTargets(state, cpu, arenaId);
+  if (allies.length === 0 || legalTargets.length === 0) return null;
 
   let best: { attackerId: string; targetId: string; score: number } | null = null;
 
   for (const attacker of allies) {
     const candidates = arenaUsesRandomCombatTargets(state, arenaId)
-      ? [pickRandom(allEnemies)!]
-      : getLegalCombatTargets(state, cpu, arenaId);
+      ? [pickRandom(legalTargets)!]
+      : legalTargets;
 
     const attackerDef = state.catalog[attacker.cardId];
     const hasFatiar = attackerDef ? cardHasKeyword(attackerDef, "fatiar") : false;
@@ -605,7 +605,7 @@ function pickBestCombatAttack(
 
       let score = 0;
       score += lethal ? 1000 : 0;
-      if (hasFatiar && lethal && overkill > 0 && allEnemies.length > 1) {
+      if (hasFatiar && lethal && overkill > 0 && legalTargets.length > 1) {
         score += 500 + overkill * 50;
       }
       score += 100 - target.currentHealth;

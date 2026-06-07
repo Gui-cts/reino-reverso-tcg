@@ -2392,6 +2392,8 @@ function canTroopAttackInStrike(combat, troop) {
 }
 function hasAttackableAlliesInStrike(state, player) {
   if (!state.combat || state.combat.subPhase !== "strike") return false;
+  const { arenaId } = state.combat;
+  if (getLegalCombatTargets(state, player, arenaId).length === 0) return false;
   const allies = alliesInCombatArena(state, player);
   return allies.some((t) => canTroopAttackInStrike(state.combat, t));
 }

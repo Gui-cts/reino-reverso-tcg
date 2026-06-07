@@ -36,6 +36,7 @@ export {
   getContestedArenaNames,
   hasAttackedThisStrike,
   hasAttackableAlliesInStrike,
+  canTroopAttackInStrike,
   isCombatMagicPhase,
   isCombatStrikePhase,
 } from "./combat";

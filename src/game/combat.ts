@@ -7,7 +7,7 @@ import {
 } from "./arena-effects";
 import { finalizeReinoReversoCombat } from "./reino-reverso";
 import { applyStrikeDamage } from "./combat-damage";
-import { isLegalCombatTarget } from "./keywords";
+import { getLegalCombatTargets, isLegalCombatTarget } from "./keywords";
 import { resolveEncoreBeforeAttack } from "./spells";
 
 function livingTroops(troops: TroopInstance[]): TroopInstance[] {
@@ -64,9 +64,11 @@ export function canTroopAttackInStrike(combat: import("./types").CombatState, tr
   );
 }
 
-/** Há tropa aliada que ainda pode atacar neste golpe. */
+/** Há tropa aliada que ainda pode atacar neste golpe (com alvo legal na arena). */
 export function hasAttackableAlliesInStrike(state: GameState, player: PlayerId): boolean {
   if (!state.combat || state.combat.subPhase !== "strike") return false;
+  const { arenaId } = state.combat;
+  if (getLegalCombatTargets(state, player, arenaId).length === 0) return false;
   const allies = alliesInCombatArena(state, player);
   return allies.some((t) => canTroopAttackInStrike(state.combat!, t));
 }
