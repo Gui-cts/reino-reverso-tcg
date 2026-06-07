@@ -9,6 +9,7 @@ export function spawnTroopInArena(
   cardId: string,
   attack: number,
   health: number,
+  opts?: { entersReady?: boolean },
 ): GameState {
   if (countTroopsInZone(state, owner, "arena", arenaId) >= MAX_TROOPS_PER_ZONE) {
     return state;
@@ -22,7 +23,7 @@ export function spawnTroopInArena(
     owner,
     currentHealth: health,
     attack,
-    exhausted: false,
+    exhausted: !opts?.entersReady,
     pinned: false,
     zone: "arena",
     arenaId,

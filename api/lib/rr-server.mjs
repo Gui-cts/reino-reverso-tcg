@@ -1073,7 +1073,7 @@ function applySpellEffect(state, caster, effect, targetTroopId, spellName, targe
         ...state.troops,
         [targetTroopId]: {
           ...target,
-          pinned: true,
+          movementLocked: true,
           attackSuppressed: true
         }
       };
@@ -1833,7 +1833,7 @@ function drawFromDeck(state, player, count) {
 }
 
 // src/game/tokens.ts
-function spawnTroopInArena(state, owner, arenaId, cardId, attack, health) {
+function spawnTroopInArena(state, owner, arenaId, cardId, attack, health, opts) {
   if (countTroopsInZone(state, owner, "arena", arenaId) >= MAX_TROOPS_PER_ZONE) {
     return state;
   }
@@ -1845,7 +1845,7 @@ function spawnTroopInArena(state, owner, arenaId, cardId, attack, health) {
     owner,
     currentHealth: health,
     attack,
-    exhausted: false,
+    exhausted: !opts?.entersReady,
     pinned: false,
     zone: "arena",
     arenaId,
@@ -1904,7 +1904,7 @@ function fillGargoyles(state, arenaId) {
     let slots = MAX_TROOPS_PER_ZONE - countTroopsInZone(next, player, "arena", arenaId);
     while (slots > 0) {
       const before = countTroopsInZone(next, player, "arena", arenaId);
-      next = spawnTroopInArena(next, player, arenaId, GARGOYLE_CARD, 1, 1);
+      next = spawnTroopInArena(next, player, arenaId, GARGOYLE_CARD, 1, 1, { entersReady: true });
       if (countTroopsInZone(next, player, "arena", arenaId) === before) break;
       slots--;
     }
@@ -2365,9 +2365,8 @@ function combatWouldEnd(state, arenaId) {
   const p1 = livingTroops(getTroopsInZone(state, 1, "arena", arenaId));
   return p0.length === 0 || p1.length === 0;
 }
-function applySanatorioIfStrikeEndsCombat(state, arenaId, strikingPlayer) {
+function applySanatorioIfStrikeEndsCombat(state, arenaId) {
   if (!state.combat || !isSanatorioArena(state, arenaId)) return state;
-  if (!allStrikeTroopsAttacked(state, strikingPlayer)) return state;
   if (!combatWouldEnd(state, arenaId)) return state;
   return sanatorioPingAfterStrike(state, arenaId);
 }
@@ -2506,6 +2505,12 @@ function executeCombatAttack(state, attackerId, targetId) {
       log: appendLog(state, "Esta tropa j\xE1 atacou neste golpe.")
     };
   }
+  if (attacker.exhausted) {
+    return {
+      ...state,
+      log: appendLog(state, `${getTroopName(state, attacker)} est\xE1 exausta e n\xE3o pode atacar.`)
+    };
+  }
   if (attacker.attackSuppressed) {
     return {
       ...state,
@@ -2577,7 +2582,7 @@ function executeCombatAttack(state, attackerId, targetId) {
     },
     log: appendLog(nextAfterEncore, strike.logLine)
   };
-  next = applySanatorioIfStrikeEndsCombat(next, arenaId, strikingPlayer);
+  next = applySanatorioIfStrikeEndsCombat(next, arenaId);
   next = checkCombatEndAfterDamage(next, arenaId, "Combate encerrado");
   if (!next.combat) return next;
   return tryAutoEndStrike(next);
@@ -3767,6 +3772,40 @@ function dispatch(state, action) {
 }
 
 // src/game/permissions.ts
+function canUseLeaderAbilityReact(state, player) {
+  if (!state.combat) return false;
+  const pl = state.players[player];
+  if (!pl.leaderId || pl.leaderAbilityUsedThisTurn || pl.leaderExhausted) return false;
+  const ld = state.catalog[pl.leaderId];
+  if (!ld?.leaderAbilityId || ld.leaderAbilityId === "arcane-melody") return false;
+  const abilityId = ld.leaderAbilityId;
+  if (abilityId === "shield" || abilityId === "frost-convert") {
+    if (getAvailableEssence(state, player).length < 2) return false;
+  } else if (abilityId === "empathy-mark") {
+    if (getAvailableEssence(state, player).length < 1) return false;
+  }
+  const arenaId = state.combat.arenaId;
+  return Object.values(state.troops).some(
+    (t) => t.owner === player && t.zone === "arena" && t.arenaId === arenaId && t.currentHealth > 0
+  );
+}
+function canPlayReactiveFastSpell(state, player, spellInstanceId) {
+  const inst = state.troops[spellInstanceId];
+  if (!inst || inst.owner !== player) return false;
+  const def = state.catalog[inst.cardId];
+  if (!def || !isSpellCard(def) || getCardSpeed(def) !== "fast") return false;
+  return canPlaySpellNow(state, player, def);
+}
+function isStrikeReactionAction(state, player, action) {
+  switch (action.type) {
+    case "USE_LEADER_ABILITY":
+      return canUseLeaderAbilityReact(state, player);
+    case "PLAY_SPELL":
+      return canPlayReactiveFastSpell(state, player, action.spellInstanceId);
+    default:
+      return false;
+  }
+}
 function canControlPlayer(s, player) {
   if (s.pendingSpell) {
     if (s.pendingSpell.counterWindowOpen && player === opponent(s.pendingSpell.caster)) {
@@ -3842,7 +3881,19 @@ function inferActionPlayer(state, action) {
 function canSubmitAction(state, seat, action) {
   const actor = inferActionPlayer(state, action);
   if (actor === null || actor !== seat) return false;
-  return canControlPlayer(state, seat);
+  if (state.pendingSpell) {
+    if (state.pendingSpell.counterWindowOpen && seat === opponent(state.pendingSpell.caster)) {
+      return true;
+    }
+    if (state.pendingSpell.awaitingCounterPayment && seat === state.pendingSpell.caster) {
+      return true;
+    }
+  }
+  if (canControlPlayer(state, seat)) return true;
+  if (state.combat?.subPhase === "strike" && seat !== getCombatAssigningPlayer(state.combat)) {
+    return isStrikeReactionAction(state, seat, action);
+  }
+  return false;
 }
 
 // src/net/player-view.ts

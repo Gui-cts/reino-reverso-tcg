@@ -1,6 +1,58 @@
 import { getCombatAssigningPlayer } from "./combat";
-import { opponent } from "./helpers";
+import { getAvailableEssence, opponent } from "./helpers";
+import { canPlaySpellNow, getCardSpeed, isSpellCard } from "./spells";
 import type { GameAction, GameState, PlayerId } from "./types";
+
+function canUseLeaderAbilityReact(state: GameState, player: PlayerId): boolean {
+  if (!state.combat) return false;
+  const pl = state.players[player];
+  if (!pl.leaderId || pl.leaderAbilityUsedThisTurn || pl.leaderExhausted) return false;
+  const ld = state.catalog[pl.leaderId];
+  if (!ld?.leaderAbilityId || ld.leaderAbilityId === "arcane-melody") return false;
+
+  const abilityId = ld.leaderAbilityId;
+  if (abilityId === "shield" || abilityId === "frost-convert") {
+    if (getAvailableEssence(state, player).length < 2) return false;
+  } else if (abilityId === "empathy-mark") {
+    if (getAvailableEssence(state, player).length < 1) return false;
+  }
+
+  const arenaId = state.combat.arenaId;
+  return Object.values(state.troops).some(
+    (t) =>
+      t.owner === player &&
+      t.zone === "arena" &&
+      t.arenaId === arenaId &&
+      t.currentHealth > 0,
+  );
+}
+
+function canPlayReactiveFastSpell(
+  state: GameState,
+  player: PlayerId,
+  spellInstanceId: string,
+): boolean {
+  const inst = state.troops[spellInstanceId];
+  if (!inst || inst.owner !== player) return false;
+  const def = state.catalog[inst.cardId];
+  if (!def || !isSpellCard(def) || getCardSpeed(def) !== "fast") return false;
+  return canPlaySpellNow(state, player, def);
+}
+
+function isStrikeReactionAction(
+  state: GameState,
+  player: PlayerId,
+  action: GameAction,
+): boolean {
+  switch (action.type) {
+    case "USE_LEADER_ABILITY":
+      return canUseLeaderAbilityReact(state, player);
+    case "PLAY_SPELL":
+      return canPlayReactiveFastSpell(state, player, action.spellInstanceId);
+    default:
+      return false;
+  }
+}
 
 /** Quem pode agir neste momento (hotseat / online — não inclui CPU). */
 export function canControlPlayer(s: GameState, player: PlayerId): boolean {
@@ -89,5 +141,24 @@ export function canSubmitAction(
 ): boolean {
   const actor = inferActionPlayer(state, action);
   if (actor === null || actor !== seat) return false;
-  return canControlPlayer(state, seat);
+
+  if (state.pendingSpell) {
+    if (state.pendingSpell.counterWindowOpen && seat === opponent(state.pendingSpell.caster)) {
+      return true;
+    }
+    if (state.pendingSpell.awaitingCounterPayment && seat === state.pendingSpell.caster) {
+      return true;
+    }
+  }
+
+  if (canControlPlayer(state, seat)) return true;
+
+  if (
+    state.combat?.subPhase === "strike" &&
+    seat !== getCombatAssigningPlayer(state.combat)
+  ) {
+    return isStrikeReactionAction(state, seat, action);
+  }
+
+  return false;
 }

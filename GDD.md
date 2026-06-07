@@ -54,7 +54,7 @@ flowchart LR
 |-----------|-------|
 | Vida inicial | Definida pelo Líder (Noah: **10 HP**) |
 | Custo de evolução | **5 Corrupção** |
-| Corrupção máxima | **Por fase**: MN=3, Abismo=7, RR=sem limite |
+| Corrupção máxima | **Por fase**: MN=5, Abismo=10, RR=sem limite |
 
 #### Habilidades de Líder
 

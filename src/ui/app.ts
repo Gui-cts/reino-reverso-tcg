@@ -61,8 +61,8 @@ type UiSelection = {
   arenaId: string | null;
   spellInstanceId: string | null;
   mulliganIndices: Set<number>;
-  /** Habilidade do Líder ativada — próximo clique em tropa aplica a habilidade. */
-  leaderAbilityTargeting: boolean;
+  /** Jogador que está mirando alvo da habilidade do Líder (null = inativo). */
+  leaderAbilityTargetingPlayer: PlayerId | null;
   /** Artefato selecionado para ativação — próximo clique em tropa sacrifica. */
   artifactTargetingId: string | null;
 };
@@ -79,7 +79,7 @@ export class GameApp {
     troopId: null,
     arenaId: null,
     spellInstanceId: null,
-    leaderAbilityTargeting: false,
+    leaderAbilityTargetingPlayer: null,
     artifactTargetingId: null,
     mulliganIndices: new Set(),
   };
@@ -206,7 +206,7 @@ export class GameApp {
       arenaId: null,
       spellInstanceId: null,
       mulliganIndices: new Set(),
-      leaderAbilityTargeting: false,
+      leaderAbilityTargetingPlayer: null,
       artifactTargetingId: null,
     };
     this.render();
@@ -248,7 +248,7 @@ export class GameApp {
     this.selection.arenaId = null;
     this.selection.spellInstanceId = null;
     this.selection.mulliganIndices = new Set();
-    this.selection.leaderAbilityTargeting = false;
+    this.selection.leaderAbilityTargetingPlayer = null;
     this.selection.artifactTargetingId = null;
     this.cpuLoopGeneration++;
     this.render();
@@ -382,7 +382,7 @@ export class GameApp {
     this.selection.troopId = null;
     this.selection.arenaId = null;
     this.selection.spellInstanceId = null;
-    this.selection.leaderAbilityTargeting = false;
+    this.selection.leaderAbilityTargetingPlayer = null;
     this.selection.artifactTargetingId = null;
     this.cpuLoopGeneration++;
     this.render();
@@ -1596,10 +1596,10 @@ export class GameApp {
       };
     } else {
       btn.onclick = () => {
-        if (this.selection.leaderAbilityTargeting) {
-          this.selection.leaderAbilityTargeting = false;
+        if (this.selection.leaderAbilityTargetingPlayer === player) {
+          this.selection.leaderAbilityTargetingPlayer = null;
         } else {
-          this.selection.leaderAbilityTargeting = true;
+          this.selection.leaderAbilityTargetingPlayer = player;
           this.selection.spellInstanceId = null;
           this.selection.troopId = null;
         }
@@ -1609,7 +1609,7 @@ export class GameApp {
 
     container.appendChild(btn);
 
-    if (this.selection.leaderAbilityTargeting) {
+    if (this.selection.leaderAbilityTargetingPlayer === player) {
       const hint = document.createElement("div");
       hint.style.cssText = "font-size:0.72rem;color:#f0c878;margin-top:0.25rem";
       hint.textContent = "Clique em tropa aliada na arena.";
@@ -2035,7 +2035,7 @@ export class GameApp {
             } else {
               this.selection.artifactTargetingId = art.instanceId;
               this.selection.spellInstanceId = null;
-              this.selection.leaderAbilityTargeting = false;
+              this.selection.leaderAbilityTargetingPlayer = null;
             }
             this.render();
           }
@@ -2072,20 +2072,20 @@ export class GameApp {
     let subLabel: string | undefined;
 
     // Habilidade do Líder / artefato têm prioridade sobre seleção de combate.
+    const leaderTargetPlayer = this.selection.leaderAbilityTargetingPlayer;
     if (
-      this.selection.leaderAbilityTargeting &&
-      troop.owner === this.humanPlayer(s) &&
+      leaderTargetPlayer !== null &&
+      troop.owner === leaderTargetPlayer &&
       troop.currentHealth > 0
     ) {
-      const human = this.humanPlayer(s);
       if (troop.zone === "arena") {
         onClick = (e) => {
           e.stopPropagation();
-          this.selection.leaderAbilityTargeting = false;
+          this.selection.leaderAbilityTargetingPlayer = null;
           this.selection.troopId = null;
           this.dispatchAction({
             type: "USE_LEADER_ABILITY",
-            player: human,
+            player: leaderTargetPlayer,
             targetTroopId: troop.instanceId,
           });
         };
@@ -2097,9 +2097,10 @@ export class GameApp {
     } else if (
       this.selection.artifactTargetingId &&
       (troop.zone === "base" || troop.zone === "arena") &&
-      troop.owner === this.humanPlayer(s) &&
       troop.currentHealth > 0
     ) {
+      const art = s.artifacts[this.selection.artifactTargetingId];
+      if (art && troop.owner === art.owner) {
       const artId = this.selection.artifactTargetingId;
       onClick = (e) => {
         e.stopPropagation();
@@ -2112,6 +2113,7 @@ export class GameApp {
       };
       subLabel = "clique — sacrificar no artefato";
       selected = true;
+      }
     } else if (inCombatArena && combat && isCombatStrikePhase(s)) {
       const assigningPlayer = getCombatAssigningPlayer(combat);
       const alreadyAttacked = hasAttackedThisStrike(combat, troop.instanceId);

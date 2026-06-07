@@ -134,7 +134,7 @@ export function applySpellEffect(
         ...state.troops,
         [targetTroopId]: {
           ...target,
-          pinned: true,
+          movementLocked: true,
           attackSuppressed: true,
         },
       };

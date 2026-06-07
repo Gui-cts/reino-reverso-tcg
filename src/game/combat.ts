@@ -100,13 +100,8 @@ function combatWouldEnd(state: GameState, arenaId: string): boolean {
   return p0.length === 0 || p1.length === 0;
 }
 
-function applySanatorioIfStrikeEndsCombat(
-  state: GameState,
-  arenaId: string,
-  strikingPlayer: PlayerId,
-): GameState {
+function applySanatorioIfStrikeEndsCombat(state: GameState, arenaId: string): GameState {
   if (!state.combat || !isSanatorioArena(state, arenaId)) return state;
-  if (!allStrikeTroopsAttacked(state, strikingPlayer)) return state;
   if (!combatWouldEnd(state, arenaId)) return state;
   return sanatorioPingAfterStrike(state, arenaId);
 }
@@ -278,6 +273,12 @@ export function executeCombatAttack(
       log: appendLog(state, "Esta tropa já atacou neste golpe."),
     };
   }
+  if (attacker.exhausted) {
+    return {
+      ...state,
+      log: appendLog(state, `${getTroopName(state, attacker)} está exausta e não pode atacar.`),
+    };
+  }
   if (attacker.attackSuppressed) {
     return {
       ...state,
@@ -354,7 +355,7 @@ export function executeCombatAttack(
     log: appendLog(nextAfterEncore, strike.logLine),
   };
 
-  next = applySanatorioIfStrikeEndsCombat(next, arenaId, strikingPlayer);
+  next = applySanatorioIfStrikeEndsCombat(next, arenaId);
   next = checkCombatEndAfterDamage(next, arenaId, "Combate encerrado");
   if (!next.combat) return next;
   return tryAutoEndStrike(next);

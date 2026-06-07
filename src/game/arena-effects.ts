@@ -31,7 +31,7 @@ function fillGargoyles(state: GameState, arenaId: string): GameState {
     let slots = MAX_TROOPS_PER_ZONE - countTroopsInZone(next, player, "arena", arenaId);
     while (slots > 0) {
       const before = countTroopsInZone(next, player, "arena", arenaId);
-      next = spawnTroopInArena(next, player, arenaId, GARGOYLE_CARD, 1, 1);
+      next = spawnTroopInArena(next, player, arenaId, GARGOYLE_CARD, 1, 1, { entersReady: true });
       if (countTroopsInZone(next, player, "arena", arenaId) === before) break;
       slots--;
     }
