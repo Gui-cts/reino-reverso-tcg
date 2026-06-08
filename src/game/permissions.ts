@@ -78,6 +78,7 @@ function isStrikeReactionAction(
 /** Magia rápida ou habilidade reativa do Líder durante o golpe de combate (oponente do atacante). */
 export function playerCanReactDuringStrike(state: GameState, player: PlayerId): boolean {
   if (!state.combat || state.combat.subPhase !== "strike") return false;
+  if (player === getCombatAssigningPlayer(state.combat)) return false;
 
   for (const spellId of state.players[player].hand) {
     if (canPlayReactiveFastSpell(state, player, spellId)) {

@@ -714,8 +714,10 @@ export class GameApp {
   }
 
   private humanCanRespond(state: GameState): boolean {
-    if (!state.combat || state.combat.subPhase === "magic") return false;
-    return playerCanReactDuringStrike(state, this.humanPlayer(state));
+    if (!state.combat || state.combat.subPhase !== "strike") return false;
+    const human = this.humanPlayer(state);
+    if (getCombatAssigningPlayer(state.combat) === human) return false;
+    return playerCanReactDuringStrike(state, human);
   }
 
   private confirmHumanPass(): void {
@@ -726,7 +728,6 @@ export class GameApp {
   }
 
   private async waitForHumanPassOrAction(loopGen: number): Promise<boolean> {
-    this.render();
     return new Promise<boolean>((resolve) => {
       let resolved = false;
       this.humanPassResolve = () => {
@@ -735,6 +736,7 @@ export class GameApp {
         clearInterval(intervalId);
         resolve(true);
       };
+      this.render();
       const intervalId = setInterval(() => {
         if (loopGen !== this.cpuLoopGeneration) {
           if (resolved) return;
@@ -2356,13 +2358,18 @@ export class GameApp {
       const combatHint = document.createElement("p");
       combatHint.className = "mulligan-hint";
       const striker = getCombatAssigningPlayer(s.combat);
-      combatHint.textContent = this.canControlPlayer(s, striker)
-        ? hasAttackableAlliesInStrike(s, striker)
-          ? "Golpe de combate: ataque com todas as tropas disponíveis antes de passar."
-          : "Golpe de combate: selecione sua tropa e clique no inimigo."
-        : this.isCpuPlayer(s, striker)
-          ? "Combate: vez da CPU…"
-          : `Combate: vez do Jogador ${striker + 1}…`;
+      const human = this.humanPlayer(s);
+      const humanMayReact =
+        striker !== human && playerCanReactDuringStrike(s, human);
+      combatHint.textContent = humanMayReact && this.isCpuPlayer(s, striker)
+        ? "CPU vai atacar — responda com magia rápida ou habilidade do Líder, ou passe."
+        : this.canControlPlayer(s, striker)
+          ? hasAttackableAlliesInStrike(s, striker)
+            ? "Golpe de combate: ataque com todas as tropas disponíveis antes de passar."
+            : "Golpe de combate: selecione sua tropa e clique no inimigo."
+          : this.isCpuPlayer(s, striker)
+            ? "Combate: vez da CPU…"
+            : `Combate: vez do Jogador ${striker + 1}…`;
       actions.appendChild(combatHint);
 
       if (

@@ -229,12 +229,35 @@ export function passCombatMagic(state: GameState, player: PlayerId): GameState {
   return next;
 }
 
+/** Constrição bloqueia ataque só no golpe em que o dono é o atacante; consome ao encerrar esse golpe. */
+function clearConstrictionAfterStrikePhase(state: GameState, striker: PlayerId): GameState {
+  const troops = { ...state.troops };
+  let cleared = 0;
+  for (const t of Object.values(troops)) {
+    if (t.owner === striker && t.attackSuppressed) {
+      troops[t.instanceId] = { ...t, attackSuppressed: false };
+      cleared++;
+    }
+  }
+  if (cleared === 0) return state;
+  return {
+    ...state,
+    troops,
+    log: appendLog(
+      state,
+      cleared === 1
+        ? "Constrição: bloqueio de ataque consumido."
+        : `Constrição: bloqueio de ataque consumido em ${cleared} tropas.`,
+    ),
+  };
+}
+
 function advanceToNextStrike(state: GameState): GameState {
   if (!state.combat) return state;
 
   const { arenaId, strikingPlayer, strike } = state.combat;
 
-  let stateAfterPing = state;
+  let stateAfterPing = clearConstrictionAfterStrikePhase(state, strikingPlayer);
   if (isSanatorioArena(state, arenaId) && !combatWouldEnd(state, arenaId)) {
     stateAfterPing = sanatorioPingAfterStrike(state, arenaId);
   }

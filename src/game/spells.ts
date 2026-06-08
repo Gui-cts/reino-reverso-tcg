@@ -120,7 +120,7 @@ export function describeSpellEffect(effect: SpellEffectId): string {
     case "spell-tutor":
       return "Revele um feitiço do deck e coloque na mão.";
     case "constriction":
-      return "Prende tropa inimiga; no próximo combate do dono dela, não pode atacar.";
+      return "Prende tropa inimiga; no próximo golpe do dono dela, bloqueia 1 ataque (movimento preso até a preparação).";
     case "ethereal":
       return "Tropa aliada não pode ser alvo de ataques nem feitiços pontuais neste turno.";
     case "omega":

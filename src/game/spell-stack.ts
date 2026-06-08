@@ -146,7 +146,7 @@ export function applySpellEffect(
         troops,
         log: appendLog(
           state,
-          `${spellName}: ${getTroopName(state, target)} presa — não ataca no próximo combate do dono.`,
+          `${spellName}: ${getTroopName(state, target)} presa — bloqueia 1 ataque no próximo golpe do dono.`,
         ),
       };
     }
