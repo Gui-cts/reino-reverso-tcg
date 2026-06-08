@@ -1,5 +1,6 @@
 import {
   describeKeywordRule,
+  describeLandingEffectForCard,
   formatKeywordsLine,
   keywordLabel,
 } from "../game/keywords";
@@ -122,6 +123,9 @@ function buildCardTooltip(
   if (def) {
     const kw = formatKeywordsLine(def);
     if (kw) lines.push(kw);
+    if (def.keywords?.includes("aterrisagem") && (def.landingEffect || def.landingEffectText)) {
+      lines.push(describeLandingEffectForCard(def));
+    }
     if (def.deathEffect) {
       lines.push(describeKeywordRule("testamento"));
     }

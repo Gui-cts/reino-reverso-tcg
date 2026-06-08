@@ -180,6 +180,8 @@ export interface CardDefinition {
   artifactEffect?: ArtifactEffectId;
   /** Efeito de aterrisagem (ao entrar em campo). */
   landingEffect?: LandingEffectId;
+  /** Texto na carta para o efeito de aterrisagem (quando difere da regra genérica). */
+  landingEffectText?: string;
 }
 
 /** Baralho + metadados para validação (deckbuilder / partida). */

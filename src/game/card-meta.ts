@@ -172,22 +172,28 @@ export function getCardFrameUrl(def: CardDefinition): string {
   return CARD_FRAME_URLS[resolveCardFrameKind(def)];
 }
 
-/** Linha do setor tipo: `Tropa — Neutra`, `Feitiço — Neutro`. */
+function cardTypeSuffix(def: CardDefinition): string {
+  if (def.cardRole === "captain" && getCardType(def) === "troop") {
+    return "Capitã";
+  }
+  if (def.cardRole === "signature") {
+    return "Assinatura";
+  }
+  const type = getCardType(def);
+  const faction = getFaction(def);
+  if (type === "spell") {
+    return faction === "neutra" ? "Neutro" : factionLabel(faction);
+  }
+  return faction === "neutra" ? "Neutra" : factionLabel(faction);
+}
+
+/** Linha do setor tipo: `Tropa — Neutra`, `Tropa — Capitã`, `Feitiço — Neutro`. */
 export function formatCardTypeLine(
   def: CardDefinition,
   spellSpeedLabel?: string,
 ): string {
   const type = getCardType(def);
-  const faction = getFaction(def);
-  const factionWord =
-    type === "spell"
-      ? faction === "neutra"
-        ? "Neutro"
-        : faction
-      : faction === "neutra"
-        ? "Neutra"
-        : faction;
-  const base = `${cardTypeLabel(type)} — ${factionWord}`;
+  const base = `${cardTypeLabel(type)} — ${cardTypeSuffix(def)}`;
   if (type === "spell" && spellSpeedLabel) {
     return `${base} · ${spellSpeedLabel}`;
   }

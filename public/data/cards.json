@@ -841,6 +841,7 @@
       "keywords": ["aterrisagem"],
       "landingEffect": "tutor-signature-equipment",
       "landingTutorCardId": "equip-canino-fogo-gelo",
+      "landingEffectText": "Busca O canino de fogo e gelo no baralho e coloca na mão.",
       "cardType": "troop",
       "faction": "delta",
       "cardRole": "captain",

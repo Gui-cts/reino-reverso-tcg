@@ -342,6 +342,13 @@ import { destroyEnemyRelic } from "./equipment";
 import { buryDeadTroops } from "./troop-cleanup";
 import type { LandingEffectId } from "./types";
 
+/** Texto do efeito de aterrisagem desta carta (não a regra genérica da palavra-chave). */
+export function describeLandingEffectForCard(def: CardDefinition): string {
+  if (def.landingEffectText) return def.landingEffectText;
+  if (def.landingEffect) return landingEffectDescription(def.landingEffect);
+  return describeKeywordRule("aterrisagem");
+}
+
 export function landingEffectDescription(effect: LandingEffectId): string {
   switch (effect) {
     case "destroy-enemy-artifact":
@@ -349,7 +356,7 @@ export function landingEffectDescription(effect: LandingEffectId): string {
     case "board-wipe":
       return "Destrói todas as tropas nas bases e arenas (aliados e inimigos).";
     case "tutor-signature-equipment":
-      return "Busca equipamento assinatura no baralho.";
+      return "Busca o equipamento assinatura no baralho e coloca na mão.";
     default:
       return "";
   }

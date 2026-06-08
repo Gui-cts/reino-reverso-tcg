@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { activateCaptainAbility } from "./captain-abilities";
+import { formatCardTypeLine } from "./card-meta";
 import { validateDeck } from "./deck-rules";
-import { applyLandingEffect } from "./keywords";
+import { applyLandingEffect, describeLandingEffectForCard } from "./keywords";
 import { defaultTroopFields } from "./spells";
 import { EBONY_TOKEN_ID, IVORY_TOKEN_ID } from "./tokens";
 import { minimalPlayingState } from "./test-fixtures";
@@ -86,6 +87,15 @@ const catalog = {
 };
 
 describe("capitãs e assinaturas", () => {
+  it("Sarah exibe tipo Capitã e texto da aterrisagem específica", () => {
+    const sarah = catalog["sarah-determinacao"]!;
+    expect(formatCardTypeLine(sarah)).toBe("Tropa — Capitã");
+    expect(describeLandingEffectForCard({
+      ...sarah,
+      landingEffectText: "Busca O canino de fogo e gelo no baralho e coloca na mão.",
+    })).toContain("canino");
+  });
+
   it("valida máx. 1 cópia e vínculo ao líder", () => {
     const filler = Array.from({ length: 39 }, () => "filler");
     const bad = validateDeck(

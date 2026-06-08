@@ -1470,7 +1470,7 @@ function applySpellEffect(state, caster, effect, targetTroopId, spellName, targe
         troops,
         log: appendLog(
           state,
-          `${spellName}: ${getTroopName(state, target)} presa \u2014 n\xE3o ataca no pr\xF3ximo combate do dono.`
+          `${spellName}: ${getTroopName(state, target)} presa \u2014 bloqueia 1 ataque no pr\xF3ximo golpe do dono.`
         )
       };
     }
@@ -1568,21 +1568,31 @@ function applySpellEffect(state, caster, effect, targetTroopId, spellName, targe
       }
       if (effect === "gust-wind") {
         const targetIsToken = Boolean(state.catalog[target.cardId]?.isToken);
-        if (!targetIsToken && countBaseTroopSlotsUsed(state, target.owner) >= MAX_TROOPS_PER_ZONE) {
-          return { ...state, log: appendLog(state, "Base do alvo cheia \u2014 Lufada falhou.") };
-        }
+        const baseFull = !targetIsToken && countBaseTroopSlotsUsed(state, target.owner) >= MAX_TROOPS_PER_ZONE;
+        const toHand = baseFull;
         troops[targetTroopId] = {
           ...target,
-          zone: "base",
+          zone: toHand ? "hand" : "base",
           arenaId: null,
           exhausted: true
         };
-        let next = {
-          ...state,
-          troops,
+        let next = { ...state, troops };
+        if (toHand) {
+          const owner = target.owner;
+          const players2 = [...next.players];
+          if (!players2[owner].hand.includes(targetTroopId)) {
+            players2[owner] = {
+              ...players2[owner],
+              hand: [...players2[owner].hand, targetTroopId]
+            };
+          }
+          next = { ...next, players: players2 };
+        }
+        next = {
+          ...next,
           log: appendLog(
-            state,
-            `${spellName} \u2014 ${getTroopName(state, target)} voltou \xE0 base (exausta).`
+            next,
+            toHand ? `${spellName} \u2014 ${getTroopName(state, target)} voltou \xE0 m\xE3o (base cheia, exausta).` : `${spellName} \u2014 ${getTroopName(state, target)} voltou \xE0 base (exausta).`
           )
         };
         next = sanitizePlayerHands(next);
@@ -1736,7 +1746,13 @@ function canPlaySpellNow(state, player, spellDef) {
   if (state.combat && !isMagicAllowedInCombat(state)) return false;
   const speed = getCardSpeed(spellDef);
   if (speed === "fast") {
-    return state.turnPhase === "main" || state.turnPhase === "combat";
+    if (state.turnPhase === "main") return true;
+    if (state.turnPhase !== "combat" || !state.combat) return false;
+    if (state.combat.subPhase === "magic") return true;
+    if (state.combat.subPhase === "strike") {
+      return player !== getCombatAssigningPlayer(state.combat);
+    }
+    return false;
   }
   if (speed === "turn") {
     return state.turnPhase === "main" && state.activePlayer === player && !state.combat;
@@ -1797,9 +1813,6 @@ function canTargetSpell(state, caster, spellDef, target) {
     case "gust-wind":
       if (target.zone !== "arena") return false;
       if (inCombat && combatArenaId && target.arenaId !== combatArenaId) return false;
-      if (!state.catalog[target.cardId]?.isToken && countBaseTroopSlotsUsed(state, target.owner) >= MAX_TROOPS_PER_ZONE) {
-        return false;
-      }
       return true;
     default:
       return false;
@@ -2773,7 +2786,7 @@ function beginCombatStrikePhase(state) {
 }
 function beginCombatMagicPhase(state, opts) {
   if (!state.combat) return state;
-  const arena = getArena(state, opts.strike ? state.combat.arenaId : state.combat.arenaId);
+  const arena = getArena(state, state.combat.arenaId);
   return {
     ...state,
     combat: {
@@ -2816,12 +2829,31 @@ function passCombatMagic(state, player) {
   }
   return next;
 }
+function clearConstrictionAfterStrikePhase(state, striker) {
+  const troops = { ...state.troops };
+  let cleared = 0;
+  for (const t of Object.values(troops)) {
+    if (t.owner === striker && t.attackSuppressed) {
+      troops[t.instanceId] = { ...t, attackSuppressed: false };
+      cleared++;
+    }
+  }
+  if (cleared === 0) return state;
+  return {
+    ...state,
+    troops,
+    log: appendLog(
+      state,
+      cleared === 1 ? "Constri\xE7\xE3o: bloqueio de ataque consumido." : `Constri\xE7\xE3o: bloqueio de ataque consumido em ${cleared} tropas.`
+    )
+  };
+}
 function advanceToNextStrike(state) {
   if (!state.combat) return state;
   const { arenaId, strikingPlayer, strike } = state.combat;
-  let stateAfterPing = state;
-  if (isSanatorioArena(state, arenaId) && !combatWouldEnd(state, arenaId)) {
-    stateAfterPing = sanatorioPingAfterStrike(state, arenaId);
+  let stateAfterPing = clearConstrictionAfterStrikePhase(state, strikingPlayer);
+  if (isSanatorioArena(stateAfterPing, arenaId) && !combatWouldEnd(stateAfterPing, arenaId)) {
+    stateAfterPing = sanatorioPingAfterStrike(stateAfterPing, arenaId);
   }
   stateAfterPing = checkCombatEndAfterDamage(
     stateAfterPing,
@@ -2873,7 +2905,10 @@ function executeCombatAttack(state, attackerId, targetId) {
     };
   }
   if (attacker.zone !== "arena" || attacker.arenaId !== arenaId || attacker.currentHealth <= 0) {
-    return state;
+    return {
+      ...state,
+      log: appendLog(state, "Atacante inv\xE1lido ou fora da arena de combate.")
+    };
   }
   let resolvedTargetId = targetId;
   if (arenaUsesRandomCombatTargets(state, arenaId)) {
@@ -4196,7 +4231,7 @@ function equipTroop(state, equipmentInstanceId, targetTroopId) {
     )
   });
 }
-function activateArtifact(state, artifactId, sacrificeTroopId, freeSpellInstanceId) {
+function activateArtifact(state, artifactId, sacrificeTroopId, freeSpellInstanceId, freeSpellTargetTroopId) {
   if (state.turnPhase !== "main" || state.combat) return state;
   const player = state.activePlayer;
   const artifact = state.artifacts[artifactId];
@@ -4273,7 +4308,14 @@ function activateArtifact(state, artifactId, sacrificeTroopId, freeSpellInstance
       artifacts,
       log: appendLog(state, `${def.name} exausto \u2014 ${spellDef.name} sem custo.`)
     };
-    return playSpell(pre, player, freeSpellInstanceId, null, null, { skipCost: true });
+    return playSpell(
+      pre,
+      player,
+      freeSpellInstanceId,
+      freeSpellTargetTroopId ?? null,
+      null,
+      { skipCost: true }
+    );
   }
   return state;
 }
@@ -4327,7 +4369,8 @@ function applyAction(state, action) {
         state,
         action.artifactId,
         action.sacrificeTroopId,
-        action.freeSpellInstanceId
+        action.freeSpellInstanceId,
+        action.freeSpellTargetTroopId
       );
     case "ACTIVATE_CAPTAIN_ABILITY":
       return activateCaptainAbility(state, action.troopId);
@@ -4376,6 +4419,9 @@ function canPlayReactiveFastSpell(state, player, spellInstanceId) {
   const def = state.catalog[inst.cardId];
   if (!def || !isSpellCard(def) || getCardSpeed(def) !== "fast") return false;
   return canPlaySpellNow(state, player, def);
+}
+function isStrikerStrikeAction(action) {
+  return action.type === "EXECUTE_COMBAT_ATTACK" || action.type === "END_COMBAT_STRIKE";
 }
 function isStrikeReactionAction(state, player, action) {
   switch (action.type) {
@@ -4475,7 +4521,12 @@ function canSubmitAction(state, seat, action) {
     }
     return false;
   }
-  if (canControlPlayer(state, seat)) return true;
+  if (canControlPlayer(state, seat)) {
+    if (state.combat?.subPhase === "strike" && seat === getCombatAssigningPlayer(state.combat)) {
+      return isStrikerStrikeAction(action);
+    }
+    return true;
+  }
   if (state.combat?.subPhase === "strike" && seat !== getCombatAssigningPlayer(state.combat)) {
     return isStrikeReactionAction(state, seat, action);
   }
@@ -5366,6 +5417,7 @@ var cards_default = {
       keywords: ["aterrisagem"],
       landingEffect: "tutor-signature-equipment",
       landingTutorCardId: "equip-canino-fogo-gelo",
+      landingEffectText: "Busca O canino de fogo e gelo no baralho e coloca na m\xE3o.",
       cardType: "troop",
       faction: "delta",
       cardRole: "captain",
@@ -5514,16 +5566,18 @@ var cards_default = {
       id: "noah",
       leaderId: "noah-lider-base",
       name: "Noah \u2014 Controle Delta",
-      description: "Tropas resistentes, Protetores, equipamentos e Sarah + Canino.",
+      description: "50 cartas \u2014 muralhas, Protetores, equipamentos Delta, Sarah + Canino.",
       cardIds: [
         "sarah-determinacao",
         "equip-canino-fogo-gelo",
         "escudeiro-pacto",
         "escudeiro-pacto",
         "escudeiro-pacto",
+        "escudeiro-pacto",
         "sentinela-calha",
         "sentinela-calha",
         "sentinela-calha",
+        "muralha-ossos",
         "muralha-ossos",
         "muralha-ossos",
         "guardiao-estandarte",
@@ -5533,22 +5587,20 @@ var cards_default = {
         "guarda-penhasco",
         "vigia-reverso",
         "vigia-reverso",
-        "vigia-reverso",
         "bruto-patio",
         "bruto-patio",
         "curandeiro-errante",
         "curandeiro-errante",
         "mensageiro-alado",
         "mensageiro-alado",
-        "arqueiro-torre",
-        "arqueiro-torre",
         "falcao-abismo",
+        "arqueiro-torre",
+        "arqueiro-torre",
         "colosso-rachado",
         "destruidor-reliquias",
         "fragmento-poco",
         "fragmento-poco",
-        "cinza-rastejante",
-        "cinza-rastejante",
+        "equip-escudo-delta",
         "equip-escudo-delta",
         "equip-escudo-delta",
         "equip-escudo-delta",
@@ -5558,33 +5610,37 @@ var cards_default = {
         "equip-corrente-ferro",
         "pele-ferro",
         "pele-ferro",
+        "pele-ferro",
+        "encore",
         "encore",
         "encore",
         "fragmentar",
-        "fragmentar"
+        "fragmentar",
+        "fragmentar",
+        "lufada-vento",
+        "lufada-vento"
       ]
     },
     {
       id: "klaus",
       leaderId: "klaus-violinista",
       name: "Klaus \u2014 Melodia Arcana",
-      description: "Feiti\xE7os, corrup\xE7\xE3o, Angelica + Monteiro e Summoner.",
+      description: "50 cartas \u2014 4\xD7 Contramagia, controle, corrup\xE7\xE3o, Angelica + Monteiro.",
       cardIds: [
         "angelica-capita",
         "monteiro-violino",
-        "altar-sombrio",
-        "altar-sombrio",
-        "encore",
+        "contramagia",
+        "contramagia",
+        "contramagia",
+        "contramagia",
+        "caldeirao-sangue",
+        "caldeirao-sangue",
+        "caldeirao-sangue",
         "encore",
         "encore",
         "pele-ferro",
         "pele-ferro",
         "pele-ferro",
-        "caldeirao-sangue",
-        "caldeirao-sangue",
-        "caldeirao-sangue",
-        "lufada-vento",
-        "lufada-vento",
         "constricao",
         "constricao",
         "eterealidade",
@@ -5594,13 +5650,17 @@ var cards_default = {
         "revelacao-erudito",
         "compendio-vazio",
         "compendio-vazio",
+        "lufada-vento",
         "chamado-tropas",
         "omega",
+        "altar-sombrio",
+        "altar-sombrio",
         "cinza-rastejante",
         "cinza-rastejante",
+        "cinza-rastejante",
         "fragmento-poco",
         "fragmento-poco",
-        "fragmento-poco",
+        "servo-cinzas",
         "servo-cinzas",
         "servo-cinzas",
         "servo-cinzas",
@@ -5612,11 +5672,11 @@ var cards_default = {
         "corrente-eterea",
         "demolidor-ruinas",
         "espectro-menor",
-        "filho-bruma",
-        "filho-bruma",
         "destruidor-reliquias",
         "equip-amuleto-sombrio",
-        "equip-amuleto-sombrio"
+        "equip-amuleto-sombrio",
+        "equip-amuleto-sombrio",
+        "equip-lamina-pacto"
       ]
     }
   ]

@@ -10,6 +10,7 @@ import { describeArtifactEffect, describeEquipmentEffect } from "../game/equipme
 import {
   describeDeathEffect,
   describeKeywordRule,
+  describeLandingEffectForCard,
   keywordLabel,
 } from "../game/keywords";
 import {
@@ -32,6 +33,9 @@ const FRAME_CLASS: Record<string, string> = {
 function keywordDetailText(def: CardDefinition, kw: KeywordId): string {
   if (kw === "testamento" && def.deathEffect) {
     return describeDeathEffect(def.deathEffect);
+  }
+  if (kw === "aterrisagem" && (def.landingEffect || def.landingEffectText)) {
+    return describeLandingEffectForCard(def);
   }
   return describeKeywordRule(kw);
 }
