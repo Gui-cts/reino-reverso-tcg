@@ -229,6 +229,67 @@ export function listOpenArenasForTroop(
 }
 
 /** Motivo pelo qual a tropa não pode sair da base; `null` = movimento permitido. */
+/** Revela carta do deck e coloca na mão (tutor). */
+export function tutorCardToHand(
+  state: GameState,
+  player: PlayerId,
+  cardId: string,
+  notFoundMsg: string,
+): GameState {
+  const pl = state.players[player];
+  const idx = pl.deck.findIndex((id) => id === cardId);
+  if (idx === -1) {
+    return { ...state, log: appendLog(state, notFoundMsg) };
+  }
+
+  const def = state.catalog[cardId];
+  if (!def) {
+    return { ...state, log: appendLog(state, notFoundMsg) };
+  }
+
+  const deck = [...pl.deck];
+  deck.splice(idx, 1);
+
+  const [idNum, nextId] = nextInstanceId(state);
+  const instanceId = `troop-${idNum}`;
+  const troops = {
+    ...state.troops,
+    [instanceId]: {
+      instanceId,
+      cardId,
+      owner: player,
+      zone: "hand" as const,
+      arenaId: null,
+      exhausted: false,
+      pinned: false,
+      movementLocked: false,
+      equipmentId: null,
+      currentHealth: def.health,
+      attack: def.attack,
+      attachedSpell: null,
+      healthBonus: 0,
+      shielded: false,
+      etherealThisTurn: false,
+      attackSuppressed: false,
+    },
+  };
+
+  const players = [...state.players] as GameState["players"];
+  players[player] = {
+    ...pl,
+    deck,
+    hand: [...pl.hand, instanceId],
+  };
+
+  return {
+    ...state,
+    players,
+    troops,
+    nextInstanceId: nextId,
+    log: appendLog(state, `${def.name} foi buscada no deck e colocada na mão.`),
+  };
+}
+
 export function explainTroopSendToArenaBlock(
   state: GameState,
   troop: TroopInstance,

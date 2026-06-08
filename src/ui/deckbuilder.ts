@@ -105,7 +105,7 @@ function attachDeckCardPreview(anchor: HTMLElement, def: CardDefinition): void {
 }
 
 function maxCopies(def: CardDefinition): number {
-  return def.cardRole === "captain" ? 1 : 4;
+  return def.cardRole === "captain" || def.cardRole === "signature" ? 1 : 4;
 }
 
 function buildCatalogCardTile(

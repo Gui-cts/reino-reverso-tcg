@@ -47,6 +47,21 @@ export function presetCardIds(catalog: CardCatalog, preset: PresetDeckDefinition
   return baseDeckCardIds(catalog);
 }
 
+/** Preset do oponente (Noah ↔ Klaus) para partidas vs CPU. */
+export function opponentPresetFor(
+  catalog: CardCatalog,
+  leaderId: string,
+): PresetDeckDefinition | null {
+  const presets = getCatalogPresets(catalog);
+  if (leaderId === "noah-lider-base") {
+    return presets.find((p) => p.id === "klaus") ?? presets[1] ?? null;
+  }
+  if (leaderId === "klaus-violinista") {
+    return presets.find((p) => p.id === "noah") ?? presets[0] ?? null;
+  }
+  return presets[0] ?? null;
+}
+
 export function slotKindForPreset(presetId: string): DeckSlotKind {
   if (presetId === "klaus") return "preset-klaus";
   return "preset-noah";

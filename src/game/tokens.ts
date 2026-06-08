@@ -5,6 +5,8 @@ import { MAX_TROOPS_PER_ZONE } from "./types";
 
 /** Ficha 1/1 criada por Klaus — o portador do abismo. */
 export const ABYSS_SERVANT_TOKEN_ID = "token-servo-abismo";
+export const EBONY_TOKEN_ID = "token-ebony";
+export const IVORY_TOKEN_ID = "token-ivory";
 
 export function spawnTroopInArena(
   state: GameState,
@@ -51,6 +53,7 @@ export function spawnTokenInBase(
   cardId: string,
   attack: number,
   health: number,
+  opts?: { exhausted?: boolean },
 ): GameState {
   const def = state.catalog[cardId];
   if (!def) return state;
@@ -63,7 +66,7 @@ export function spawnTokenInBase(
     owner,
     zone: "base",
     arenaId: null,
-    exhausted: true,
+    exhausted: opts?.exhausted ?? true,
     pinned: false,
     ...defaultTroopFields(def),
     attack,

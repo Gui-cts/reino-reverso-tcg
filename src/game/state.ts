@@ -83,6 +83,9 @@ export type CreateGameOptions = {
   leaderId?: string;
   /** Cartas do baralho do jogador humano (J1 ou seat humano). CPU/oponente usa starter. */
   deckCardIds?: string[];
+  /** Baralho do oponente (CPU / J2). Se omitido, usa `starterDeck`. */
+  opponentDeckCardIds?: string[];
+  opponentLeaderId?: string;
 };
 
 export function createInitialGame(
@@ -124,18 +127,27 @@ export function createInitialGame(
       const def = catalog[id];
       return !def?.leaderFormOf;
     });
-    return shuffle([...base, ...forms]);
+    const formsMissing = forms.filter((fid) => !base.includes(fid));
+    return shuffle([...base, ...formsMissing]);
   }
+
+  const opponentDeckSource =
+    options.opponentDeckCardIds?.length
+      ? options.opponentDeckCardIds
+      : catalogData.starterDeck;
 
   function deckSourceForPlayer(player: PlayerId): string[] {
     if (cpuPlayer !== null && player === humanIdx) return humanDeckSource;
+    if (cpuPlayer !== null && player !== humanIdx) return opponentDeckSource;
     if (cpuPlayer === null && player === 0) return humanDeckSource;
-    return catalogData.starterDeck;
+    return opponentDeckSource;
   }
+
+  const resolvedCpuLeaderId = options.opponentLeaderId ?? cpuLeaderId;
 
   function leaderForPlayer(player: PlayerId): string | null {
     if (cpuPlayer !== null) {
-      return player === humanIdx ? p0LeaderId : cpuLeaderId;
+      return player === humanIdx ? p0LeaderId : resolvedCpuLeaderId;
     }
     return player === 0 ? p0LeaderId : p1LeaderId;
   }

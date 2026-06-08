@@ -68,6 +68,14 @@ export function isCaptainCard(def: CardDefinition | undefined): boolean {
   return Boolean(def && def.cardRole === "captain");
 }
 
+export function isSignatureCard(def: CardDefinition | undefined): boolean {
+  return Boolean(def && def.cardRole === "signature");
+}
+
+export function isLeaderExclusiveCard(def: CardDefinition | undefined): boolean {
+  return isCaptainCard(def) || isSignatureCard(def);
+}
+
 export function isDeckableCard(def: CardDefinition | undefined): boolean {
   if (!def || def.isToken) return false;
   if (def.leaderFormOf) return true;

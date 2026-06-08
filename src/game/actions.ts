@@ -24,6 +24,7 @@ import {
   finalizePhaseTransition,
   finishArenaSetupAndResume,
 } from "./phase-transition";
+import { activateCaptainAbility } from "./captain-abilities";
 import { drawFromDeck, finalizeArenas } from "./state";
 import { runTurnBegin } from "./turn";
 import { applyRRNonResponsePenaltyAtEndTurn } from "./reino-reverso";
@@ -47,6 +48,7 @@ import {
   isSpellCard,
   isTroopCard,
   passSpellCounter,
+  canPlaySpellNow,
   playSpell,
   resolveCounterPayment,
 } from "./spells";
@@ -1160,7 +1162,13 @@ function equipTroop(
   });
 }
 
-function activateArtifact(state: GameState, artifactId: string, sacrificeTroopId?: string): GameState {
+function activateArtifact(
+  state: GameState,
+  artifactId: string,
+  sacrificeTroopId?: string,
+  freeSpellInstanceId?: string,
+  freeSpellTargetTroopId?: string,
+): GameState {
   if (state.turnPhase !== "main" || state.combat) return state;
   const player = state.activePlayer;
   const artifact = state.artifacts[artifactId];
@@ -1211,6 +1219,50 @@ function activateArtifact(state: GameState, artifactId: string, sacrificeTroopId
       artifacts,
       log: appendLog(state, `Jogador ${player + 1} sacrificou ${troopName} no artefato → +1 Corrupção (${Math.min(cap, cur + 1)}/${cap}). Artefato exausto.`),
     });
+  }
+
+  if (def.artifactEffect === "free-spell") {
+    if (!freeSpellInstanceId) {
+      return {
+        ...state,
+        log: appendLog(state, "Selecione um feitiço da mão para conjurar gratuitamente."),
+      };
+    }
+    const pl = state.players[player];
+    if (!pl.hand.includes(freeSpellInstanceId)) {
+      return { ...state, log: appendLog(state, "Feitiço não está na sua mão.") };
+    }
+    const spellInst = state.troops[freeSpellInstanceId];
+    if (!spellInst || spellInst.owner !== player) return state;
+    const spellDef = state.catalog[spellInst.cardId];
+    if (!spellDef || !isSpellCard(spellDef)) {
+      return { ...state, log: appendLog(state, "Carta inválida para conjuração gratuita.") };
+    }
+    if (spellDef.spellEffect === "counterspell") {
+      return { ...state, log: appendLog(state, "Contramagia não pode ser conjurada pelo violino.") };
+    }
+    if (!canPlaySpellNow(state, player, spellDef)) {
+      return {
+        ...state,
+        log: appendLog(state, `${spellDef.name} não pode ser lançada neste momento.`),
+      };
+    }
+
+    const artifacts = { ...state.artifacts };
+    artifacts[artifactId] = { ...artifact, exhausted: true };
+    const pre = {
+      ...state,
+      artifacts,
+      log: appendLog(state, `${def.name} exausto — ${spellDef.name} sem custo.`),
+    };
+    return playSpell(
+      pre,
+      player,
+      freeSpellInstanceId,
+      freeSpellTargetTroopId ?? null,
+      null,
+      { skipCost: true },
+    );
   }
 
   return state;
@@ -1279,7 +1331,16 @@ function applyAction(state: GameState, action: GameAction): GameState {
       return evolveLeader(state, action.player, action.formId, action.formInstanceId);
 
     case "ACTIVATE_ARTIFACT":
-      return activateArtifact(state, action.artifactId, action.sacrificeTroopId);
+      return activateArtifact(
+        state,
+        action.artifactId,
+        action.sacrificeTroopId,
+        action.freeSpellInstanceId,
+        action.freeSpellTargetTroopId,
+      );
+
+    case "ACTIVATE_CAPTAIN_ABILITY":
+      return activateCaptainAbility(state, action.troopId);
 
     case "EQUIP_TROOP":
       return equipTroop(state, action.equipmentInstanceId, action.targetTroopId);

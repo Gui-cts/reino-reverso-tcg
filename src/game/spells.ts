@@ -108,7 +108,7 @@ export function describeSpellEffect(effect: SpellEffectId): string {
     case "iron-skin":
       return "Tropa aliada +2 de vida permanente.";
     case "blood-cauldron":
-      return "Tropa inimiga na arena: 1d6 — par = 2 de dano.";
+      return "Tropa inimiga na base ou arena: 1d6 — par = 2 de dano.";
     case "gust-wind":
       return "Tropa na arena (aliada ou inimiga) volta à base do dono, exausta.";
     case "draw-two":
@@ -265,8 +265,15 @@ export function canTargetSpell(
       return true;
     case "blood-cauldron":
       if (target.owner !== opponent(caster)) return false;
-      if (target.zone !== "arena") return false;
-      if (inCombat && combatArenaId && target.arenaId !== combatArenaId) return false;
+      if (target.zone !== "base" && target.zone !== "arena") return false;
+      if (
+        inCombat &&
+        target.zone === "arena" &&
+        combatArenaId &&
+        target.arenaId !== combatArenaId
+      ) {
+        return false;
+      }
       return true;
     case "gust-wind":
       if (target.zone !== "arena") return false;
@@ -283,12 +290,15 @@ export function canTargetSpell(
   }
 }
 
+export type PlaySpellOptions = { skipCost?: boolean };
+
 export function playSpell(
   state: GameState,
   caster: PlayerId,
   spellInstanceId: string,
   targetTroopId?: string | null,
   targetArtifactId?: string | null,
+  options?: PlaySpellOptions,
 ): GameState {
   const pl = state.players[caster];
   if (!pl.hand.includes(spellInstanceId)) {
@@ -370,20 +380,23 @@ export function playSpell(
     };
   }
 
-  const paid = payEssenceCost(state, caster, payment, true);
-  if (!paid.ok) {
-    return { ...state, log: appendLog(state, "Não foi possível pagar o custo em Essência.") };
-  }
-  let next = paid.state;
+  let next = state;
+  if (!options?.skipCost) {
+    const paid = payEssenceCost(state, caster, payment, true);
+    if (!paid.ok) {
+      return { ...state, log: appendLog(state, "Não foi possível pagar o custo em Essência.") };
+    }
+    next = paid.state;
 
-  const paidCorruption = payCorruptionCost(next, caster, corruptionCost);
-  if (!paidCorruption.ok) {
-    return {
-      ...state,
-      log: appendLog(state, "Não foi possível pagar o custo em Corrupção."),
-    };
+    const paidCorruption = payCorruptionCost(next, caster, corruptionCost);
+    if (!paidCorruption.ok) {
+      return {
+        ...state,
+        log: appendLog(state, "Não foi possível pagar o custo em Corrupção."),
+      };
+    }
+    next = paidCorruption.state;
   }
-  next = paidCorruption.state;
 
   const players = [...next.players] as GameState["players"];
   const hand = players[caster].hand.filter((id) => id !== spellInstanceId);

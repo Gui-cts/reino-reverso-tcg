@@ -45,8 +45,8 @@ export type CardKind = "troop" | "spell";
 /** Tipo da carta no baralho / catálogo. */
 export type CardType = "troop" | "spell" | "equipment" | "artifact" | "leader";
 
-/** Papéis extras (tropas). */
-export type CardRole = "normal" | "captain";
+/** Papéis extras: capitã/assinatura — máx. 1 cópia, exclusivas do Líder (`requiredLeaderId`). */
+export type CardRole = "normal" | "captain" | "signature";
 
 /** Facções — todas as cartas piloto usam `neutra`. */
 export type FactionId = "neutra" | (string & {});
@@ -89,10 +89,19 @@ export type KeywordId =
 export type DeathEffectId = "draw-one" | "ping-leader-1";
 
 /** Efeitos de ativação de artefatos permanentes. */
-export type ArtifactEffectId = "sacrifice-for-corruption";
+export type ArtifactEffectId = "sacrifice-for-corruption" | "free-spell";
 
 /** Efeitos de aterrisagem (ao entrar em campo). */
-export type LandingEffectId = "destroy-enemy-artifact" | "board-wipe";
+export type LandingEffectId =
+  | "destroy-enemy-artifact"
+  | "board-wipe"
+  | "tutor-signature-equipment";
+
+/** Traços de equipamento (assinaturas). */
+export type EquipmentTraitId = "vacuum-resist";
+
+/** Habilidade ativa de capitã (ex.: Angelica). */
+export type CaptainAbilityId = "angelica-duo";
 
 /** Habilidades ativas de Líder. */
 export type LeaderAbilityId =
@@ -133,8 +142,14 @@ export interface CardDefinition {
   faction?: FactionId;
   /** Tropas: normal ou capitã (máx. 1 cópia; exige `requiredLeaderId`). */
   cardRole?: CardRole;
-  /** Capitã: id da carta de Líder que permite esta tropa no deck. */
+  /** Capitã / assinatura: id do Líder que permite esta carta no deck. */
   requiredLeaderId?: string;
+  /** Capitã: habilidade ativada na base. */
+  captainAbilityId?: CaptainAbilityId;
+  /** Aterrisagem: id da carta a buscar no deck. */
+  landingTutorCardId?: string;
+  /** Equipamento assinatura: efeito especial. */
+  equipmentTrait?: EquipmentTraitId;
   /** Líder: vida máxima fora do baralho (substitui LEADER_MAX_HP quando ativo). */
   leaderMaxHp?: number;
   /** Líder: texto descritivo da habilidade. */
@@ -411,5 +426,12 @@ export type GameAction =
     }
   | { type: "USE_LEADER_ABILITY"; player: PlayerId; targetTroopId: string }
   | { type: "EVOLVE_LEADER"; player: PlayerId; formId: string; formInstanceId: string }
-  | { type: "ACTIVATE_ARTIFACT"; artifactId: string; sacrificeTroopId?: string }
+  | {
+      type: "ACTIVATE_ARTIFACT";
+      artifactId: string;
+      sacrificeTroopId?: string;
+      freeSpellInstanceId?: string;
+      freeSpellTargetTroopId?: string;
+    }
+  | { type: "ACTIVATE_CAPTAIN_ABILITY"; troopId: string }
   | { type: "EQUIP_TROOP"; equipmentInstanceId: string; targetTroopId: string };

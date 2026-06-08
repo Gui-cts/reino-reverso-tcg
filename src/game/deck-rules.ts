@@ -1,4 +1,11 @@
-import { isCaptainCard, isDeckableCard, isLeaderCard, normalizeCardDefinition } from "./card-meta";
+import {
+  isCaptainCard,
+  isDeckableCard,
+  isLeaderCard,
+  isLeaderExclusiveCard,
+  isSignatureCard,
+  normalizeCardDefinition,
+} from "./card-meta";
 import type { CardCatalog, CardDefinition, DeckDefinition } from "./types";
 
 export type DeckValidationError = {
@@ -13,7 +20,7 @@ export type DeckValidationResult = {
 
 const DEFAULT_MIN_DECK_SIZE = 40;
 const DEFAULT_MAX_COPIES = 4;
-const CAPTAIN_MAX_COPIES = 1;
+const EXCLUSIVE_MAX_COPIES = 1;
 
 function catalogMap(cards: CardDefinition[]): Record<string, CardDefinition> {
   return Object.fromEntries(cards.map((c) => [c.id, normalizeCardDefinition(c)]));
@@ -81,24 +88,25 @@ export function validateDeck(
       });
     }
 
-    const limit = isCaptainCard(def) ? CAPTAIN_MAX_COPIES : maxCopies;
+    const limit = isLeaderExclusiveCard(def) ? EXCLUSIVE_MAX_COPIES : maxCopies;
     if (count > limit) {
+      const roleLabel = isSignatureCard(def) ? "assinatura" : isCaptainCard(def) ? "capitã" : "cópias";
       errors.push({
-        code: isCaptainCard(def) ? "captain_copies" : "max_copies",
-        message: `"${def.name}": máximo ${limit} cópia(s) (tem ${count}).`,
+        code: isLeaderExclusiveCard(def) ? "exclusive_copies" : "max_copies",
+        message: `"${def.name}": máximo ${limit} (${roleLabel}) — tem ${count}.`,
       });
     }
 
-    if (isCaptainCard(def)) {
+    if (isLeaderExclusiveCard(def)) {
       if (!deck.leaderId) {
         errors.push({
-          code: "captain_no_leader",
-          message: `A capitã "${def.name}" exige um Líder no deck.`,
+          code: "exclusive_no_leader",
+          message: `"${def.name}" exige um Líder no deck.`,
         });
       } else if (def.requiredLeaderId && def.requiredLeaderId !== deck.leaderId) {
         errors.push({
-          code: "captain_wrong_leader",
-          message: `"${def.name}" só pode ser usada com o Líder "${def.requiredLeaderId}".`,
+          code: "exclusive_wrong_leader",
+          message: `"${def.name}" é exclusiva do Líder "${def.requiredLeaderId}".`,
         });
       }
     }
@@ -109,8 +117,21 @@ export function validateDeck(
 
 export function validateStarterDeck(catalogData: CardCatalog): DeckValidationResult {
   const catalog = catalogMap(catalogData.cards);
-  return validateDeck(
-    { leaderId: null, cardIds: catalogData.starterDeck },
-    catalog,
-  );
+  const map = catalog;
+  const errors: DeckValidationError[] = [];
+
+  const presets = catalogData.presetDecks ?? [];
+  if (presets.length > 0) {
+    for (const preset of presets) {
+      const cardIds =
+        preset.cardIds?.length
+          ? preset.cardIds
+          : catalogData.starterDeck.filter((id) => !map[id]?.leaderFormOf);
+      const result = validateDeck({ leaderId: preset.leaderId, cardIds }, catalog);
+      errors.push(...result.errors);
+    }
+    return { valid: errors.length === 0, errors };
+  }
+
+  return validateDeck({ leaderId: null, cardIds: catalogData.starterDeck }, catalog);
 }

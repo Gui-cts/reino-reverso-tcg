@@ -146,7 +146,8 @@ export function inferActionPlayer(state: GameState, action: GameAction): PlayerI
       return action.player;
     case "PLAY_TROOP":
     case "SACRIFICE_ESSENCE":
-    case "MOVE_TROOP": {
+    case "MOVE_TROOP":
+    case "ACTIVATE_CAPTAIN_ABILITY": {
       const troop = state.troops[action.troopId];
       return troop?.owner ?? null;
     }

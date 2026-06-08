@@ -128,7 +128,8 @@ export function createTestGame(
       .filter((c) => c.leaderFormOf === leaderId)
       .map((c) => c.id);
     const base = sourceIds.filter((id) => !catalog[id]?.leaderFormOf);
-    return shuffle([...base, ...forms]);
+    const formsMissing = forms.filter((fid) => !base.includes(fid));
+    return shuffle([...base, ...formsMissing]);
   }
 
   function leaderForPlayer(p: PlayerId): string | null {

@@ -1,3 +1,4 @@
+import { returnEquipmentToDeck, troopHasVacuumResistance } from "./equipment";
 import {
   appendLog,
   countTroopsInZone,
@@ -50,33 +51,54 @@ function vacuumDamageForArena(effect: ArenaEffectId): number {
 /** Destrói todas as tropas vivas na arena (sobreviventes não voltam à base). */
 function destroyArenaSurvivors(state: GameState, arenaId: string): GameState {
   const arena = getArena(state, arenaId);
-  const troops = { ...state.troops };
-  const players = [...state.players] as GameState["players"];
+  let next = state;
   const names: string[] = [];
 
-  for (const t of Object.values(troops)) {
+  for (const t of Object.values(state.troops)) {
     if (t.zone !== "arena" || t.arenaId !== arenaId || t.currentHealth <= 0) continue;
+
+    if (troopHasVacuumResistance(next, t)) {
+      next = returnEquipmentToDeck(
+        next,
+        t.instanceId,
+        `Resistência ao Vácuo (${getTroopName(next, t)})`,
+      );
+      const live = next.troops[t.instanceId];
+      if (live) {
+        next = {
+          ...next,
+          troops: {
+            ...next.troops,
+            [t.instanceId]: { ...live, zone: "base", arenaId: null, exhausted: true },
+          },
+        };
+        names.push(`${getTroopName(next, t)} (salva — equipamento ao deck)`);
+        continue;
+      }
+    }
+
     const p = t.owner;
+    const players = [...next.players] as GameState["players"];
     players[p] = {
       ...players[p],
       hand: players[p].hand.filter((id) => id !== t.instanceId),
       discard: [...players[p].discard, t.cardId],
     };
-    names.push(getTroopName(state, t));
+    const troops = { ...next.troops };
     delete troops[t.instanceId];
+    next = { ...next, troops, players };
+    names.push(getTroopName(state, t));
   }
 
-  if (names.length === 0) return { ...state, troops, players };
+  if (names.length === 0) return next;
 
   return {
-    ...state,
-    troops,
-    players,
+    ...next,
     log: appendLog(
-      state,
+      next,
       names.length === 1
-        ? `Reino Reverso (${arena.name}) — ${names[0]} foi destruída após o combate.`
-        : `Reino Reverso (${arena.name}) — ${names.length} tropas destruídas após o combate.`,
+        ? `Reino Reverso (${arena.name}) — ${names[0]} após o combate.`
+        : `Reino Reverso (${arena.name}) — ${names.length} tropas após o combate: ${names.join(", ")}.`,
     ),
   };
 }

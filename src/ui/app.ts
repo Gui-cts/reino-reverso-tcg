@@ -69,6 +69,8 @@ import { attachCardHoverPreview } from "./card-hover-preview";
 import { renderDeckbuilderScreen } from "./deckbuilder";
 import {
   loadActiveDeckSlot,
+  opponentPresetFor,
+  presetCardIds,
   resolveActiveDeck,
   validateDeckForCatalog,
   type ActiveDeckConfig,
@@ -108,6 +110,8 @@ type UiSelection = {
   artifactTargetingId: string | null;
   /** Equipamento selecionado na mão — próximo clique em tropa aliada equipa. */
   equipInstanceId: string | null;
+  /** Monteiro: artefato ativo — próximo clique em feitiço da mão conjura grátis. */
+  artifactFreeSpellArtifactId: string | null;
 };
 
 type AppScreen = "menu" | "deckbuilder" | "game" | "online-wait";
@@ -127,6 +131,7 @@ export class GameApp {
     leaderAbilityTargetingPlayer: null,
     artifactTargetingId: null,
     equipInstanceId: null,
+    artifactFreeSpellArtifactId: null,
     mulliganIndices: new Set(),
   };
   private root: HTMLElement;
@@ -449,10 +454,16 @@ export class GameApp {
     this.lastCpuPlayer = cpuPlayer;
     this.lastTestMode = testMode;
     this.lastLeaderId = resolvedLeader;
+    const oppPreset =
+      cpuPlayer !== null && this.catalog
+        ? opponentPresetFor(this.catalog, resolvedLeader)
+        : null;
     const gameOpts = {
       cpuPlayer,
       leaderId: resolvedLeader,
       deckCardIds: activeDeck.cardIds,
+      opponentDeckCardIds: oppPreset ? presetCardIds(this.catalog!, oppPreset) : undefined,
+      opponentLeaderId: oppPreset?.leaderId,
     };
     this.state = testMode
       ? createTestGame(this.catalog, { ...gameOpts, testMode })
@@ -466,6 +477,7 @@ export class GameApp {
       leaderAbilityTargetingPlayer: null,
       artifactTargetingId: null,
       equipInstanceId: null,
+      artifactFreeSpellArtifactId: null,
     };
     this.render();
     void this.runCpuLoop();
@@ -513,6 +525,7 @@ export class GameApp {
     this.selection.leaderAbilityTargetingPlayer = null;
     this.selection.artifactTargetingId = null;
     this.selection.equipInstanceId = null;
+    this.selection.artifactFreeSpellArtifactId = null;
     this.cpuLoopGeneration++;
     if (view.state.matchPhase === "finished") {
       this.stopOnlinePolling();
@@ -694,6 +707,7 @@ export class GameApp {
     this.selection.leaderAbilityTargetingPlayer = null;
     this.selection.artifactTargetingId = null;
     this.selection.equipInstanceId = null;
+    this.selection.artifactFreeSpellArtifactId = null;
     this.cpuLoopGeneration++;
     this.render();
     void this.runCpuLoop();
@@ -921,6 +935,18 @@ export class GameApp {
     if (!spellId) return;
     const spellInst = s.troops[spellId];
     if (!spellInst) return;
+    const monteiroId = this.selection.artifactFreeSpellArtifactId;
+    if (monteiroId) {
+      this.selection.artifactFreeSpellArtifactId = null;
+      this.selection.spellInstanceId = null;
+      this.dispatchAction({
+        type: "ACTIVATE_ARTIFACT",
+        artifactId: monteiroId,
+        freeSpellInstanceId: spellId,
+        freeSpellTargetTroopId: targetTroopId,
+      });
+      return;
+    }
     this.dispatchAction({
       type: "PLAY_SPELL",
       player: spellInst.owner,
@@ -1995,6 +2021,23 @@ export class GameApp {
                 }
               : canSelectSpell
               ? () => {
+                  const monteiroId = this.selection.artifactFreeSpellArtifactId;
+                  if (monteiroId && isSpellCard(def!)) {
+                    const effect = def!.spellEffect;
+                    if (effect && spellRequiresTarget(effect)) {
+                      this.selection.spellInstanceId = troopId;
+                      this.selection.troopId = null;
+                      this.render();
+                      return;
+                    }
+                    this.selection.artifactFreeSpellArtifactId = null;
+                    this.dispatchAction({
+                      type: "ACTIVATE_ARTIFACT",
+                      artifactId: monteiroId,
+                      freeSpellInstanceId: troopId,
+                    });
+                    return;
+                  }
                   const effect = def!.spellEffect;
                   if (
                     this.selection.spellInstanceId === troopId &&
@@ -2432,6 +2475,29 @@ export class GameApp {
         }
       }
 
+      if (
+        selectedTroop &&
+        selectedTroop.owner === active &&
+        selectedTroop.zone === "base" &&
+        s.catalog[selectedTroop.cardId]?.captainAbilityId
+      ) {
+        const capDef = s.catalog[selectedTroop.cardId];
+        const capBtn = document.createElement("button");
+        capBtn.className = "secondary";
+        capBtn.textContent =
+          capDef?.captainAbilityId === "angelica-duo"
+            ? `Ativar ${capDef.name} — Ebony & Ivory`
+            : `Ativar habilidade de ${capDef?.name ?? "capitã"}`;
+        capBtn.onclick = () => {
+          this.dispatchAction({
+            type: "ACTIVATE_CAPTAIN_ABILITY",
+            troopId: selectedTroop.instanceId,
+          });
+          this.selection.troopId = null;
+        };
+        btns.appendChild(capBtn);
+      }
+
       const combatBtn = document.createElement("button");
       combatBtn.textContent = "Declarar combate na arena selecionada";
       combatBtn.disabled = !this.selection.arenaId;
@@ -2559,9 +2625,12 @@ export class GameApp {
       const card = document.createElement("div");
       card.className = "artifact-card";
       const name = def?.name ?? art.cardId;
-      const effectLabel = def?.artifactEffect === "sacrifice-for-corruption"
-        ? "Sacrifique tropa → +1 Corrupção"
-        : "";
+      const effectLabel =
+        def?.artifactEffect === "sacrifice-for-corruption"
+          ? "Sacrifique tropa → +1 Corrupção"
+          : def?.artifactEffect === "free-spell"
+            ? "Exausta → conjure feitiço grátis"
+            : "";
 
       card.innerHTML = `<span class="artifact-name">${name}</span>`;
       if (effectLabel) {
@@ -2580,9 +2649,20 @@ export class GameApp {
           if (def.artifactEffect === "sacrifice-for-corruption") {
             if (this.selection.artifactTargetingId === art.instanceId) {
               this.selection.artifactTargetingId = null;
-    this.selection.equipInstanceId = null;
+              this.selection.equipInstanceId = null;
             } else {
               this.selection.artifactTargetingId = art.instanceId;
+              this.selection.artifactFreeSpellArtifactId = null;
+              this.selection.spellInstanceId = null;
+              this.selection.leaderAbilityTargetingPlayer = null;
+            }
+            this.render();
+          } else if (def.artifactEffect === "free-spell") {
+            if (this.selection.artifactFreeSpellArtifactId === art.instanceId) {
+              this.selection.artifactFreeSpellArtifactId = null;
+            } else {
+              this.selection.artifactFreeSpellArtifactId = art.instanceId;
+              this.selection.artifactTargetingId = null;
               this.selection.spellInstanceId = null;
               this.selection.leaderAbilityTargetingPlayer = null;
             }
@@ -2596,6 +2676,13 @@ export class GameApp {
           const hint = document.createElement("div");
           hint.className = "artifact-hint";
           hint.textContent = "Clique em tropa aliada para sacrificar.";
+          card.appendChild(hint);
+        }
+        if (this.selection.artifactFreeSpellArtifactId === art.instanceId) {
+          card.classList.add("artifact-targeting");
+          const hint = document.createElement("div");
+          hint.className = "artifact-hint";
+          hint.textContent = "Clique em um feitiço da mão para conjurar grátis.";
           card.appendChild(hint);
         }
       }

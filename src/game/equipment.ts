@@ -1,4 +1,5 @@
 import { appendLog, getTroopName } from "./helpers";
+import { shufflePlayerDeck } from "./tokens";
 import { getCardType } from "./card-meta";
 import type {
   ArtifactEffectId,
@@ -13,6 +14,8 @@ export function describeArtifactEffect(effect: ArtifactEffectId): string {
   switch (effect) {
     case "sacrifice-for-corruption":
       return "Ativar: sacrifique uma tropa aliada para ganhar +1 Corrupção. Fica exausto até o próximo turno.";
+    case "free-spell":
+      return "Ativar (exausta): conjure um feitiço da mão sem pagar custo.";
     default:
       return "";
   }
@@ -25,7 +28,18 @@ export function describeEquipmentEffect(def: CardDefinition): string {
   if (atk > 0) bonus.push(`+${atk} ataque`);
   if (hp > 0) bonus.push(`+${hp} vida`);
   const bonusText = bonus.length ? ` Concede ${bonus.join(" e ")}.` : "";
-  return `Equipa em tropa aliada na base ou arena.${bonusText}`;
+  const trait =
+    def.equipmentTrait === "vacuum-resist"
+      ? " Resistência ao Vácuo (RR): após combate, o equipamento volta ao baralho em vez da tropa ser destruída."
+      : "";
+  const role = def.cardRole === "signature" ? " Assinatura do Líder." : "";
+  return `Equipa em tropa aliada na base ou arena.${bonusText}${trait}${role}`;
+}
+
+export function troopHasVacuumResistance(state: GameState, troop: TroopInstance): boolean {
+  if (state.gamePhase !== "reino-reverso") return false;
+  const eqDef = getEquipmentDef(state, troop);
+  return eqDef?.equipmentTrait === "vacuum-resist";
 }
 
 export function isEquipmentCard(def: CardDefinition | undefined): boolean {
@@ -150,4 +164,56 @@ export function destroyEnemyRelic(state: GameState, caster: PlayerId): GameState
     victim.instanceId,
     `${eqName} em ${getTroopName(state, victim)}`,
   );
+}
+
+/** Desequipa e embaralha a carta de equipamento no baralho do dono (assinaturas). */
+export function returnEquipmentToDeck(
+  state: GameState,
+  troopId: string,
+  logPrefix: string,
+): GameState {
+  const troop = state.troops[troopId];
+  if (!troop?.equipmentId) return state;
+
+  const eq = state.equipments[troop.equipmentId];
+  if (!eq) {
+    const troops = { ...state.troops, [troopId]: { ...troop, equipmentId: null } };
+    return { ...state, troops };
+  }
+
+  const eqDef = state.catalog[eq.cardId];
+  const bonusAtk = eqDef?.attack ?? 0;
+  const bonusHp = eqDef?.health ?? 0;
+
+  const troops = { ...state.troops };
+  troops[troopId] = {
+    ...troop,
+    equipmentId: null,
+    attack: Math.max(0, troop.attack - bonusAtk),
+    healthBonus: Math.max(0, troop.healthBonus - bonusHp),
+    currentHealth: Math.max(1, troop.currentHealth - bonusHp),
+  };
+
+  const equipments = { ...state.equipments };
+  delete equipments[eq.instanceId];
+
+  const owner = troop.owner as PlayerId;
+  const players = [...state.players] as GameState["players"];
+  players[owner] = {
+    ...players[owner],
+    deck: [...players[owner].deck, eq.cardId],
+  };
+
+  const eqName = eqDef?.name ?? eq.cardId;
+  let next: GameState = {
+    ...state,
+    troops,
+    equipments,
+    players,
+    log: appendLog(
+      state,
+      `${logPrefix} — ${eqName} voltou ao baralho de Jogador ${owner + 1}.`,
+    ),
+  };
+  return shufflePlayerDeck(next, owner);
 }

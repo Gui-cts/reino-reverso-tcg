@@ -5,6 +5,7 @@ import {
   getTroopsInZone,
   getTroopName,
   opponent,
+  tutorCardToHand,
 } from "./helpers";
 import type {
   CardDefinition,
@@ -347,6 +348,8 @@ export function landingEffectDescription(effect: LandingEffectId): string {
       return "Destrói um artefato inimigo.";
     case "board-wipe":
       return "Destrói todas as tropas nas bases e arenas (aliados e inimigos).";
+    case "tutor-signature-equipment":
+      return "Busca equipamento assinatura no baralho.";
     default:
       return "";
   }
@@ -390,6 +393,14 @@ export function applyLandingEffect(state: GameState, troop: TroopInstance): Game
   }
   if (def.landingEffect === "board-wipe") {
     return applyBoardWipeLanding(state, troop.instanceId);
+  }
+  if (def.landingEffect === "tutor-signature-equipment" && def.landingTutorCardId) {
+    return tutorCardToHand(
+      state,
+      troop.owner,
+      def.landingTutorCardId,
+      `Aterrisagem (${getTroopName(state, troop)}): equipamento assinatura não encontrado no deck.`,
+    );
   }
   return state;
 }

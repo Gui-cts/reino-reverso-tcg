@@ -11,6 +11,12 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-05-19",
+    title: "Capitãs, assinaturas e decks",
+    summary:
+      "Sarah + Canino (Noah), Angelica + Monteiro (Klaus); decks base rebalanceados; Caldeirão Padrão (alvo na base); Resistência ao Vácuo no RR.",
+  },
+  {
+    date: "2026-05-19",
     title: "Movimento de tropas — feedback",
     summary:
       "Ao não conseguir enviar tropa da base, o jogo explica o motivo (exausta, arena dominada, não é sua vez, feitiço pendente). Clique na tropa exausta para ver a dica.",

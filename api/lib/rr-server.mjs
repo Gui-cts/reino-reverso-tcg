@@ -1,6 +1,23 @@
 // src/net/room-service.ts
 import { randomBytes } from "node:crypto";
 
+// src/game/types.ts
+var LEADER_MAX_HP = 15;
+var MAX_TROOPS_PER_ZONE = 3;
+var INITIAL_HAND_SIZE = 5;
+var CARDS_DRAW_PER_TURN = 1;
+var LEADER_EVOLUTION_CORRUPTION_COST = 5;
+function maxCorruptionForPhase(phase) {
+  switch (phase) {
+    case "mundo-normal":
+      return 5;
+    case "abismo":
+      return 10;
+    case "reino-reverso":
+      return 999;
+  }
+}
+
 // src/game/helpers.ts
 function opponent(p) {
   return p === 0 ? 1 : 0;
@@ -127,6 +144,55 @@ function untapEssence(state, player) {
   }
   return { ...state, essencePool };
 }
+function tutorCardToHand(state, player, cardId, notFoundMsg) {
+  const pl = state.players[player];
+  const idx = pl.deck.findIndex((id) => id === cardId);
+  if (idx === -1) {
+    return { ...state, log: appendLog(state, notFoundMsg) };
+  }
+  const def = state.catalog[cardId];
+  if (!def) {
+    return { ...state, log: appendLog(state, notFoundMsg) };
+  }
+  const deck = [...pl.deck];
+  deck.splice(idx, 1);
+  const [idNum, nextId] = nextInstanceId(state);
+  const instanceId = `troop-${idNum}`;
+  const troops = {
+    ...state.troops,
+    [instanceId]: {
+      instanceId,
+      cardId,
+      owner: player,
+      zone: "hand",
+      arenaId: null,
+      exhausted: false,
+      pinned: false,
+      movementLocked: false,
+      equipmentId: null,
+      currentHealth: def.health,
+      attack: def.attack,
+      attachedSpell: null,
+      healthBonus: 0,
+      shielded: false,
+      etherealThisTurn: false,
+      attackSuppressed: false
+    }
+  };
+  const players2 = [...state.players];
+  players2[player] = {
+    ...pl,
+    deck,
+    hand: [...pl.hand, instanceId]
+  };
+  return {
+    ...state,
+    players: players2,
+    troops,
+    nextInstanceId: nextId,
+    log: appendLog(state, `${def.name} foi buscada no deck e colocada na m\xE3o.`)
+  };
+}
 
 // src/game/card-meta.ts
 function normalizeCardDefinition(raw) {
@@ -156,6 +222,12 @@ function isLeaderCard(def) {
 }
 function isCaptainCard(def) {
   return Boolean(def && def.cardRole === "captain");
+}
+function isSignatureCard(def) {
+  return Boolean(def && def.cardRole === "signature");
+}
+function isLeaderExclusiveCard(def) {
+  return isCaptainCard(def) || isSignatureCard(def);
 }
 function isDeckableCard(def) {
   if (!def || def.isToken) return false;
@@ -203,7 +275,7 @@ function canAffordCardCost(state, player, def, essencePayment) {
 // src/game/deck-rules.ts
 var DEFAULT_MIN_DECK_SIZE = 40;
 var DEFAULT_MAX_COPIES = 4;
-var CAPTAIN_MAX_COPIES = 1;
+var EXCLUSIVE_MAX_COPIES = 1;
 function catalogMap(cards) {
   return Object.fromEntries(cards.map((c) => [c.id, normalizeCardDefinition(c)]));
 }
@@ -253,23 +325,24 @@ function validateDeck(deck, catalog, options) {
         message: `O L\xEDder "${def.name}" fica fora do baralho \u2014 use leaderId.`
       });
     }
-    const limit = isCaptainCard(def) ? CAPTAIN_MAX_COPIES : maxCopies;
+    const limit = isLeaderExclusiveCard(def) ? EXCLUSIVE_MAX_COPIES : maxCopies;
     if (count > limit) {
+      const roleLabel = isSignatureCard(def) ? "assinatura" : isCaptainCard(def) ? "capit\xE3" : "c\xF3pias";
       errors.push({
-        code: isCaptainCard(def) ? "captain_copies" : "max_copies",
-        message: `"${def.name}": m\xE1ximo ${limit} c\xF3pia(s) (tem ${count}).`
+        code: isLeaderExclusiveCard(def) ? "exclusive_copies" : "max_copies",
+        message: `"${def.name}": m\xE1ximo ${limit} (${roleLabel}) \u2014 tem ${count}.`
       });
     }
-    if (isCaptainCard(def)) {
+    if (isLeaderExclusiveCard(def)) {
       if (!deck.leaderId) {
         errors.push({
-          code: "captain_no_leader",
-          message: `A capit\xE3 "${def.name}" exige um L\xEDder no deck.`
+          code: "exclusive_no_leader",
+          message: `"${def.name}" exige um L\xEDder no deck.`
         });
       } else if (def.requiredLeaderId && def.requiredLeaderId !== deck.leaderId) {
         errors.push({
-          code: "captain_wrong_leader",
-          message: `"${def.name}" s\xF3 pode ser usada com o L\xEDder "${def.requiredLeaderId}".`
+          code: "exclusive_wrong_leader",
+          message: `"${def.name}" \xE9 exclusiva do L\xEDder "${def.requiredLeaderId}".`
         });
       }
     }
@@ -278,10 +351,18 @@ function validateDeck(deck, catalog, options) {
 }
 function validateStarterDeck(catalogData) {
   const catalog = catalogMap(catalogData.cards);
-  return validateDeck(
-    { leaderId: null, cardIds: catalogData.starterDeck },
-    catalog
-  );
+  const map = catalog;
+  const errors = [];
+  const presets = catalogData.presetDecks ?? [];
+  if (presets.length > 0) {
+    for (const preset of presets) {
+      const cardIds = preset.cardIds?.length ? preset.cardIds : catalogData.starterDeck.filter((id) => !map[id]?.leaderFormOf);
+      const result = validateDeck({ leaderId: preset.leaderId, cardIds }, catalog);
+      errors.push(...result.errors);
+    }
+    return { valid: errors.length === 0, errors };
+  }
+  return validateDeck({ leaderId: null, cardIds: catalogData.starterDeck }, catalog);
 }
 
 // src/game/cards.ts
@@ -469,23 +550,6 @@ function arenasForPhase(phase) {
       return ABISMO_ARENAS;
     case "reino-reverso":
       return REINO_REVERSO_ARENAS;
-  }
-}
-
-// src/game/types.ts
-var LEADER_MAX_HP = 15;
-var MAX_TROOPS_PER_ZONE = 3;
-var INITIAL_HAND_SIZE = 5;
-var CARDS_DRAW_PER_TURN = 1;
-var LEADER_EVOLUTION_CORRUPTION_COST = 5;
-function maxCorruptionForPhase(phase) {
-  switch (phase) {
-    case "mundo-normal":
-      return 5;
-    case "abismo":
-      return 10;
-    case "reino-reverso":
-      return 999;
   }
 }
 
@@ -784,9 +848,110 @@ function applyDeckoutLoss(state, player) {
   };
 }
 
+// src/game/tokens.ts
+var ABYSS_SERVANT_TOKEN_ID = "token-servo-abismo";
+var EBONY_TOKEN_ID = "token-ebony";
+var IVORY_TOKEN_ID = "token-ivory";
+function spawnTroopInArena(state, owner, arenaId, cardId, attack, health, opts) {
+  if (countTroopsInZone(state, owner, "arena", arenaId) >= MAX_TROOPS_PER_ZONE) {
+    return state;
+  }
+  const [idNum, nextId] = nextInstanceId(state);
+  const instanceId = `troop-${idNum}`;
+  const troop = {
+    instanceId,
+    cardId,
+    owner,
+    currentHealth: health,
+    attack,
+    exhausted: !opts?.entersReady,
+    pinned: false,
+    zone: "arena",
+    arenaId,
+    attachedSpell: null,
+    healthBonus: 0,
+    movementLocked: false,
+    equipmentId: null
+  };
+  return {
+    ...state,
+    troops: { ...state.troops, [instanceId]: troop },
+    nextInstanceId: nextId
+  };
+}
+function spawnTokenInBase(state, owner, cardId, attack, health, opts) {
+  const def = state.catalog[cardId];
+  if (!def) return state;
+  const [idNum, nextId] = nextInstanceId(state);
+  const instanceId = `troop-${idNum}`;
+  const troop = {
+    instanceId,
+    cardId,
+    owner,
+    zone: "base",
+    arenaId: null,
+    exhausted: opts?.exhausted ?? true,
+    pinned: false,
+    ...defaultTroopFields(def),
+    attack,
+    currentHealth: health
+  };
+  return {
+    ...state,
+    troops: { ...state.troops, [instanceId]: troop },
+    nextInstanceId: nextId
+  };
+}
+function spawnTokensInBase(state, owner, cardId, count, attack, health) {
+  if (count <= 0) return state;
+  let next = state;
+  for (let i = 0; i < count; i++) {
+    next = spawnTokenInBase(next, owner, cardId, attack, health);
+  }
+  return next;
+}
+function shufflePlayerDeck(state, player) {
+  const pl = { ...state.players[player] };
+  const deck = [...pl.deck];
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  const players2 = [...state.players];
+  players2[player] = { ...pl, deck };
+  return { ...state, players: players2 };
+}
+function addCardToDeck(state, player, cardId, shuffleAfter = true) {
+  const players2 = [...state.players];
+  players2[player] = {
+    ...players2[player],
+    deck: [...players2[player].deck, cardId]
+  };
+  let next = {
+    ...state,
+    players: players2,
+    log: appendLog(state, `Carta adicionada ao baralho do Jogador ${player + 1}.`)
+  };
+  return shuffleAfter ? shufflePlayerDeck(next, player) : next;
+}
+
 // src/game/equipment.ts
+function troopHasVacuumResistance(state, troop) {
+  if (state.gamePhase !== "reino-reverso") return false;
+  const eqDef = getEquipmentDef(state, troop);
+  return eqDef?.equipmentTrait === "vacuum-resist";
+}
 function isEquipmentCard(def) {
   return Boolean(def && getCardType(def) === "equipment");
+}
+function getTroopEquipment(state, troop) {
+  if (!troop.equipmentId) return null;
+  return state.equipments[troop.equipmentId] ?? null;
+}
+function getEquipmentDef(state, troop) {
+  const eq = getTroopEquipment(state, troop);
+  if (!eq) return null;
+  return state.catalog[eq.cardId] ?? null;
 }
 function getEnemyEquippedTroops(state, player) {
   const enemy = player === 0 ? 1 : 0;
@@ -865,6 +1030,46 @@ function destroyEnemyRelic(state, caster) {
     victim.instanceId,
     `${eqName} em ${getTroopName(state, victim)}`
   );
+}
+function returnEquipmentToDeck(state, troopId, logPrefix) {
+  const troop = state.troops[troopId];
+  if (!troop?.equipmentId) return state;
+  const eq = state.equipments[troop.equipmentId];
+  if (!eq) {
+    const troops2 = { ...state.troops, [troopId]: { ...troop, equipmentId: null } };
+    return { ...state, troops: troops2 };
+  }
+  const eqDef = state.catalog[eq.cardId];
+  const bonusAtk = eqDef?.attack ?? 0;
+  const bonusHp = eqDef?.health ?? 0;
+  const troops = { ...state.troops };
+  troops[troopId] = {
+    ...troop,
+    equipmentId: null,
+    attack: Math.max(0, troop.attack - bonusAtk),
+    healthBonus: Math.max(0, troop.healthBonus - bonusHp),
+    currentHealth: Math.max(1, troop.currentHealth - bonusHp)
+  };
+  const equipments = { ...state.equipments };
+  delete equipments[eq.instanceId];
+  const owner = troop.owner;
+  const players2 = [...state.players];
+  players2[owner] = {
+    ...players2[owner],
+    deck: [...players2[owner].deck, eq.cardId]
+  };
+  const eqName = eqDef?.name ?? eq.cardId;
+  let next = {
+    ...state,
+    troops,
+    equipments,
+    players: players2,
+    log: appendLog(
+      state,
+      `${logPrefix} \u2014 ${eqName} voltou ao baralho de Jogador ${owner + 1}.`
+    )
+  };
+  return shufflePlayerDeck(next, owner);
 }
 
 // src/game/troop-cleanup.ts
@@ -1151,6 +1356,14 @@ function applyLandingEffect(state, troop) {
   }
   if (def.landingEffect === "board-wipe") {
     return applyBoardWipeLanding(state, troop.instanceId);
+  }
+  if (def.landingEffect === "tutor-signature-equipment" && def.landingTutorCardId) {
+    return tutorCardToHand(
+      state,
+      troop.owner,
+      def.landingTutorCardId,
+      `Aterrisagem (${getTroopName(state, troop)}): equipamento assinatura n\xE3o encontrado no deck.`
+    );
   }
   return state;
 }
@@ -1576,8 +1789,10 @@ function canTargetSpell(state, caster, spellDef, target) {
       return true;
     case "blood-cauldron":
       if (target.owner !== opponent(caster)) return false;
-      if (target.zone !== "arena") return false;
-      if (inCombat && combatArenaId && target.arenaId !== combatArenaId) return false;
+      if (target.zone !== "base" && target.zone !== "arena") return false;
+      if (inCombat && target.zone === "arena" && combatArenaId && target.arenaId !== combatArenaId) {
+        return false;
+      }
       return true;
     case "gust-wind":
       if (target.zone !== "arena") return false;
@@ -1590,7 +1805,7 @@ function canTargetSpell(state, caster, spellDef, target) {
       return false;
   }
 }
-function playSpell(state, caster, spellInstanceId, targetTroopId, targetArtifactId) {
+function playSpell(state, caster, spellInstanceId, targetTroopId, targetArtifactId, options) {
   const pl = state.players[caster];
   if (!pl.hand.includes(spellInstanceId)) {
     return { ...state, log: appendLog(state, "Magia n\xE3o est\xE1 na sua m\xE3o.") };
@@ -1661,19 +1876,22 @@ function playSpell(state, caster, spellInstanceId, targetTroopId, targetArtifact
       )
     };
   }
-  const paid = payEssenceCost(state, caster, payment, true);
-  if (!paid.ok) {
-    return { ...state, log: appendLog(state, "N\xE3o foi poss\xEDvel pagar o custo em Ess\xEAncia.") };
+  let next = state;
+  if (!options?.skipCost) {
+    const paid = payEssenceCost(state, caster, payment, true);
+    if (!paid.ok) {
+      return { ...state, log: appendLog(state, "N\xE3o foi poss\xEDvel pagar o custo em Ess\xEAncia.") };
+    }
+    next = paid.state;
+    const paidCorruption = payCorruptionCost(next, caster, corruptionCost);
+    if (!paidCorruption.ok) {
+      return {
+        ...state,
+        log: appendLog(state, "N\xE3o foi poss\xEDvel pagar o custo em Corrup\xE7\xE3o.")
+      };
+    }
+    next = paidCorruption.state;
   }
-  let next = paid.state;
-  const paidCorruption = payCorruptionCost(next, caster, corruptionCost);
-  if (!paidCorruption.ok) {
-    return {
-      ...state,
-      log: appendLog(state, "N\xE3o foi poss\xEDvel pagar o custo em Corrup\xE7\xE3o.")
-    };
-  }
-  next = paidCorruption.state;
   const players2 = [...next.players];
   const hand = players2[caster].hand.filter((id) => id !== spellInstanceId);
   players2[caster] = {
@@ -1836,16 +2054,20 @@ function createInitialGame(catalogData, options = {}) {
       const def = catalog[id];
       return !def?.leaderFormOf;
     });
-    return shuffle([...base, ...forms]);
+    const formsMissing = forms.filter((fid) => !base.includes(fid));
+    return shuffle([...base, ...formsMissing]);
   }
+  const opponentDeckSource = options.opponentDeckCardIds?.length ? options.opponentDeckCardIds : catalogData.starterDeck;
   function deckSourceForPlayer(player) {
     if (cpuPlayer !== null && player === humanIdx) return humanDeckSource;
+    if (cpuPlayer !== null && player !== humanIdx) return opponentDeckSource;
     if (cpuPlayer === null && player === 0) return humanDeckSource;
-    return catalogData.starterDeck;
+    return opponentDeckSource;
   }
+  const resolvedCpuLeaderId = options.opponentLeaderId ?? cpuLeaderId;
   function leaderForPlayer(player) {
     if (cpuPlayer !== null) {
-      return player === humanIdx ? p0LeaderId : cpuLeaderId;
+      return player === humanIdx ? p0LeaderId : resolvedCpuLeaderId;
     }
     return player === 0 ? p0LeaderId : p1LeaderId;
   }
@@ -1997,91 +2219,6 @@ function drawFromDeck(state, player, count) {
   pl[player] = drawn.player;
   next = { ...next, players: pl, troops: drawn.troops, nextInstanceId: drawn.nextId };
   return next;
-}
-
-// src/game/tokens.ts
-var ABYSS_SERVANT_TOKEN_ID = "token-servo-abismo";
-function spawnTroopInArena(state, owner, arenaId, cardId, attack, health, opts) {
-  if (countTroopsInZone(state, owner, "arena", arenaId) >= MAX_TROOPS_PER_ZONE) {
-    return state;
-  }
-  const [idNum, nextId] = nextInstanceId(state);
-  const instanceId = `troop-${idNum}`;
-  const troop = {
-    instanceId,
-    cardId,
-    owner,
-    currentHealth: health,
-    attack,
-    exhausted: !opts?.entersReady,
-    pinned: false,
-    zone: "arena",
-    arenaId,
-    attachedSpell: null,
-    healthBonus: 0,
-    movementLocked: false,
-    equipmentId: null
-  };
-  return {
-    ...state,
-    troops: { ...state.troops, [instanceId]: troop },
-    nextInstanceId: nextId
-  };
-}
-function spawnTokenInBase(state, owner, cardId, attack, health) {
-  const def = state.catalog[cardId];
-  if (!def) return state;
-  const [idNum, nextId] = nextInstanceId(state);
-  const instanceId = `troop-${idNum}`;
-  const troop = {
-    instanceId,
-    cardId,
-    owner,
-    zone: "base",
-    arenaId: null,
-    exhausted: true,
-    pinned: false,
-    ...defaultTroopFields(def),
-    attack,
-    currentHealth: health
-  };
-  return {
-    ...state,
-    troops: { ...state.troops, [instanceId]: troop },
-    nextInstanceId: nextId
-  };
-}
-function spawnTokensInBase(state, owner, cardId, count, attack, health) {
-  if (count <= 0) return state;
-  let next = state;
-  for (let i = 0; i < count; i++) {
-    next = spawnTokenInBase(next, owner, cardId, attack, health);
-  }
-  return next;
-}
-function shufflePlayerDeck(state, player) {
-  const pl = { ...state.players[player] };
-  const deck = [...pl.deck];
-  for (let i = deck.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [deck[i], deck[j]] = [deck[j], deck[i]];
-  }
-  const players2 = [...state.players];
-  players2[player] = { ...pl, deck };
-  return { ...state, players: players2 };
-}
-function addCardToDeck(state, player, cardId, shuffleAfter = true) {
-  const players2 = [...state.players];
-  players2[player] = {
-    ...players2[player],
-    deck: [...players2[player].deck, cardId]
-  };
-  let next = {
-    ...state,
-    players: players2,
-    log: appendLog(state, `Carta adicionada ao baralho do Jogador ${player + 1}.`)
-  };
-  return shuffleAfter ? shufflePlayerDeck(next, player) : next;
 }
 
 // src/game/arena-effects.ts
@@ -2272,28 +2409,47 @@ function vacuumDamageForArena(effect) {
 }
 function destroyArenaSurvivors(state, arenaId) {
   const arena = getArena(state, arenaId);
-  const troops = { ...state.troops };
-  const players2 = [...state.players];
+  let next = state;
   const names = [];
-  for (const t of Object.values(troops)) {
+  for (const t of Object.values(state.troops)) {
     if (t.zone !== "arena" || t.arenaId !== arenaId || t.currentHealth <= 0) continue;
+    if (troopHasVacuumResistance(next, t)) {
+      next = returnEquipmentToDeck(
+        next,
+        t.instanceId,
+        `Resist\xEAncia ao V\xE1cuo (${getTroopName(next, t)})`
+      );
+      const live = next.troops[t.instanceId];
+      if (live) {
+        next = {
+          ...next,
+          troops: {
+            ...next.troops,
+            [t.instanceId]: { ...live, zone: "base", arenaId: null, exhausted: true }
+          }
+        };
+        names.push(`${getTroopName(next, t)} (salva \u2014 equipamento ao deck)`);
+        continue;
+      }
+    }
     const p = t.owner;
+    const players2 = [...next.players];
     players2[p] = {
       ...players2[p],
       hand: players2[p].hand.filter((id) => id !== t.instanceId),
       discard: [...players2[p].discard, t.cardId]
     };
-    names.push(getTroopName(state, t));
+    const troops = { ...next.troops };
     delete troops[t.instanceId];
+    next = { ...next, troops, players: players2 };
+    names.push(getTroopName(state, t));
   }
-  if (names.length === 0) return { ...state, troops, players: players2 };
+  if (names.length === 0) return next;
   return {
-    ...state,
-    troops,
-    players: players2,
+    ...next,
     log: appendLog(
-      state,
-      names.length === 1 ? `Reino Reverso (${arena.name}) \u2014 ${names[0]} foi destru\xEDda ap\xF3s o combate.` : `Reino Reverso (${arena.name}) \u2014 ${names.length} tropas destru\xEDdas ap\xF3s o combate.`
+      next,
+      names.length === 1 ? `Reino Reverso (${arena.name}) \u2014 ${names[0]} ap\xF3s o combate.` : `Reino Reverso (${arena.name}) \u2014 ${names.length} tropas ap\xF3s o combate: ${names.join(", ")}.`
     )
   };
 }
@@ -2956,6 +3112,74 @@ function setConquestWatchOnEndTurn(state, player) {
     }
   }
   return { ...state, conquestWatch: watch };
+}
+
+// src/game/captain-abilities.ts
+function tokenAliveOnField(state, player, cardId) {
+  return Object.values(state.troops).some(
+    (t) => t.owner === player && t.cardId === cardId && t.currentHealth > 0 && (t.zone === "base" || t.zone === "arena")
+  );
+}
+function activateCaptainAbility(state, troopId) {
+  if (state.matchPhase !== "playing" || state.turnPhase !== "main" || state.combat) {
+    return state;
+  }
+  const player = state.activePlayer;
+  const troop = state.troops[troopId];
+  if (!troop || troop.owner !== player) return state;
+  const def = state.catalog[troop.cardId];
+  if (!def?.captainAbilityId) {
+    return { ...state, log: appendLog(state, "Esta tropa n\xE3o tem habilidade de capit\xE3.") };
+  }
+  if (troop.zone !== "base") {
+    return { ...state, log: appendLog(state, "Habilidade de capit\xE3 s\xF3 na base.") };
+  }
+  if (troop.exhausted) {
+    return {
+      ...state,
+      log: appendLog(state, `${getTroopName(state, troop)} est\xE1 exausta.`)
+    };
+  }
+  if (def.captainAbilityId === "angelica-duo") {
+    const ebonyAlive = tokenAliveOnField(state, player, EBONY_TOKEN_ID);
+    const ivoryAlive = tokenAliveOnField(state, player, IVORY_TOKEN_ID);
+    if (ebonyAlive && ivoryAlive) {
+      return {
+        ...state,
+        log: appendLog(
+          state,
+          `${getTroopName(state, troop)}: Ebony e Ivory j\xE1 est\xE3o em campo.`
+        )
+      };
+    }
+    let next = state;
+    const spawned = [];
+    if (!ebonyAlive) {
+      next = spawnTokenInBase(next, player, EBONY_TOKEN_ID, 2, 2, {
+        exhausted: true
+      });
+      spawned.push("Ebony");
+    }
+    if (!ivoryAlive) {
+      next = spawnTokenInBase(next, player, IVORY_TOKEN_ID, 2, 2, {
+        exhausted: true
+      });
+      spawned.push("Ivory");
+    }
+    const troops = {
+      ...next.troops,
+      [troopId]: { ...next.troops[troopId], exhausted: true }
+    };
+    return {
+      ...next,
+      troops,
+      log: appendLog(
+        next,
+        `${getTroopName(state, troop)} invocou ${spawned.join(" e ")} na base (exaustos).`
+      )
+    };
+  }
+  return state;
 }
 
 // src/game/turn.ts
@@ -3972,7 +4196,7 @@ function equipTroop(state, equipmentInstanceId, targetTroopId) {
     )
   });
 }
-function activateArtifact(state, artifactId, sacrificeTroopId) {
+function activateArtifact(state, artifactId, sacrificeTroopId, freeSpellInstanceId) {
   if (state.turnPhase !== "main" || state.combat) return state;
   const player = state.activePlayer;
   const artifact = state.artifacts[artifactId];
@@ -4015,6 +4239,41 @@ function activateArtifact(state, artifactId, sacrificeTroopId) {
       artifacts,
       log: appendLog(state, `Jogador ${player + 1} sacrificou ${troopName} no artefato \u2192 +1 Corrup\xE7\xE3o (${Math.min(cap, cur + 1)}/${cap}). Artefato exausto.`)
     });
+  }
+  if (def.artifactEffect === "free-spell") {
+    if (!freeSpellInstanceId) {
+      return {
+        ...state,
+        log: appendLog(state, "Selecione um feiti\xE7o da m\xE3o para conjurar gratuitamente.")
+      };
+    }
+    const pl = state.players[player];
+    if (!pl.hand.includes(freeSpellInstanceId)) {
+      return { ...state, log: appendLog(state, "Feiti\xE7o n\xE3o est\xE1 na sua m\xE3o.") };
+    }
+    const spellInst = state.troops[freeSpellInstanceId];
+    if (!spellInst || spellInst.owner !== player) return state;
+    const spellDef = state.catalog[spellInst.cardId];
+    if (!spellDef || !isSpellCard(spellDef)) {
+      return { ...state, log: appendLog(state, "Carta inv\xE1lida para conjura\xE7\xE3o gratuita.") };
+    }
+    if (spellDef.spellEffect === "counterspell") {
+      return { ...state, log: appendLog(state, "Contramagia n\xE3o pode ser conjurada pelo violino.") };
+    }
+    if (!canPlaySpellNow(state, player, spellDef)) {
+      return {
+        ...state,
+        log: appendLog(state, `${spellDef.name} n\xE3o pode ser lan\xE7ada neste momento.`)
+      };
+    }
+    const artifacts = { ...state.artifacts };
+    artifacts[artifactId] = { ...artifact, exhausted: true };
+    const pre = {
+      ...state,
+      artifacts,
+      log: appendLog(state, `${def.name} exausto \u2014 ${spellDef.name} sem custo.`)
+    };
+    return playSpell(pre, player, freeSpellInstanceId, null, null, { skipCost: true });
   }
   return state;
 }
@@ -4064,7 +4323,14 @@ function applyAction(state, action) {
     case "EVOLVE_LEADER":
       return evolveLeader(state, action.player, action.formId, action.formInstanceId);
     case "ACTIVATE_ARTIFACT":
-      return activateArtifact(state, action.artifactId, action.sacrificeTroopId);
+      return activateArtifact(
+        state,
+        action.artifactId,
+        action.sacrificeTroopId,
+        action.freeSpellInstanceId
+      );
+    case "ACTIVATE_CAPTAIN_ABILITY":
+      return activateCaptainAbility(state, action.troopId);
     case "EQUIP_TROOP":
       return equipTroop(state, action.equipmentInstanceId, action.targetTroopId);
     default:
@@ -4089,8 +4355,11 @@ function canUseLeaderAbilityReact(state, player) {
   const pl = state.players[player];
   if (!pl.leaderId || pl.leaderAbilityUsedThisTurn || pl.leaderExhausted) return false;
   const ld = state.catalog[pl.leaderId];
-  if (!ld?.leaderAbilityId || ld.leaderAbilityId === "arcane-melody") return false;
+  if (!ld?.leaderAbilityId) return false;
   const abilityId = ld.leaderAbilityId;
+  if (abilityId !== "shield" && abilityId !== "frost-convert" && abilityId !== "empathy-mark") {
+    return false;
+  }
   if (abilityId === "shield" || abilityId === "frost-convert") {
     if (getAvailableEssence(state, player).length < 2) return false;
   } else if (abilityId === "empathy-mark") {
@@ -4161,7 +4430,8 @@ function inferActionPlayer(state, action) {
       return action.player;
     case "PLAY_TROOP":
     case "SACRIFICE_ESSENCE":
-    case "MOVE_TROOP": {
+    case "MOVE_TROOP":
+    case "ACTIVATE_CAPTAIN_ABILITY": {
       const troop = state.troops[action.troopId];
       return troop?.owner ?? null;
     }
@@ -4395,7 +4665,7 @@ var cards_default = {
       id: "caldeirao-sangue",
       name: "Caldeir\xE3o de Sangue",
       cardKind: "spell",
-      cardSpeed: "combat",
+      cardSpeed: "standard",
       spellEffect: "blood-cauldron",
       cost: 3,
       attack: 0,
@@ -5085,6 +5355,84 @@ var cards_default = {
       health: 0,
       hasEssenceSymbol: false,
       faction: "neutra"
+    },
+    {
+      id: "sarah-determinacao",
+      name: "Sarah \u2014 A determina\xE7\xE3o",
+      cost: 4,
+      attack: 4,
+      health: 4,
+      hasEssenceSymbol: false,
+      keywords: ["aterrisagem"],
+      landingEffect: "tutor-signature-equipment",
+      landingTutorCardId: "equip-canino-fogo-gelo",
+      cardType: "troop",
+      faction: "delta",
+      cardRole: "captain",
+      requiredLeaderId: "noah-lider-base"
+    },
+    {
+      id: "equip-canino-fogo-gelo",
+      name: "O canino de fogo e gelo",
+      cardType: "equipment",
+      faction: "delta",
+      cost: 3,
+      attack: 2,
+      health: 2,
+      hasEssenceSymbol: false,
+      cardRole: "signature",
+      requiredLeaderId: "noah-lider-base",
+      equipmentTrait: "vacuum-resist"
+    },
+    {
+      id: "monteiro-violino",
+      name: "Monteiro \u2014 O violino",
+      cardType: "artifact",
+      faction: "delta",
+      cost: 2,
+      attack: 0,
+      health: 0,
+      hasEssenceSymbol: false,
+      cardRole: "signature",
+      requiredLeaderId: "klaus-violinista",
+      artifactEffect: "free-spell"
+    },
+    {
+      id: "angelica-capita",
+      name: "Angelica",
+      cost: 4,
+      attack: 2,
+      health: 2,
+      hasEssenceSymbol: true,
+      cardType: "troop",
+      faction: "delta",
+      cardRole: "captain",
+      requiredLeaderId: "klaus-violinista",
+      captainAbilityId: "angelica-duo"
+    },
+    {
+      id: "token-ebony",
+      name: "Ebony",
+      cost: 0,
+      attack: 2,
+      health: 2,
+      hasEssenceSymbol: false,
+      isToken: true,
+      cardType: "troop",
+      faction: "delta",
+      cardRole: "normal"
+    },
+    {
+      id: "token-ivory",
+      name: "Ivory",
+      cost: 0,
+      attack: 2,
+      health: 2,
+      hasEssenceSymbol: false,
+      isToken: true,
+      cardType: "troop",
+      faction: "delta",
+      cardRole: "normal"
     }
   ],
   starterDeck: [
@@ -5166,13 +5514,110 @@ var cards_default = {
       id: "noah",
       leaderId: "noah-lider-base",
       name: "Noah \u2014 Controle Delta",
-      description: "Tropas resistentes, equipamentos e evolu\xE7\xF5es do pugilista."
+      description: "Tropas resistentes, Protetores, equipamentos e Sarah + Canino.",
+      cardIds: [
+        "sarah-determinacao",
+        "equip-canino-fogo-gelo",
+        "escudeiro-pacto",
+        "escudeiro-pacto",
+        "escudeiro-pacto",
+        "sentinela-calha",
+        "sentinela-calha",
+        "sentinela-calha",
+        "muralha-ossos",
+        "muralha-ossos",
+        "guardiao-estandarte",
+        "guardiao-estandarte",
+        "guardiao-estandarte",
+        "guarda-penhasco",
+        "guarda-penhasco",
+        "vigia-reverso",
+        "vigia-reverso",
+        "vigia-reverso",
+        "bruto-patio",
+        "bruto-patio",
+        "curandeiro-errante",
+        "curandeiro-errante",
+        "mensageiro-alado",
+        "mensageiro-alado",
+        "arqueiro-torre",
+        "arqueiro-torre",
+        "falcao-abismo",
+        "colosso-rachado",
+        "destruidor-reliquias",
+        "fragmento-poco",
+        "fragmento-poco",
+        "cinza-rastejante",
+        "cinza-rastejante",
+        "equip-escudo-delta",
+        "equip-escudo-delta",
+        "equip-escudo-delta",
+        "equip-lamina-pacto",
+        "equip-lamina-pacto",
+        "equip-corrente-ferro",
+        "equip-corrente-ferro",
+        "pele-ferro",
+        "pele-ferro",
+        "encore",
+        "encore",
+        "fragmentar",
+        "fragmentar"
+      ]
     },
     {
       id: "klaus",
       leaderId: "klaus-violinista",
       name: "Klaus \u2014 Melodia Arcana",
-      description: "Feiti\xE7os, ess\xEAncia e formas do violinista."
+      description: "Feiti\xE7os, corrup\xE7\xE3o, Angelica + Monteiro e Summoner.",
+      cardIds: [
+        "angelica-capita",
+        "monteiro-violino",
+        "altar-sombrio",
+        "altar-sombrio",
+        "encore",
+        "encore",
+        "encore",
+        "pele-ferro",
+        "pele-ferro",
+        "pele-ferro",
+        "caldeirao-sangue",
+        "caldeirao-sangue",
+        "caldeirao-sangue",
+        "lufada-vento",
+        "lufada-vento",
+        "constricao",
+        "constricao",
+        "eterealidade",
+        "fragmentar",
+        "fragmentar",
+        "revelacao-erudito",
+        "revelacao-erudito",
+        "compendio-vazio",
+        "compendio-vazio",
+        "chamado-tropas",
+        "omega",
+        "cinza-rastejante",
+        "cinza-rastejante",
+        "fragmento-poco",
+        "fragmento-poco",
+        "fragmento-poco",
+        "servo-cinzas",
+        "servo-cinzas",
+        "servo-cinzas",
+        "eco-banshee",
+        "eco-banshee",
+        "carnical-incandescente",
+        "carnical-incandescente",
+        "vazio-antimagia",
+        "corrente-eterea",
+        "demolidor-ruinas",
+        "espectro-menor",
+        "filho-bruma",
+        "filho-bruma",
+        "destruidor-reliquias",
+        "equip-amuleto-sombrio",
+        "equip-amuleto-sombrio"
+      ]
     }
   ]
 };
