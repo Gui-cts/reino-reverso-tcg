@@ -155,7 +155,7 @@ export function applyArenaOnDominate(
           ...next,
           log: appendLog(
             next,
-            "Colégio Aurélio — Susej embaralhado no baralho (carta em desenvolvimento).",
+            "Colégio Aurélio — Susej embaralhado no baralho.",
           ),
         };
       }

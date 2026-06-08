@@ -92,10 +92,15 @@ export type DeathEffectId = "draw-one" | "ping-leader-1";
 export type ArtifactEffectId = "sacrifice-for-corruption";
 
 /** Efeitos de aterrisagem (ao entrar em campo). */
-export type LandingEffectId = "destroy-enemy-artifact";
+export type LandingEffectId = "destroy-enemy-artifact" | "board-wipe";
 
 /** Habilidades ativas de Líder. */
-export type LeaderAbilityId = "shield" | "frost-convert" | "empathy-mark" | "arcane-melody";
+export type LeaderAbilityId =
+  | "shield"
+  | "frost-convert"
+  | "empathy-mark"
+  | "arcane-melody"
+  | "abyss-summon";
 
 export type CombatSubPhase = "magic" | "strike";
 

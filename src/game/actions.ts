@@ -8,6 +8,7 @@ import {
 import { setConquestWatchOnEndTurn } from "./conquest";
 import {
   appendLog,
+  countBaseTroopSlotsUsed,
   countTroopsInZone,
   getAvailableEssence,
   getAvailableNonTempEssence,
@@ -34,7 +35,14 @@ import {
   getEssenceCost,
 } from "./card-meta";
 import { isEquipmentCard } from "./equipment";
-import { applyLandingEffect, cardHasKeyword, troopCanFlyBetweenArenas, troopEntersReadyOnDeploy } from "./keywords";
+import {
+  applyLandingEffect,
+  applyTroopDeathTriggers,
+  cardHasKeyword,
+  troopCanFlyBetweenArenas,
+  troopEntersReadyOnDeploy,
+} from "./keywords";
+import { ABYSS_SERVANT_TOKEN_ID, spawnTokensInBase } from "./tokens";
 import {
   isSpellCard,
   isTroopCard,
@@ -45,7 +53,7 @@ import {
 import { buryDeadTroops } from "./troop-cleanup";
 import { repairStaleTurnPhase } from "./turn";
 import { isLeaderFormCard } from "./card-meta";
-import type { GameAction, GameState, PlayerId } from "./types";
+import type { GameAction, GameState, PlayerId, TroopInstance } from "./types";
 import { LEADER_EVOLUTION_CORRUPTION_COST, MAX_TROOPS_PER_ZONE, maxCorruptionForPhase } from "./types";
 
 function endPlayerTurn(state: GameState): GameState {
@@ -228,7 +236,7 @@ function playTroop(state: GameState, troopId: string): GameState {
     };
   }
 
-  if (countTroopsInZone(state, player, "base") >= MAX_TROOPS_PER_ZONE) {
+  if (countBaseTroopSlotsUsed(state, player) >= MAX_TROOPS_PER_ZONE) {
     return { ...state, log: appendLog(state, "Base cheia (máx. 3 tropas).") };
   }
 
@@ -402,7 +410,11 @@ function moveTroop(
         ),
       };
     }
-    if (countTroopsInZone(state, player, "base") >= MAX_TROOPS_PER_ZONE) {
+    const tokenToBase = Boolean(state.catalog[troop.cardId]?.isToken);
+    if (
+      !tokenToBase &&
+      countBaseTroopSlotsUsed(state, player) >= MAX_TROOPS_PER_ZONE
+    ) {
       return { ...state, log: appendLog(state, "Base cheia.") };
     }
     const troops = { ...state.troops };
@@ -635,6 +647,32 @@ function handlePostPhaseChoice(
   return finalizePhaseTransition(next);
 }
 
+function sacrificeTroopToDiscard(state: GameState, troop: TroopInstance): GameState {
+  let next = applyTroopDeathTriggers(state, troop);
+  if (next.matchPhase === "finished") return next;
+
+  const players = [...next.players] as GameState["players"];
+  const p = troop.owner;
+  const pl = { ...players[p] };
+  pl.hand = pl.hand.filter((id) => id !== troop.instanceId);
+  pl.discard = [...pl.discard, troop.cardId];
+
+  let equipments = { ...next.equipments };
+  if (troop.equipmentId) {
+    const eq = equipments[troop.equipmentId];
+    if (eq) {
+      pl.discard = [...pl.discard, eq.cardId];
+      delete equipments[troop.equipmentId];
+    }
+  }
+  players[p] = pl;
+
+  const troops = { ...next.troops };
+  delete troops[troop.instanceId];
+
+  return { ...next, players, troops, equipments };
+}
+
 function useLeaderAbility(
   state: GameState,
   player: PlayerId,
@@ -843,6 +881,51 @@ function useLeaderAbility(
       log: appendLog(
         state,
         `Jogador ${player + 1} usou Melodia Arcana — +${count} Essência temporária (só feitiços). Líder exausto.`,
+      ),
+    };
+  }
+
+  if (leaderDef.leaderAbilityId === "abyss-summon") {
+    if (state.turnPhase !== "main" || state.combat) {
+      return {
+        ...state,
+        log: appendLog(state, "Summoner só pode ser usado na fase principal (sem combate)."),
+      };
+    }
+    if (state.activePlayer !== player) {
+      return { ...state, log: appendLog(state, "Não é seu turno.") };
+    }
+
+    const target = state.troops[targetTroopId];
+    if (!target || target.owner !== player) {
+      return { ...state, log: appendLog(state, "Escolha uma tropa aliada na base ou arena.") };
+    }
+    if (target.zone !== "base" && target.zone !== "arena") {
+      return { ...state, log: appendLog(state, "A tropa deve estar na base ou numa arena.") };
+    }
+    if (target.currentHealth <= 0) return state;
+    if (!state.catalog[ABYSS_SERVANT_TOKEN_ID]) {
+      return { ...state, log: appendLog(state, "Ficha Servo do Abismo não encontrada.") };
+    }
+
+    const tokenCount = Math.max(target.attack, target.currentHealth);
+    const troopName = state.catalog[target.cardId]?.name ?? target.cardId;
+
+    let next = sacrificeTroopToDiscard(state, target);
+    const players = [...next.players] as GameState["players"];
+    players[player] = {
+      ...players[player],
+      leaderAbilityUsedThisTurn: true,
+      leaderExhausted: true,
+    };
+    next = { ...next, players };
+    next = spawnTokensInBase(next, player, ABYSS_SERVANT_TOKEN_ID, tokenCount, 1, 1);
+
+    return {
+      ...next,
+      log: appendLog(
+        next,
+        `Jogador ${player + 1} usou Summoner — sacrificou ${troopName} e criou ${tokenCount} Servo(s) do Abismo 1/1 na base.`,
       ),
     };
   }

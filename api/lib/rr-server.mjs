@@ -22,6 +22,11 @@ function getTroopsInZone(state, player, zone, arenaId) {
 function countTroopsInZone(state, player, zone, arenaId) {
   return getTroopsInZone(state, player, zone, arenaId).length;
 }
+function countBaseTroopSlotsUsed(state, player) {
+  return getTroopsInZone(state, player, "base").filter(
+    (t) => !state.catalog[t.cardId]?.isToken
+  ).length;
+}
 function getPlayerEssence(state, player) {
   return state.players[player].essenceIds.map((id) => state.essencePool[id]).filter((e) => Boolean(e) && e.owner === player);
 }
@@ -862,6 +867,78 @@ function destroyEnemyRelic(state, caster) {
   );
 }
 
+// src/game/troop-cleanup.ts
+function buryDeadTroops(state) {
+  const dead = Object.values(state.troops).filter((t) => {
+    if (t.zone !== "base" && t.zone !== "arena") return false;
+    if (t.currentHealth > 0) return false;
+    const def = state.catalog[t.cardId];
+    if (isSpellCard(def)) return false;
+    return true;
+  });
+  if (dead.length === 0) return state;
+  let next = state;
+  for (const t of dead) {
+    next = applyTroopDeathTriggers(next, t);
+    if (next.matchPhase === "finished") return next;
+  }
+  const troops = { ...next.troops };
+  const players2 = [...next.players];
+  let equipments = { ...next.equipments };
+  const buriedNames = [];
+  const exiledNames = [];
+  for (const t of dead) {
+    const p = t.owner;
+    const pl = { ...players2[p] };
+    pl.hand = pl.hand.filter((id) => id !== t.instanceId);
+    const name = getTroopName(next, t);
+    if (t.equipmentId) {
+      const eq = equipments[t.equipmentId];
+      if (eq) {
+        pl.discard = [...pl.discard, eq.cardId];
+        delete equipments[t.equipmentId];
+      }
+    }
+    const exiled = t.arenaId !== null && arenaExilesDeadTroops(state, t.arenaId);
+    if (exiled) {
+      pl.exile = [...pl.exile, t.cardId];
+      exiledNames.push(name);
+    } else {
+      pl.discard = [...pl.discard, t.cardId];
+      buriedNames.push(name);
+    }
+    players2[p] = pl;
+    delete troops[t.instanceId];
+  }
+  next = { ...next, troops, players: players2, equipments };
+  if (buriedNames.length === 1) {
+    next = {
+      ...next,
+      log: appendLog(next, `${buriedNames[0]} foi para o descarte.`)
+    };
+  } else if (buriedNames.length > 1) {
+    next = {
+      ...next,
+      log: appendLog(next, `${buriedNames.length} tropas foram para o descarte.`)
+    };
+  }
+  if (exiledNames.length === 1) {
+    next = {
+      ...next,
+      log: appendLog(next, `${exiledNames[0]} foi exilada (Pris\xE3o do Conglomerado).`)
+    };
+  } else if (exiledNames.length > 1) {
+    next = {
+      ...next,
+      log: appendLog(
+        next,
+        `${exiledNames.length} tropas foram exiladas (Pris\xE3o do Conglomerado).`
+      )
+    };
+  }
+  return next;
+}
+
 // src/game/keywords.ts
 function cardHasKeyword(def, keyword) {
   return def?.keywords?.includes(keyword) ?? false;
@@ -1042,11 +1119,38 @@ function troopEntersReadyOnDeploy(def) {
 function troopBlocksEnchantments(state, target) {
   return troopHasKeyword(state, target, "silencio");
 }
+function applyBoardWipeLanding(state, enteringInstanceId) {
+  const victims = Object.values(state.troops).filter(
+    (t) => t.instanceId !== enteringInstanceId && (t.zone === "base" || t.zone === "arena") && t.currentHealth > 0
+  );
+  if (victims.length === 0) {
+    return {
+      ...state,
+      log: appendLog(state, "Aterrisagem \u2014 nenhuma outra tropa no campo.")
+    };
+  }
+  const troops = { ...state.troops };
+  for (const t of victims) {
+    troops[t.instanceId] = { ...t, currentHealth: 0 };
+  }
+  let next = {
+    ...state,
+    troops,
+    log: appendLog(
+      state,
+      `Aterrisagem \u2014 ${victims.length} tropa(s) nas bases e arenas foram destru\xEDdas.`
+    )
+  };
+  return buryDeadTroops(next);
+}
 function applyLandingEffect(state, troop) {
   const def = state.catalog[troop.cardId];
   if (!def?.landingEffect || !cardHasKeyword(def, "aterrisagem")) return state;
   if (def.landingEffect === "destroy-enemy-artifact") {
     return destroyEnemyRelic(state, troop.owner);
+  }
+  if (def.landingEffect === "board-wipe") {
+    return applyBoardWipeLanding(state, troop.instanceId);
   }
   return state;
 }
@@ -1250,7 +1354,8 @@ function applySpellEffect(state, caster, effect, targetTroopId, spellName, targe
         });
       }
       if (effect === "gust-wind") {
-        if (countTroopsInZone(state, target.owner, "base") >= MAX_TROOPS_PER_ZONE) {
+        const targetIsToken = Boolean(state.catalog[target.cardId]?.isToken);
+        if (!targetIsToken && countBaseTroopSlotsUsed(state, target.owner) >= MAX_TROOPS_PER_ZONE) {
           return { ...state, log: appendLog(state, "Base do alvo cheia \u2014 Lufada falhou.") };
         }
         troops[targetTroopId] = {
@@ -1477,7 +1582,7 @@ function canTargetSpell(state, caster, spellDef, target) {
     case "gust-wind":
       if (target.zone !== "arena") return false;
       if (inCombat && combatArenaId && target.arenaId !== combatArenaId) return false;
-      if (countTroopsInZone(state, target.owner, "base") >= MAX_TROOPS_PER_ZONE) {
+      if (!state.catalog[target.cardId]?.isToken && countBaseTroopSlotsUsed(state, target.owner) >= MAX_TROOPS_PER_ZONE) {
         return false;
       }
       return true;
@@ -1895,6 +2000,7 @@ function drawFromDeck(state, player, count) {
 }
 
 // src/game/tokens.ts
+var ABYSS_SERVANT_TOKEN_ID = "token-servo-abismo";
 function spawnTroopInArena(state, owner, arenaId, cardId, attack, health, opts) {
   if (countTroopsInZone(state, owner, "arena", arenaId) >= MAX_TROOPS_PER_ZONE) {
     return state;
@@ -1921,6 +2027,37 @@ function spawnTroopInArena(state, owner, arenaId, cardId, attack, health, opts) 
     troops: { ...state.troops, [instanceId]: troop },
     nextInstanceId: nextId
   };
+}
+function spawnTokenInBase(state, owner, cardId, attack, health) {
+  const def = state.catalog[cardId];
+  if (!def) return state;
+  const [idNum, nextId] = nextInstanceId(state);
+  const instanceId = `troop-${idNum}`;
+  const troop = {
+    instanceId,
+    cardId,
+    owner,
+    zone: "base",
+    arenaId: null,
+    exhausted: true,
+    pinned: false,
+    ...defaultTroopFields(def),
+    attack,
+    currentHealth: health
+  };
+  return {
+    ...state,
+    troops: { ...state.troops, [instanceId]: troop },
+    nextInstanceId: nextId
+  };
+}
+function spawnTokensInBase(state, owner, cardId, count, attack, health) {
+  if (count <= 0) return state;
+  let next = state;
+  for (let i = 0; i < count; i++) {
+    next = spawnTokenInBase(next, owner, cardId, attack, health);
+  }
+  return next;
 }
 function shufflePlayerDeck(state, player) {
   const pl = { ...state.players[player] };
@@ -2072,7 +2209,7 @@ function applyArenaOnDominate(state, arenaId, player) {
           ...next,
           log: appendLog(
             next,
-            "Col\xE9gio Aur\xE9lio \u2014 Susej embaralhado no baralho (carta em desenvolvimento)."
+            "Col\xE9gio Aur\xE9lio \u2014 Susej embaralhado no baralho."
           )
         };
       }
@@ -2927,78 +3064,6 @@ function repairStaleTurnPhase(state) {
   return state;
 }
 
-// src/game/troop-cleanup.ts
-function buryDeadTroops(state) {
-  const dead = Object.values(state.troops).filter((t) => {
-    if (t.zone !== "base" && t.zone !== "arena") return false;
-    if (t.currentHealth > 0) return false;
-    const def = state.catalog[t.cardId];
-    if (isSpellCard(def)) return false;
-    return true;
-  });
-  if (dead.length === 0) return state;
-  let next = state;
-  for (const t of dead) {
-    next = applyTroopDeathTriggers(next, t);
-    if (next.matchPhase === "finished") return next;
-  }
-  const troops = { ...next.troops };
-  const players2 = [...next.players];
-  let equipments = { ...next.equipments };
-  const buriedNames = [];
-  const exiledNames = [];
-  for (const t of dead) {
-    const p = t.owner;
-    const pl = { ...players2[p] };
-    pl.hand = pl.hand.filter((id) => id !== t.instanceId);
-    const name = getTroopName(next, t);
-    if (t.equipmentId) {
-      const eq = equipments[t.equipmentId];
-      if (eq) {
-        pl.discard = [...pl.discard, eq.cardId];
-        delete equipments[t.equipmentId];
-      }
-    }
-    const exiled = t.arenaId !== null && arenaExilesDeadTroops(state, t.arenaId);
-    if (exiled) {
-      pl.exile = [...pl.exile, t.cardId];
-      exiledNames.push(name);
-    } else {
-      pl.discard = [...pl.discard, t.cardId];
-      buriedNames.push(name);
-    }
-    players2[p] = pl;
-    delete troops[t.instanceId];
-  }
-  next = { ...next, troops, players: players2, equipments };
-  if (buriedNames.length === 1) {
-    next = {
-      ...next,
-      log: appendLog(next, `${buriedNames[0]} foi para o descarte.`)
-    };
-  } else if (buriedNames.length > 1) {
-    next = {
-      ...next,
-      log: appendLog(next, `${buriedNames.length} tropas foram para o descarte.`)
-    };
-  }
-  if (exiledNames.length === 1) {
-    next = {
-      ...next,
-      log: appendLog(next, `${exiledNames[0]} foi exilada (Pris\xE3o do Conglomerado).`)
-    };
-  } else if (exiledNames.length > 1) {
-    next = {
-      ...next,
-      log: appendLog(
-        next,
-        `${exiledNames.length} tropas foram exiladas (Pris\xE3o do Conglomerado).`
-      )
-    };
-  }
-  return next;
-}
-
 // src/game/actions.ts
 function endPlayerTurn(state) {
   const player = state.activePlayer;
@@ -3146,7 +3211,7 @@ function playTroop(state, troopId) {
       log: appendLog(state, "Ess\xEAncia tempor\xE1ria s\xF3 pode pagar feiti\xE7os \u2014 insuficiente para tropas.")
     };
   }
-  if (countTroopsInZone(state, player, "base") >= MAX_TROOPS_PER_ZONE) {
+  if (countBaseTroopSlotsUsed(state, player) >= MAX_TROOPS_PER_ZONE) {
     return { ...state, log: appendLog(state, "Base cheia (m\xE1x. 3 tropas).") };
   }
   const paid = payEssenceCost(state, player, payment);
@@ -3293,7 +3358,8 @@ function moveTroop(state, troopId, to, arenaId) {
         )
       };
     }
-    if (countTroopsInZone(state, player, "base") >= MAX_TROOPS_PER_ZONE) {
+    const tokenToBase = Boolean(state.catalog[troop.cardId]?.isToken);
+    if (!tokenToBase && countBaseTroopSlotsUsed(state, player) >= MAX_TROOPS_PER_ZONE) {
       return { ...state, log: appendLog(state, "Base cheia.") };
     }
     const troops2 = { ...state.troops };
@@ -3479,6 +3545,27 @@ function handlePostPhaseChoice(state, player, choice) {
   }
   return finalizePhaseTransition(next);
 }
+function sacrificeTroopToDiscard(state, troop) {
+  let next = applyTroopDeathTriggers(state, troop);
+  if (next.matchPhase === "finished") return next;
+  const players2 = [...next.players];
+  const p = troop.owner;
+  const pl = { ...players2[p] };
+  pl.hand = pl.hand.filter((id) => id !== troop.instanceId);
+  pl.discard = [...pl.discard, troop.cardId];
+  let equipments = { ...next.equipments };
+  if (troop.equipmentId) {
+    const eq = equipments[troop.equipmentId];
+    if (eq) {
+      pl.discard = [...pl.discard, eq.cardId];
+      delete equipments[troop.equipmentId];
+    }
+  }
+  players2[p] = pl;
+  const troops = { ...next.troops };
+  delete troops[troop.instanceId];
+  return { ...next, players: players2, troops, equipments };
+}
 function useLeaderAbility(state, player, targetTroopId) {
   if (state.matchPhase !== "playing") return state;
   if (!state.combat && state.activePlayer !== player) {
@@ -3659,6 +3746,46 @@ function useLeaderAbility(state, player, targetTroopId) {
       log: appendLog(
         state,
         `Jogador ${player + 1} usou Melodia Arcana \u2014 +${count} Ess\xEAncia tempor\xE1ria (s\xF3 feiti\xE7os). L\xEDder exausto.`
+      )
+    };
+  }
+  if (leaderDef.leaderAbilityId === "abyss-summon") {
+    if (state.turnPhase !== "main" || state.combat) {
+      return {
+        ...state,
+        log: appendLog(state, "Summoner s\xF3 pode ser usado na fase principal (sem combate).")
+      };
+    }
+    if (state.activePlayer !== player) {
+      return { ...state, log: appendLog(state, "N\xE3o \xE9 seu turno.") };
+    }
+    const target = state.troops[targetTroopId];
+    if (!target || target.owner !== player) {
+      return { ...state, log: appendLog(state, "Escolha uma tropa aliada na base ou arena.") };
+    }
+    if (target.zone !== "base" && target.zone !== "arena") {
+      return { ...state, log: appendLog(state, "A tropa deve estar na base ou numa arena.") };
+    }
+    if (target.currentHealth <= 0) return state;
+    if (!state.catalog[ABYSS_SERVANT_TOKEN_ID]) {
+      return { ...state, log: appendLog(state, "Ficha Servo do Abismo n\xE3o encontrada.") };
+    }
+    const tokenCount = Math.max(target.attack, target.currentHealth);
+    const troopName = state.catalog[target.cardId]?.name ?? target.cardId;
+    let next = sacrificeTroopToDiscard(state, target);
+    const players2 = [...next.players];
+    players2[player] = {
+      ...players2[player],
+      leaderAbilityUsedThisTurn: true,
+      leaderExhausted: true
+    };
+    next = { ...next, players: players2 };
+    next = spawnTokensInBase(next, player, ABYSS_SERVANT_TOKEN_ID, tokenCount, 1, 1);
+    return {
+      ...next,
+      log: appendLog(
+        next,
+        `Jogador ${player + 1} usou Summoner \u2014 sacrificou ${troopName} e criou ${tokenCount} Servo(s) do Abismo 1/1 na base.`
       )
     };
   }
@@ -4303,13 +4430,28 @@ var cards_default = {
       cardRole: "normal"
     },
     {
+      id: "token-servo-abismo",
+      name: "Servo do Abismo",
+      cost: 0,
+      attack: 1,
+      health: 1,
+      hasEssenceSymbol: false,
+      isToken: true,
+      cardType: "troop",
+      faction: "delta",
+      cardRole: "normal"
+    },
+    {
       id: "susej-arauto",
       name: "Susej \u2014 o arauto da ignor\xE2ncia",
-      cost: 3,
-      attack: 2,
-      health: 3,
+      cost: 5,
+      corruptionCost: 2,
+      attack: 6,
+      health: 6,
       hasEssenceSymbol: false,
       isToken: false,
+      keywords: ["aterrisagem"],
+      landingEffect: "board-wipe",
       cardType: "troop",
       faction: "neutra",
       cardRole: "normal"
@@ -4535,7 +4677,8 @@ var cards_default = {
       health: 0,
       hasEssenceSymbol: true,
       leaderMaxHp: 8,
-      leaderAbility: "Summoner (habilidade em desenvolvimento).",
+      leaderAbility: "Summoner (1\xD7/turno, fase principal): sacrifique uma tropa aliada na base ou arena \u2014 crie X fichas Servo do Abismo 1/1 na base (X = maior entre ATK e VIT; fichas n\xE3o ocupam vaga na base).",
+      leaderAbilityId: "abyss-summon",
       leaderFormOf: "klaus-violinista",
       sacrificeReward: { essence: 1, corruption: 1 },
       leaderFormIds: []

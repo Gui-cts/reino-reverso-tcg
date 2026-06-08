@@ -17,6 +17,7 @@ import {
 import { arenaBlocksNormalExit } from "../game/arena-effects";
 import {
   canPayEssenceCost,
+  countBaseTroopSlotsUsed,
   countTroopsInZone,
   getTroopsInZone,
   opponent,
@@ -355,7 +356,7 @@ function pickSacrificeForEssence(state: GameState, cpu: PlayerId): GameAction | 
 }
 
 function pickPlayTroop(state: GameState, cpu: PlayerId): GameAction | null {
-  if (countTroopsInZone(state, cpu, "base") >= MAX_TROOPS_PER_ZONE) return null;
+  if (countBaseTroopSlotsUsed(state, cpu) >= MAX_TROOPS_PER_ZONE) return null;
 
   const affordable = handTroopDefs(state, cpu)
     .filter((h) => {
@@ -541,6 +542,29 @@ function pickLeaderAbility(state: GameState, cpu: PlayerId): GameAction | null {
   if (!state.combat && leaderDef.leaderAbilityId === "empathy-mark") {
     return pickEmpathyMarkMainPhase(state, cpu);
   }
+
+  if (!state.combat && leaderDef.leaderAbilityId === "abyss-summon") {
+    if (state.turnPhase !== "main" || state.activePlayer !== cpu) return null;
+    const allies = Object.values(state.troops).filter(
+      (t) =>
+        t.owner === cpu &&
+        t.currentHealth > 0 &&
+        (t.zone === "base" || t.zone === "arena"),
+    );
+    if (allies.length === 0) return null;
+    const sacrifice = [...allies].sort(
+      (a, b) => a.attack + a.currentHealth - (b.attack + b.currentHealth),
+    )[0];
+    if (!sacrifice) return null;
+    const tokens = Math.max(sacrifice.attack, sacrifice.currentHealth);
+    if (tokens < 2) return null;
+    return {
+      type: "USE_LEADER_ABILITY",
+      player: cpu,
+      targetTroopId: sacrifice.instanceId,
+    };
+  }
+
   if (!state.combat) return null;
 
   if (leaderDef.leaderAbilityId === "shield") {

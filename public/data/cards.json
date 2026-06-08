@@ -175,13 +175,28 @@
       "cardRole": "normal"
     },
     {
+      "id": "token-servo-abismo",
+      "name": "Servo do Abismo",
+      "cost": 0,
+      "attack": 1,
+      "health": 1,
+      "hasEssenceSymbol": false,
+      "isToken": true,
+      "cardType": "troop",
+      "faction": "delta",
+      "cardRole": "normal"
+    },
+    {
       "id": "susej-arauto",
       "name": "Susej — o arauto da ignorância",
-      "cost": 3,
-      "attack": 2,
-      "health": 3,
+      "cost": 5,
+      "corruptionCost": 2,
+      "attack": 6,
+      "health": 6,
       "hasEssenceSymbol": false,
       "isToken": false,
+      "keywords": ["aterrisagem"],
+      "landingEffect": "board-wipe",
       "cardType": "troop",
       "faction": "neutra",
       "cardRole": "normal"
@@ -407,7 +422,8 @@
       "health": 0,
       "hasEssenceSymbol": true,
       "leaderMaxHp": 8,
-      "leaderAbility": "Summoner (habilidade em desenvolvimento).",
+      "leaderAbility": "Summoner (1×/turno, fase principal): sacrifique uma tropa aliada na base ou arena — crie X fichas Servo do Abismo 1/1 na base (X = maior entre ATK e VIT; fichas não ocupam vaga na base).",
+      "leaderAbilityId": "abyss-summon",
       "leaderFormOf": "klaus-violinista",
       "sacrificeReward": { "essence": 1, "corruption": 1 },
       "leaderFormIds": []

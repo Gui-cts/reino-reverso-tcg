@@ -1,6 +1,10 @@
 import { appendLog, countTroopsInZone, nextInstanceId } from "./helpers";
+import { defaultTroopFields } from "./spells";
 import type { GameState, PlayerId, TroopInstance } from "./types";
 import { MAX_TROOPS_PER_ZONE } from "./types";
+
+/** Ficha 1/1 criada por Klaus — o portador do abismo. */
+export const ABYSS_SERVANT_TOKEN_ID = "token-servo-abismo";
 
 export function spawnTroopInArena(
   state: GameState,
@@ -38,6 +42,55 @@ export function spawnTroopInArena(
     troops: { ...state.troops, [instanceId]: troop },
     nextInstanceId: nextId,
   };
+}
+
+/** Ficha na base — não consome vaga de tropa (só `isToken` no catálogo). */
+export function spawnTokenInBase(
+  state: GameState,
+  owner: PlayerId,
+  cardId: string,
+  attack: number,
+  health: number,
+): GameState {
+  const def = state.catalog[cardId];
+  if (!def) return state;
+
+  const [idNum, nextId] = nextInstanceId(state);
+  const instanceId = `troop-${idNum}`;
+  const troop: TroopInstance = {
+    instanceId,
+    cardId,
+    owner,
+    zone: "base",
+    arenaId: null,
+    exhausted: true,
+    pinned: false,
+    ...defaultTroopFields(def),
+    attack,
+    currentHealth: health,
+  };
+
+  return {
+    ...state,
+    troops: { ...state.troops, [instanceId]: troop },
+    nextInstanceId: nextId,
+  };
+}
+
+export function spawnTokensInBase(
+  state: GameState,
+  owner: PlayerId,
+  cardId: string,
+  count: number,
+  attack: number,
+  health: number,
+): GameState {
+  if (count <= 0) return state;
+  let next = state;
+  for (let i = 0; i < count; i++) {
+    next = spawnTokenInBase(next, owner, cardId, attack, health);
+  }
+  return next;
 }
 
 export function shufflePlayerDeck(state: GameState, player: PlayerId): GameState {

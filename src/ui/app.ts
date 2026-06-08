@@ -2051,7 +2051,8 @@ export class GameApp {
       (abilityId === "shield" && s.combat) ||
       (abilityId === "frost-convert" && s.combat) ||
       (abilityId === "empathy-mark" && (s.combat || (s.turnPhase === "main" && !s.combat))) ||
-      (abilityId === "arcane-melody" && s.turnPhase === "main" && !s.combat);
+      (abilityId === "arcane-melody" && s.turnPhase === "main" && !s.combat) ||
+      (abilityId === "abyss-summon" && s.turnPhase === "main" && !s.combat);
 
     if (!canUseHere || s.matchPhase !== "playing") return;
 
@@ -2061,6 +2062,7 @@ export class GameApp {
       "frost-convert": "❄ Cria do Inverno (2 Ess.)",
       "empathy-mark": "💜 Empatia (1 Ess.)",
       "arcane-melody": "🎵 Melodia Arcana",
+      "abyss-summon": "☠ Summoner",
     };
 
     const btn = document.createElement("button");
@@ -2093,7 +2095,10 @@ export class GameApp {
     if (this.selection.leaderAbilityTargetingPlayer === player) {
       const hint = document.createElement("div");
       hint.style.cssText = "font-size:0.72rem;color:#f0c878;margin-top:0.25rem";
-      hint.textContent = "Clique em tropa aliada na arena.";
+      hint.textContent =
+        abilityId === "abyss-summon"
+          ? "Clique em tropa aliada na base ou arena para sacrificar."
+          : "Clique em tropa aliada na arena.";
       container.appendChild(hint);
     }
   }
@@ -2609,7 +2614,13 @@ export class GameApp {
       troop.owner === leaderTargetPlayer &&
       troop.currentHealth > 0
     ) {
-      if (troop.zone === "arena") {
+      const leaderDef =
+        s.players[leaderTargetPlayer].leaderId != null
+          ? s.catalog[s.players[leaderTargetPlayer].leaderId!]
+          : undefined;
+      const abyssSummon = leaderDef?.leaderAbilityId === "abyss-summon";
+      const validZone = troop.zone === "arena" || (abyssSummon && troop.zone === "base");
+      if (validZone) {
         onClick = (e) => {
           e.stopPropagation();
           this.selection.leaderAbilityTargetingPlayer = null;
@@ -2622,7 +2633,7 @@ export class GameApp {
         };
         subLabel = "clique — alvo da habilidade";
         selected = true;
-      } else {
+      } else if (!abyssSummon) {
         subLabel = "deve estar na arena";
       }
     } else if (

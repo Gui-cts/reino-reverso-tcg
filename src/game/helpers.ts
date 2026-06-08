@@ -42,6 +42,13 @@ export function countTroopsInZone(
   return getTroopsInZone(state, player, zone, arenaId).length;
 }
 
+/** Tropas na base que ocupam vaga (fichas 1/1 não contam). */
+export function countBaseTroopSlotsUsed(state: GameState, player: PlayerId): number {
+  return getTroopsInZone(state, player, "base").filter(
+    (t) => !state.catalog[t.cardId]?.isToken,
+  ).length;
+}
+
 export function getPlayerEssence(
   state: GameState,
   player: PlayerId,

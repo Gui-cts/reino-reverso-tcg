@@ -3,7 +3,7 @@ import {
   appendLog,
   canPayCorruptionCost,
   canPayEssenceCost,
-  countTroopsInZone,
+  countBaseTroopSlotsUsed,
   payCorruptionCost,
   payEssenceCost,
   getTroopName,
@@ -271,7 +271,10 @@ export function canTargetSpell(
     case "gust-wind":
       if (target.zone !== "arena") return false;
       if (inCombat && combatArenaId && target.arenaId !== combatArenaId) return false;
-      if (countTroopsInZone(state, target.owner, "base") >= MAX_TROOPS_PER_ZONE) {
+      if (
+        !state.catalog[target.cardId]?.isToken &&
+        countBaseTroopSlotsUsed(state, target.owner) >= MAX_TROOPS_PER_ZONE
+      ) {
         return false;
       }
       return true;

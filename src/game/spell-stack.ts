@@ -4,7 +4,7 @@ import { drawFromDeck } from "./state";
 import {
   appendLog,
   canPayEssenceCost,
-  countTroopsInZone,
+  countBaseTroopSlotsUsed,
   getTroopName,
   nextInstanceId,
   opponent,
@@ -247,7 +247,11 @@ export function applySpellEffect(
       }
 
       if (effect === "gust-wind") {
-        if (countTroopsInZone(state, target.owner, "base") >= MAX_TROOPS_PER_ZONE) {
+        const targetIsToken = Boolean(state.catalog[target.cardId]?.isToken);
+        if (
+          !targetIsToken &&
+          countBaseTroopSlotsUsed(state, target.owner) >= MAX_TROOPS_PER_ZONE
+        ) {
           return { ...state, log: appendLog(state, "Base do alvo cheia — Lufada falhou.") };
         }
         troops[targetTroopId] = {

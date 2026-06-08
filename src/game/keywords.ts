@@ -72,6 +72,8 @@ export function formatKeywordsLine(def: CardDefinition): string {
     for (const kw of def.keywords) {
       if (kw === "testamento" && def.deathEffect) {
         parts.push(`${keywordLabel(kw)} (${describeDeathEffect(def.deathEffect)})`);
+      } else if (kw === "aterrisagem" && def.landingEffect) {
+        parts.push(`${keywordLabel(kw)} (${landingEffectDescription(def.landingEffect)})`);
       } else {
         parts.push(keywordLabel(kw));
       }
@@ -336,6 +338,48 @@ export function troopBlocksEnchantments(
 }
 
 import { destroyEnemyRelic } from "./equipment";
+import { buryDeadTroops } from "./troop-cleanup";
+import type { LandingEffectId } from "./types";
+
+export function landingEffectDescription(effect: LandingEffectId): string {
+  switch (effect) {
+    case "destroy-enemy-artifact":
+      return "Destrói um artefato inimigo.";
+    case "board-wipe":
+      return "Destrói todas as tropas nas bases e arenas (aliados e inimigos).";
+    default:
+      return "";
+  }
+}
+
+function applyBoardWipeLanding(state: GameState, enteringInstanceId: string): GameState {
+  const victims = Object.values(state.troops).filter(
+    (t) =>
+      t.instanceId !== enteringInstanceId &&
+      (t.zone === "base" || t.zone === "arena") &&
+      t.currentHealth > 0,
+  );
+  if (victims.length === 0) {
+    return {
+      ...state,
+      log: appendLog(state, "Aterrisagem — nenhuma outra tropa no campo."),
+    };
+  }
+
+  const troops = { ...state.troops };
+  for (const t of victims) {
+    troops[t.instanceId] = { ...t, currentHealth: 0 };
+  }
+  let next: GameState = {
+    ...state,
+    troops,
+    log: appendLog(
+      state,
+      `Aterrisagem — ${victims.length} tropa(s) nas bases e arenas foram destruídas.`,
+    ),
+  };
+  return buryDeadTroops(next);
+}
 
 export function applyLandingEffect(state: GameState, troop: TroopInstance): GameState {
   const def = state.catalog[troop.cardId];
@@ -343,6 +387,9 @@ export function applyLandingEffect(state: GameState, troop: TroopInstance): Game
 
   if (def.landingEffect === "destroy-enemy-artifact") {
     return destroyEnemyRelic(state, troop.owner);
+  }
+  if (def.landingEffect === "board-wipe") {
+    return applyBoardWipeLanding(state, troop.instanceId);
   }
   return state;
 }

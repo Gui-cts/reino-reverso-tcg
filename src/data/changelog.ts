@@ -11,6 +11,11 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-05-19",
+    title: "Klaus Portador e Susej",
+    summary: "Summoner: sacrifique tropa aliada → fichas 1/1 na base (X = maior ATK/VIT; não ocupam vaga). Susej 6/6 com Aterrisagem — board wipe (5 Essência + 2 Corrupção).",
+  },
+  {
+    date: "2026-05-19",
     title: "Escolha pós-fase",
     summary: "Corrigido bloqueio das opções Essência/Corrupção/Reciclar na transição MN → Abismo (feitiço pendente não trava mais).",
   },

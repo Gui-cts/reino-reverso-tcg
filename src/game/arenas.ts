@@ -178,7 +178,7 @@ const EFFECT_LABELS: Record<ArenaEffectId, string> = {
   none: "Sem efeito",
   "no-magic": "Magias não podem ser usadas nesta arena",
   "gargoyle-fill": "Ao declarar combate: preenche vazios com Gárgulas 1/1",
-  "susej-on-dominate": "Ao dominar: embaralha Susej no seu baralho (em breve)",
+  "susej-on-dominate": "Ao dominar: embaralha Susej — o arauto da ignorância no seu baralho",
   "random-buff-on-combat": "Ao declarar combate: uma tropa aleatória +1/+1 permanente",
   "draw-two-on-dominate": "Ao dominar: compra 2 cartas",
   "ping-after-strike": "Após cada golpe de ataque: 1 de dano em todas as tropas na arena",
