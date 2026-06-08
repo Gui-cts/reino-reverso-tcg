@@ -25,7 +25,7 @@ import {
   troopIsUntargetable,
   tryPayCounterCost,
 } from "./spell-stack";
-import { maxCorruptionForPhase, MAX_TROOPS_PER_ZONE } from "./types";
+import { maxCorruptionForPhase } from "./types";
 import type {
   CardDefinition,
   CardSpeed,
