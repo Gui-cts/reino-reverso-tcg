@@ -3,6 +3,7 @@ import {
   canControlPlayer,
   canRespondToPendingSpell,
   canSubmitAction,
+  playerCanReactDuringStrike,
 } from "./permissions";
 import { minimalPlayingState, pendingSpellFixture } from "./test-fixtures";
 
@@ -88,6 +89,72 @@ describe("canSubmitAction with pending spell", () => {
         payTwoEssence: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe("playerCanReactDuringStrike", () => {
+  it("does not block CPU when human has abyss-summon and allies in arena", () => {
+    const state = minimalPlayingState({
+      turnPhase: "combat",
+      combat: {
+        arenaId: "arena-a",
+        declaredBy: 0,
+        strikingPlayer: 1,
+        subPhase: "strike",
+        strike: 2,
+        magicWindow: 2,
+        magicPassed: [true, true],
+        attackedThisStrike: [],
+      },
+      arenas: [
+        {
+          id: "arena-a",
+          name: "Trono Negro",
+          neutral: false,
+          phase: "reino-reverso",
+          effect: "rr-loser-only-vacuum",
+          conquestPointsToDominate: 99,
+          dominatedBy: null,
+          conquestPoints: { 0: 0, 1: 0 },
+        },
+      ],
+      catalog: {
+        "klaus-portador-abismo": {
+          id: "klaus-portador-abismo",
+          name: "Klaus",
+          cost: 0,
+          attack: 0,
+          health: 0,
+          hasEssenceSymbol: false,
+          leaderAbilityId: "abyss-summon",
+        },
+      },
+      players: [
+        {
+          ...minimalPlayingState().players[0],
+          leaderId: "klaus-portador-abismo",
+        },
+        minimalPlayingState().players[1],
+      ],
+      troops: {
+        ally: {
+          instanceId: "ally",
+          cardId: "x",
+          owner: 0,
+          zone: "arena",
+          arenaId: "arena-a",
+          attack: 3,
+          currentHealth: 4,
+          exhausted: false,
+          pinned: false,
+          movementLocked: false,
+          equipmentId: null,
+          attachedSpell: null,
+          healthBonus: 0,
+        },
+      },
+    });
+    expect(playerCanReactDuringStrike(state, 0)).toBe(false);
   });
 });
 

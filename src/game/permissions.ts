@@ -21,9 +21,17 @@ function canUseLeaderAbilityReact(state: GameState, player: PlayerId): boolean {
   const pl = state.players[player];
   if (!pl.leaderId || pl.leaderAbilityUsedThisTurn || pl.leaderExhausted) return false;
   const ld = state.catalog[pl.leaderId];
-  if (!ld?.leaderAbilityId || ld.leaderAbilityId === "arcane-melody") return false;
+  if (!ld?.leaderAbilityId) return false;
 
   const abilityId = ld.leaderAbilityId;
+  if (
+    abilityId !== "shield" &&
+    abilityId !== "frost-convert" &&
+    abilityId !== "empathy-mark"
+  ) {
+    return false;
+  }
+
   if (abilityId === "shield" || abilityId === "frost-convert") {
     if (getAvailableEssence(state, player).length < 2) return false;
   } else if (abilityId === "empathy-mark") {
@@ -65,6 +73,18 @@ function isStrikeReactionAction(
     default:
       return false;
   }
+}
+
+/** Magia rápida ou habilidade reativa do Líder durante o golpe de combate (oponente do atacante). */
+export function playerCanReactDuringStrike(state: GameState, player: PlayerId): boolean {
+  if (!state.combat || state.combat.subPhase !== "strike") return false;
+
+  for (const spellId of state.players[player].hand) {
+    if (canPlayReactiveFastSpell(state, player, spellId)) {
+      return true;
+    }
+  }
+  return canUseLeaderAbilityReact(state, player);
 }
 
 /** Pode responder ao feitiço pendente (Contramagia, passar ou pagar custo). */

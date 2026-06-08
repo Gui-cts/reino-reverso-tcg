@@ -47,6 +47,7 @@ import {
   canRespondToPendingSpell as gameCanRespondToPendingSpell,
   canSubmitAction,
   inferActionPlayer,
+  playerCanReactDuringStrike,
 } from "../game/permissions";
 import { canRespondWithCounter } from "../game/spell-stack";
 import { opponent } from "../game/helpers";
@@ -656,44 +657,9 @@ export class GameApp {
     void this.runCpuLoop();
   }
 
-  private humanHasPlayableFastSpell(state: GameState): boolean {
-    const human = this.humanPlayer(state);
-    for (const id of state.players[human].hand) {
-      const inst = state.troops[id];
-      if (!inst) continue;
-      const def = state.catalog[inst.cardId];
-      if (!def || !isSpellCard(def) || getCardSpeed(def) !== "fast") continue;
-      if (!canPlaySpellNow(state, human, def)) continue;
-      if (Object.values(state.troops).some((t) => canTargetSpell(state, human, def, t))) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   private humanCanRespond(state: GameState): boolean {
-    if (!state.combat) return false;
-    if (state.combat.subPhase === "magic") return false;
-
-    const human = this.humanPlayer(state);
-
-    if (this.humanHasPlayableFastSpell(state)) return true;
-
-    const pl = state.players[human];
-    if (!pl.leaderId || pl.leaderAbilityUsedThisTurn || pl.leaderExhausted) return false;
-    const ld = state.catalog[pl.leaderId];
-    if (!ld?.leaderAbilityId) return false;
-    const abilityId = ld.leaderAbilityId;
-    if (abilityId === "arcane-melody") return false;
-    if (abilityId === "shield" && getAvailableEssence(state, human).length < 2) return false;
-    if (abilityId === "frost-convert" && getAvailableEssence(state, human).length < 2) return false;
-    if (abilityId === "empathy-mark" && getAvailableEssence(state, human).length < 1) return false;
-    const arenaId = state.combat.arenaId;
-    const alliesInArena = Object.values(state.troops).filter(
-      (t) => t.owner === human && t.zone === "arena" && t.arenaId === arenaId && t.currentHealth > 0,
-    );
-    if (alliesInArena.length === 0) return false;
-    return true;
+    if (!state.combat || state.combat.subPhase === "magic") return false;
+    return playerCanReactDuringStrike(state, this.humanPlayer(state));
   }
 
   private confirmHumanPass(): void {
