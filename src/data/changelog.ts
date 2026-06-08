@@ -11,6 +11,12 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-05-19",
+    title: "Decks base 50 cartas",
+    summary:
+      "Noah e Klaus com 50 cartas cada no preset; Klaus com 4× Contramagia como núcleo do controle arcano.",
+  },
+  {
+    date: "2026-05-19",
     title: "Capitãs, assinaturas e decks",
     summary:
       "Sarah + Canino (Noah), Angelica + Monteiro (Klaus); decks base rebalanceados; Caldeirão Padrão (alvo na base); Resistência ao Vácuo no RR.",
