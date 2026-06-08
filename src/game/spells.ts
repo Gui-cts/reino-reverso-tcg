@@ -4,7 +4,6 @@ import {
   appendLog,
   canPayCorruptionCost,
   canPayEssenceCost,
-  countBaseTroopSlotsUsed,
   payCorruptionCost,
   payEssenceCost,
   getTroopName,
@@ -111,7 +110,7 @@ export function describeSpellEffect(effect: SpellEffectId): string {
     case "blood-cauldron":
       return "Tropa inimiga na base ou arena: 1d6 — par = 2 de dano.";
     case "gust-wind":
-      return "Tropa na arena (aliada ou inimiga) volta à base do dono, exausta.";
+      return "Tropa na arena volta à base do dono (exausta); se a base estiver cheia, vai para a mão.";
     case "draw-two":
       return "Compre 2 cartas.";
     case "troop-tutor":
@@ -285,12 +284,6 @@ export function canTargetSpell(
     case "gust-wind":
       if (target.zone !== "arena") return false;
       if (inCombat && combatArenaId && target.arenaId !== combatArenaId) return false;
-      if (
-        !state.catalog[target.cardId]?.isToken &&
-        countBaseTroopSlotsUsed(state, target.owner) >= MAX_TROOPS_PER_ZONE
-      ) {
-        return false;
-      }
       return true;
     default:
       return false;

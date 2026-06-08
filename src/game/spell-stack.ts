@@ -248,24 +248,35 @@ export function applySpellEffect(
 
       if (effect === "gust-wind") {
         const targetIsToken = Boolean(state.catalog[target.cardId]?.isToken);
-        if (
+        const baseFull =
           !targetIsToken &&
-          countBaseTroopSlotsUsed(state, target.owner) >= MAX_TROOPS_PER_ZONE
-        ) {
-          return { ...state, log: appendLog(state, "Base do alvo cheia — Lufada falhou.") };
-        }
+          countBaseTroopSlotsUsed(state, target.owner) >= MAX_TROOPS_PER_ZONE;
+        const toHand = baseFull;
         troops[targetTroopId] = {
           ...target,
-          zone: "base",
+          zone: toHand ? "hand" : "base",
           arenaId: null,
           exhausted: true,
         };
-        let next: GameState = {
-          ...state,
-          troops,
+        let next: GameState = { ...state, troops };
+        if (toHand) {
+          const owner = target.owner;
+          const players = [...next.players] as GameState["players"];
+          if (!players[owner].hand.includes(targetTroopId)) {
+            players[owner] = {
+              ...players[owner],
+              hand: [...players[owner].hand, targetTroopId],
+            };
+          }
+          next = { ...next, players };
+        }
+        next = {
+          ...next,
           log: appendLog(
-            state,
-            `${spellName} — ${getTroopName(state, target)} voltou à base (exausta).`,
+            next,
+            toHand
+              ? `${spellName} — ${getTroopName(state, target)} voltou à mão (base cheia, exausta).`
+              : `${spellName} — ${getTroopName(state, target)} voltou à base (exausta).`,
           ),
         };
         next = sanitizePlayerHands(next);

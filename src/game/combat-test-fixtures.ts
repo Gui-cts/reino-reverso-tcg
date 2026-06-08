@@ -101,6 +101,99 @@ export function inCombat(
   });
 }
 
+export const GARGOYLE_CARD = {
+  id: "token-gargula",
+  name: "Gárgula",
+  cost: 0,
+  attack: 1,
+  health: 1,
+  hasEssenceSymbol: false,
+  isToken: true,
+  cardType: "troop" as const,
+};
+
+export function spellDef(
+  id: string,
+  effect: CardDefinition["spellEffect"],
+  extra: Partial<CardDefinition> = {},
+): CardDefinition {
+  return {
+    id,
+    name: id,
+    cost: extra.cost ?? 2,
+    attack: 0,
+    health: 0,
+    hasEssenceSymbol: false,
+    spellEffect: effect,
+    cardSpeed: extra.cardSpeed ?? "combat",
+    cardType: "spell",
+    ...extra,
+  };
+}
+
+export function withPlayerEssence(
+  state: GameState,
+  player: 0 | 1,
+  count: number,
+  startId = 0,
+): GameState {
+  const essencePool = { ...state.essencePool };
+  const ids: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const id = `ess-${player}-${startId + i}`;
+    ids.push(id);
+    essencePool[id] = {
+      instanceId: id,
+      cardId: "essence-card",
+      owner: player,
+      exhausted: false,
+    };
+  }
+  const players = [...state.players] as GameState["players"];
+  players[player] = {
+    ...players[player],
+    essenceIds: [...players[player].essenceIds, ...ids],
+  };
+  return { ...state, essencePool, players };
+}
+
+export function spellInHand(
+  state: GameState,
+  player: 0 | 1,
+  instanceId: string,
+  def: CardDefinition,
+): GameState {
+  const players = [...state.players] as GameState["players"];
+  players[player] = {
+    ...players[player],
+    hand: [...players[player].hand, instanceId],
+  };
+  const troops = {
+    ...state.troops,
+    [instanceId]: {
+      instanceId,
+      cardId: def.id,
+      owner: player,
+      zone: "hand" as const,
+      arenaId: null,
+      attack: 0,
+      currentHealth: 1,
+      exhausted: false,
+      pinned: false,
+      movementLocked: false,
+      equipmentId: null,
+      attachedSpell: null,
+      healthBonus: 0,
+      shielded: false,
+      etherealThisTurn: false,
+      attackSuppressed: false,
+      ...defaultTroopFields(def),
+    },
+  };
+  const catalog = { ...state.catalog, [def.id]: def };
+  return { ...state, players, troops, catalog };
+}
+
 /** Dois combatentes na arena, pronto para declarar combate. */
 export function contestedArenaSetup(
   p0Troop = arenaTroop("p0", 0, "a", { attack: 3, health: 3 }),
