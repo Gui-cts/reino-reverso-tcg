@@ -1,4 +1,5 @@
 import { isMagicAllowedInCombat, spellCostReductionInCombat } from "./arena-effects";
+import { getCombatAssigningPlayer } from "./combat";
 import {
   appendLog,
   canPayCorruptionCost,
@@ -198,7 +199,13 @@ export function canPlaySpellNow(
   const speed = getCardSpeed(spellDef);
 
   if (speed === "fast") {
-    return state.turnPhase === "main" || state.turnPhase === "combat";
+    if (state.turnPhase === "main") return true;
+    if (state.turnPhase !== "combat" || !state.combat) return false;
+    if (state.combat.subPhase === "magic") return true;
+    if (state.combat.subPhase === "strike") {
+      return player !== getCombatAssigningPlayer(state.combat);
+    }
+    return false;
   }
 
   if (speed === "turn") {

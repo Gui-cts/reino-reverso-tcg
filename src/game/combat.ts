@@ -178,7 +178,7 @@ function beginCombatMagicPhase(
   opts: { strike: number; strikingPlayer: PlayerId; magicWindow: number },
 ): GameState {
   if (!state.combat) return state;
-  const arena = getArena(state, opts.strike ? state.combat.arenaId : state.combat.arenaId);
+  const arena = getArena(state, state.combat.arenaId);
 
   return {
     ...state,
@@ -258,8 +258,8 @@ function advanceToNextStrike(state: GameState): GameState {
   const { arenaId, strikingPlayer, strike } = state.combat;
 
   let stateAfterPing = clearConstrictionAfterStrikePhase(state, strikingPlayer);
-  if (isSanatorioArena(state, arenaId) && !combatWouldEnd(state, arenaId)) {
-    stateAfterPing = sanatorioPingAfterStrike(state, arenaId);
+  if (isSanatorioArena(stateAfterPing, arenaId) && !combatWouldEnd(stateAfterPing, arenaId)) {
+    stateAfterPing = sanatorioPingAfterStrike(stateAfterPing, arenaId);
   }
   stateAfterPing = checkCombatEndAfterDamage(
     stateAfterPing,
@@ -321,7 +321,10 @@ export function executeCombatAttack(
     };
   }
   if (attacker.zone !== "arena" || attacker.arenaId !== arenaId || attacker.currentHealth <= 0) {
-    return state;
+    return {
+      ...state,
+      log: appendLog(state, "Atacante inválido ou fora da arena de combate."),
+    };
   }
   let resolvedTargetId = targetId;
   if (arenaUsesRandomCombatTargets(state, arenaId)) {

@@ -165,3 +165,146 @@ describe("canControlPlayer without pending spell", () => {
     expect(canControlPlayer(state, 1)).toBe(false);
   });
 });
+
+describe("combat strike permissions", () => {
+  const strikeState = minimalPlayingState({
+    turnPhase: "combat",
+    combat: {
+      arenaId: "arena-a",
+      declaredBy: 0,
+      strikingPlayer: 0,
+      subPhase: "strike",
+      strike: 1,
+      magicWindow: 1,
+      magicPassed: [true, true],
+      attackedThisStrike: [],
+    },
+    arenas: [
+      {
+        id: "arena-a",
+        name: "Test",
+        neutral: false,
+        phase: "mundo-normal",
+        effect: "none",
+        conquestPointsToDominate: 2,
+        dominatedBy: null,
+        conquestPoints: { 0: 0, 1: 0 },
+      },
+    ],
+    troops: {
+      atk: {
+        instanceId: "atk",
+        cardId: "a",
+        owner: 0,
+        zone: "arena",
+        arenaId: "arena-a",
+        attack: 2,
+        currentHealth: 3,
+        exhausted: false,
+        pinned: false,
+        movementLocked: false,
+        equipmentId: null,
+        attachedSpell: null,
+        healthBonus: 0,
+      },
+      def: {
+        instanceId: "def",
+        cardId: "b",
+        owner: 1,
+        zone: "arena",
+        arenaId: "arena-a",
+        attack: 2,
+        currentHealth: 3,
+        exhausted: false,
+        pinned: false,
+        movementLocked: false,
+        equipmentId: null,
+        attachedSpell: null,
+        healthBonus: 0,
+      },
+    },
+    catalog: {
+      a: { id: "a", name: "A", cost: 0, attack: 2, health: 3, hasEssenceSymbol: false },
+      b: { id: "b", name: "B", cost: 0, attack: 2, health: 3, hasEssenceSymbol: false },
+      gust: {
+        id: "gust",
+        name: "Lufada",
+        cost: 2,
+        attack: 0,
+        health: 0,
+        hasEssenceSymbol: false,
+        spellEffect: "gust-wind",
+        cardSpeed: "fast",
+      },
+    },
+    players: [
+      { ...minimalPlayingState().players[0], hand: ["gust"] },
+      minimalPlayingState().players[1],
+    ],
+  });
+
+  it("striker may attack and end strike only", () => {
+    expect(
+      canSubmitAction(strikeState, 0, {
+        type: "EXECUTE_COMBAT_ATTACK",
+        attackerId: "atk",
+        targetId: "def",
+      }),
+    ).toBe(true);
+    expect(canSubmitAction(strikeState, 0, { type: "END_COMBAT_STRIKE" })).toBe(true);
+    expect(
+      canSubmitAction(strikeState, 0, {
+        type: "PLAY_SPELL",
+        player: 0,
+        spellInstanceId: "gust",
+      }),
+    ).toBe(false);
+    expect(canSubmitAction(strikeState, 0, { type: "END_TURN" })).toBe(false);
+  });
+
+  it("defender may react with fast spell during opponent strike", () => {
+    expect(
+      canSubmitAction(strikeState, 1, {
+        type: "PLAY_SPELL",
+        player: 1,
+        spellInstanceId: "gust",
+      }),
+    ).toBe(false);
+    const withDefSpell = {
+      ...strikeState,
+      players: [
+        strikeState.players[0],
+        { ...strikeState.players[1], hand: ["gust2"] },
+      ] as typeof strikeState.players,
+      troops: {
+        ...strikeState.troops,
+        gust2: {
+          instanceId: "gust2",
+          cardId: "gust",
+          owner: 1,
+          zone: "hand",
+          arenaId: null,
+          attack: 0,
+          currentHealth: 1,
+          exhausted: false,
+          pinned: false,
+          movementLocked: false,
+          equipmentId: null,
+          attachedSpell: null,
+          healthBonus: 0,
+        },
+      },
+    };
+    expect(
+      canSubmitAction(withDefSpell, 1, {
+        type: "PLAY_SPELL",
+        player: 1,
+        spellInstanceId: "gust2",
+      }),
+    ).toBe(true);
+  });
+
+  it("striker cannot react to own strike", () => {
+    expect(playerCanReactDuringStrike(strikeState, 0)).toBe(false);
+  });
+});

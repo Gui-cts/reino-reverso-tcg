@@ -60,6 +60,10 @@ function canPlayReactiveFastSpell(
   return canPlaySpellNow(state, player, def);
 }
 
+function isStrikerStrikeAction(action: GameAction): boolean {
+  return action.type === "EXECUTE_COMBAT_ATTACK" || action.type === "END_COMBAT_STRIKE";
+}
+
 function isStrikeReactionAction(
   state: GameState,
   player: PlayerId,
@@ -207,7 +211,15 @@ export function canSubmitAction(
     return false;
   }
 
-  if (canControlPlayer(state, seat)) return true;
+  if (canControlPlayer(state, seat)) {
+    if (
+      state.combat?.subPhase === "strike" &&
+      seat === getCombatAssigningPlayer(state.combat)
+    ) {
+      return isStrikerStrikeAction(action);
+    }
+    return true;
+  }
 
   if (
     state.combat?.subPhase === "strike" &&
