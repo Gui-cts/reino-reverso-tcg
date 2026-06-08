@@ -11,6 +11,18 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-05-19",
+    title: "Cartas — Capitã e Assinatura",
+    summary:
+      "Sarah, Angelica, Canino e Monteiro exibem o papel certo (Capitã/Assinatura · Noah ou Klaus), não só Delta. Texto da habilidade na carta: Aterrisagem da Sarah, Ebony & Ivory, Resistência ao Vácuo, Monteiro grátis. Lembrete máx. 1 no deck.",
+  },
+  {
+    date: "2026-05-19",
+    title: "Combate e Lufada",
+    summary:
+      "Constrição bloqueia só 1 ataque (não o combate inteiro). CPU no golpe: aviso e botão Passar quando você pode responder com magia rápida ou Líder. Lufada envia a tropa à mão se a base do dono estiver cheia.",
+  },
+  {
+    date: "2026-05-19",
     title: "Decks base 50 cartas",
     summary:
       "Noah e Klaus com 50 cartas cada no preset; Klaus com 4× Contramagia como núcleo do controle arcano.",
