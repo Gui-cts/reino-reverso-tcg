@@ -7,6 +7,8 @@ export {
   getCardName,
   payCorruptionCost,
   payEssenceCost,
+  explainTroopSendToArenaBlock,
+  listOpenArenasForTroop,
 } from "./helpers";
 export { loadCardCatalog, normalizeCatalog, shuffle } from "./cards";
 export {

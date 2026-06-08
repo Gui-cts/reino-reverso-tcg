@@ -31,8 +31,16 @@ function shouldToast(line: string): boolean {
   return (
     /1d6|d6|dano|domin|conquista|resolve|Contramagia|combate declarado|golpe \d/i.test(
       line,
-    ) || /Líder.*→\s*\d+\s*HP/i.test(line)
+    ) ||
+    /Líder.*→\s*\d+\s*HP/i.test(line) ||
+    /exausta|vinculada|não pode mover|não é possível enviar|Arena cheia|presa —/i.test(line)
   );
+}
+
+/** Toast imediato (ex.: ação bloqueada antes de atualizar o estado). */
+export function showGameToast(text: string, kind: ToastKind = "info"): void {
+  const host = ensureContainer();
+  renderToast({ id: nextId++, text, kind }, host);
 }
 
 function renderToast(item: ToastItem, host: HTMLElement): void {

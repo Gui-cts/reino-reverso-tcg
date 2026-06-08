@@ -11,6 +11,12 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-05-19",
+    title: "Movimento de tropas — feedback",
+    summary:
+      "Ao não conseguir enviar tropa da base, o jogo explica o motivo (exausta, arena dominada, não é sua vez, feitiço pendente). Clique na tropa exausta para ver a dica.",
+  },
+  {
+    date: "2026-05-19",
     title: "CPU no RR — golpe defensor",
     summary: "Corrigido travamento no golpe do defensor com Klaus Portador — Summoner não bloqueia mais o loop da CPU no combate.",
   },

@@ -49,7 +49,11 @@ import {
   playerCanReactDuringStrike,
 } from "../game/permissions";
 import { canRespondWithCounter } from "../game/spell-stack";
-import { opponent } from "../game/helpers";
+import {
+  explainTroopSendToArenaBlock,
+  listOpenArenasForTroop,
+  opponent,
+} from "../game/helpers";
 import {
   apiCreateRoom,
   apiFetchRoom,
@@ -58,7 +62,7 @@ import {
 } from "../net/room-client";
 import type { PlayerViewPayload } from "../net/player-view";
 import { pickCpuAction, cpuControlsPhase } from "./cpu";
-import { pushGameLogToasts, clearGameToasts } from "./game-toasts";
+import { pushGameLogToasts, clearGameToasts, showGameToast } from "./game-toasts";
 import { renderSpellStackBanner } from "./spell-stack-banner";
 import { openTutorialModal } from "./tutorial";
 import { attachCardHoverPreview } from "./card-hover-preview";
@@ -634,11 +638,50 @@ export class GameApp {
       s.activePlayer !== troop.owner ||
       troop.pinned ||
       troop.exhausted ||
+      troop.movementLocked ||
       !this.canControlPlayer(s, troop.owner)
     ) {
       return false;
     }
     return troop.zone === "base" || troop.zone === "arena";
+  }
+
+  private canSelectFieldTroop(s: GameState, troop: TroopInstance): boolean {
+    return (
+      s.matchPhase === "playing" &&
+      s.turnPhase === "main" &&
+      !s.combat &&
+      troop.owner === s.activePlayer &&
+      this.canControlPlayer(s, troop.owner) &&
+      (troop.zone === "base" || troop.zone === "arena")
+    );
+  }
+
+  private explainActionBlocked(s: GameState, action: GameAction): string {
+    if (s.pendingSpell) {
+      const pending = s.pendingSpell;
+      if (pending.counterWindowOpen) {
+        return "Resolva a janela de Contramagia antes de outras ações.";
+      }
+      if (pending.awaitingCounterPayment) {
+        return "Aguardando pagamento do custo de Contramagia.";
+      }
+      return "Há um feitiço pendente na pilha.";
+    }
+    if (action.type === "MOVE_TROOP") {
+      const troop = s.troops[action.troopId];
+      if (troop?.zone === "base") {
+        const block = explainTroopSendToArenaBlock(s, troop);
+        if (block) return block;
+      }
+      if (s.turnPhase !== "main" || s.combat) {
+        return "Não é a fase principal — não dá para mover tropas.";
+      }
+      if (troop && troop.owner !== s.activePlayer) {
+        return "Não é sua vez.";
+      }
+    }
+    return "Ação bloqueada neste momento.";
   }
 
   private update(next: GameState): void {
@@ -847,7 +890,10 @@ export class GameApp {
     }
     const s = this.getState();
     const actor = inferActionPlayer(s, action);
-    if (actor !== null && !canSubmitAction(s, actor, action)) return;
+    if (actor !== null && !canSubmitAction(s, actor, action)) {
+      showGameToast(this.explainActionBlocked(s, action));
+      return;
+    }
     this.update(dispatch(s, action));
   }
 
@@ -2355,32 +2401,34 @@ export class GameApp {
       if (
         selectedTroop &&
         selectedTroop.owner === active &&
-        selectedTroop.zone === "base" &&
-        !selectedTroop.exhausted &&
-        !selectedTroop.pinned
+        selectedTroop.zone === "base"
       ) {
-        const availableArenas = s.arenas.filter(
-          (a) => a.dominatedBy === null &&
-            Object.values(s.troops).filter(
-              (t) => t.owner === active && t.zone === "arena" && t.arenaId === a.id && t.currentHealth > 0,
-            ).length < 3,
-        );
-        const troopName = s.catalog[selectedTroop.cardId]?.name ?? "Tropa";
-        for (const arena of availableArenas) {
-          const sendBtn = document.createElement("button");
-          sendBtn.textContent = availableArenas.length === 1
-            ? `Enviar ${troopName} para ${arena.name}`
-            : `→ ${arena.name}`;
-          sendBtn.onclick = () => {
-            this.dispatchAction({
-              type: "MOVE_TROOP",
-              troopId: selectedTroop.instanceId,
-              to: "arena",
-              arenaId: arena.id,
-            });
-            this.selection.troopId = null;
-          };
-          btns.appendChild(sendBtn);
+        const moveBlock = explainTroopSendToArenaBlock(s, selectedTroop);
+        if (moveBlock) {
+          const moveHint = document.createElement("p");
+          moveHint.className = "mulligan-hint";
+          moveHint.style.color = "#f0a0a0";
+          moveHint.textContent = moveBlock;
+          actions.appendChild(moveHint);
+        } else {
+          const availableArenas = listOpenArenasForTroop(s, active);
+          const troopName = s.catalog[selectedTroop.cardId]?.name ?? "Tropa";
+          for (const arena of availableArenas) {
+            const sendBtn = document.createElement("button");
+            sendBtn.textContent = availableArenas.length === 1
+              ? `Enviar ${troopName} para ${arena.name}`
+              : `→ ${arena.name}`;
+            sendBtn.onclick = () => {
+              this.dispatchAction({
+                type: "MOVE_TROOP",
+                troopId: selectedTroop.instanceId,
+                to: "arena",
+                arenaId: arena.id,
+              });
+              this.selection.troopId = null;
+            };
+            btns.appendChild(sendBtn);
+          }
         }
       }
 
@@ -2697,19 +2745,22 @@ export class GameApp {
           subLabel = "bloqueado — ataque Protetores primeiro";
         }
       }
-    } else {
-      if (this.canDragTroopsOnField(s, troop) && (troop.zone === "arena" || troop.zone === "base")) {
-        onClick = (e) => {
-          e.stopPropagation();
-          this.selection.troopId =
-            this.selection.troopId === troop.instanceId ? null : troop.instanceId;
-          this.render();
-        };
-        if (this.selection.troopId === troop.instanceId) {
-          subLabel = troop.zone === "arena"
-            ? (subLabel ? `${subLabel} · selecionada` : "selecionada — use botão Recuar")
-            : (subLabel ? `${subLabel} · selecionada` : "selecionada — use botão Enviar");
-        }
+    } else if (this.canSelectFieldTroop(s, troop)) {
+      onClick = (e) => {
+        e.stopPropagation();
+        this.selection.troopId =
+          this.selection.troopId === troop.instanceId ? null : troop.instanceId;
+        this.render();
+      };
+      if (this.selection.troopId === troop.instanceId) {
+        subLabel = troop.zone === "arena"
+          ? (subLabel ? `${subLabel} · selecionada` : "selecionada — use botão Recuar")
+          : (subLabel ? `${subLabel} · selecionada` : "selecionada — use botão Enviar");
+      } else if (troop.zone === "base") {
+        const block = explainTroopSendToArenaBlock(s, troop);
+        if (block) subLabel = block;
+      } else if (troop.exhausted) {
+        subLabel = subLabel ? `${subLabel} · exausta` : "exausta — não move";
       }
     }
 

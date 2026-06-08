@@ -1,10 +1,11 @@
 import type { EssenceCost } from "./types";
-import type {
-  ArenaState,
-  EssenceInstance,
-  GameState,
-  PlayerId,
-  TroopInstance,
+import {
+  MAX_TROOPS_PER_ZONE,
+  type ArenaState,
+  type EssenceInstance,
+  type GameState,
+  type PlayerId,
+  type TroopInstance,
 } from "./types";
 
 export function opponent(p: PlayerId): PlayerId {
@@ -214,4 +215,50 @@ export function untapEssence(state: GameState, player: PlayerId): GameState {
     }
   }
   return { ...state, essencePool };
+}
+
+/** Arenas para onde o jogador pode enviar tropas da base neste turno. */
+export function listOpenArenasForTroop(
+  state: GameState,
+  player: PlayerId,
+): ArenaState[] {
+  return state.arenas.filter((a) => {
+    if (a.dominatedBy !== null) return false;
+    return countTroopsInZone(state, player, "arena", a.id) < MAX_TROOPS_PER_ZONE;
+  });
+}
+
+/** Motivo pelo qual a tropa não pode sair da base; `null` = movimento permitido. */
+export function explainTroopSendToArenaBlock(
+  state: GameState,
+  troop: TroopInstance,
+): string | null {
+  if (troop.zone !== "base") return null;
+  if (state.matchPhase !== "playing") return "Partida não está em andamento.";
+  if (state.turnPhase !== "main" || state.combat) {
+    return "Só é possível mover tropas na fase principal (sem combate aberto).";
+  }
+  if (troop.owner !== state.activePlayer) {
+    return "Aguarde sua vez para mover tropas.";
+  }
+  if (state.pendingSpell) {
+    return "Resolva o feitiço pendente antes de mover tropas.";
+  }
+  if (troop.pinned) return "Tropa presa na arena — não pode mover.";
+  if (troop.movementLocked) {
+    return `${getTroopName(state, troop)} está vinculada — não pode se mover neste turno.`;
+  }
+  if (troop.exhausted) {
+    return `${getTroopName(state, troop)} está exausta — use Fim de turno (desvira na preparação).`;
+  }
+  const open = listOpenArenasForTroop(state, troop.owner);
+  if (open.length === 0) {
+    const allDominated =
+      state.arenas.length > 0 && state.arenas.every((a) => a.dominatedBy !== null);
+    if (allDominated) {
+      return "Todas as arenas estão dominadas — não há campo livre para enviar tropas.";
+    }
+    return "Nenhuma arena disponível (dominadas ou já com 3 tropas suas).";
+  }
+  return null;
 }
