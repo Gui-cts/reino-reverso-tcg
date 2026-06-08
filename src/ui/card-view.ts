@@ -5,7 +5,11 @@ import {
   keywordLabel,
 } from "../game/keywords";
 import { getCardType } from "../game/card-meta";
-import { describeArtifactEffect, describeEquipmentEffect } from "../game/equipment";
+import { describeCaptainAbilityForCard } from "../game/captain-abilities";
+import {
+  describeArtifactEffectForCard,
+  describeEquipmentEffect,
+} from "../game/equipment";
 import { describeSpellEffect, getCardSpeed, isSpellCard, speedLabel } from "../game/spells";
 import type { CardDefinition, KeywordId } from "../game/types";
 import { getCardArtUrl } from "../game/card-art";
@@ -134,7 +138,10 @@ function buildCardTooltip(
     }
     const cardType = getCardType(def);
     if (cardType === "artifact" && def.artifactEffect) {
-      lines.push(describeArtifactEffect(def.artifactEffect));
+      lines.push(describeArtifactEffectForCard(def));
+    }
+    if (def.captainAbilityId) {
+      lines.push(describeCaptainAbilityForCard(def));
     }
     if (cardType === "equipment") {
       lines.push(describeEquipmentEffect(def));

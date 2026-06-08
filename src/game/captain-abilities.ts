@@ -1,6 +1,26 @@
+import { leaderExclusiveTypeSuffix } from "./card-meta";
 import { appendLog, getTroopName } from "./helpers";
 import { EBONY_TOKEN_ID, IVORY_TOKEN_ID, spawnTokenInBase } from "./tokens";
-import type { GameState, PlayerId } from "./types";
+import type { CaptainAbilityId, CardDefinition, GameState, PlayerId } from "./types";
+
+export function describeCaptainAbility(abilityId: CaptainAbilityId): string {
+  switch (abilityId) {
+    case "angelica-duo":
+      return "Ativar na base: invoca Ebony e Ivory (2/2, exaustos) se ainda não estiverem em campo.";
+    default:
+      return "";
+  }
+}
+
+export function describeCaptainAbilityForCard(def: CardDefinition): string {
+  if (!def.captainAbilityId) return "";
+  const effect = describeCaptainAbility(def.captainAbilityId);
+  const role =
+    def.cardRole === "captain"
+      ? ` ${leaderExclusiveTypeSuffix("captain", def.requiredLeaderId)} — máx. 1 no deck.`
+      : "";
+  return `${effect}${role}`;
+}
 
 function tokenAliveOnField(state: GameState, player: PlayerId, cardId: string): boolean {
   return Object.values(state.troops).some(

@@ -1,6 +1,6 @@
 import { appendLog, getTroopName } from "./helpers";
 import { shufflePlayerDeck } from "./tokens";
-import { getCardType } from "./card-meta";
+import { getCardType, leaderExclusiveTypeSuffix } from "./card-meta";
 import type {
   ArtifactEffectId,
   CardDefinition,
@@ -21,6 +21,15 @@ export function describeArtifactEffect(effect: ArtifactEffectId): string {
   }
 }
 
+export function describeArtifactEffectForCard(def: CardDefinition): string {
+  if (!def.artifactEffect) return "";
+  const base = describeArtifactEffect(def.artifactEffect);
+  if (def.cardRole === "signature") {
+    return `${base} ${leaderExclusiveTypeSuffix("signature", def.requiredLeaderId)} — máx. 1 no deck.`;
+  }
+  return base;
+}
+
 export function describeEquipmentEffect(def: CardDefinition): string {
   const atk = def.attack ?? 0;
   const hp = def.health ?? 0;
@@ -32,8 +41,11 @@ export function describeEquipmentEffect(def: CardDefinition): string {
     def.equipmentTrait === "vacuum-resist"
       ? " Resistência ao Vácuo (RR): após combate, o equipamento volta ao baralho em vez da tropa ser destruída."
       : "";
-  const role = def.cardRole === "signature" ? " Assinatura do Líder." : "";
-  return `Equipa em tropa aliada na base ou arena.${bonusText}${trait}${role}`;
+  const role =
+    def.cardRole === "signature"
+      ? ` ${leaderExclusiveTypeSuffix("signature", def.requiredLeaderId)} — máx. 1 no deck.`
+      : "";
+  return `Equipa em tropa aliada na base ou arena.${bonusText}${trait}${role}`.trim();
 }
 
 export function troopHasVacuumResistance(state: GameState, troop: TroopInstance): boolean {

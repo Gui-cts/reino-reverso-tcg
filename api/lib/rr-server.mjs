@@ -198,7 +198,9 @@ function tutorCardToHand(state, player, cardId, notFoundMsg) {
 function normalizeCardDefinition(raw) {
   const cardType = resolveCardType(raw);
   const faction = raw.faction ?? "neutra";
-  const cardRole = cardType === "troop" ? raw.cardRole ?? "normal" : "normal";
+  let cardRole = raw.cardRole ?? "normal";
+  if (cardRole === "captain" && cardType !== "troop") cardRole = "normal";
+  if (cardRole === "signature" && cardType === "troop") cardRole = "normal";
   return {
     ...raw,
     cardType,

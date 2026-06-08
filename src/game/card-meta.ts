@@ -27,13 +27,19 @@ export const FACTION_LABELS: Record<string, string> = {
   delta: "Delta",
 };
 
+const LEADER_DISPLAY_NAMES: Record<string, string> = {
+  "noah-lider-base": "Noah",
+  "klaus-violinista": "Klaus",
+};
+
 export const CARD_ROLES_COMING_SOON: CardType[] = [];
 
 export function normalizeCardDefinition(raw: CardDefinition): CardDefinition {
   const cardType = resolveCardType(raw);
   const faction: FactionId = raw.faction ?? "neutra";
-  const cardRole: CardRole =
-    cardType === "troop" ? (raw.cardRole ?? "normal") : "normal";
+  let cardRole: CardRole = raw.cardRole ?? "normal";
+  if (cardRole === "captain" && cardType !== "troop") cardRole = "normal";
+  if (cardRole === "signature" && cardType === "troop") cardRole = "normal";
 
   return {
     ...raw,
@@ -172,12 +178,24 @@ export function getCardFrameUrl(def: CardDefinition): string {
   return CARD_FRAME_URLS[resolveCardFrameKind(def)];
 }
 
+export function leaderExclusiveTypeSuffix(
+  role: "captain" | "signature",
+  requiredLeaderId?: string,
+): string {
+  const leader =
+    requiredLeaderId && LEADER_DISPLAY_NAMES[requiredLeaderId]
+      ? LEADER_DISPLAY_NAMES[requiredLeaderId]
+      : null;
+  const roleLabel = role === "captain" ? "Capitã" : "Assinatura";
+  return leader ? `${roleLabel} · ${leader}` : roleLabel;
+}
+
 function cardTypeSuffix(def: CardDefinition): string {
   if (def.cardRole === "captain" && getCardType(def) === "troop") {
-    return "Capitã";
+    return leaderExclusiveTypeSuffix("captain", def.requiredLeaderId);
   }
   if (def.cardRole === "signature") {
-    return "Assinatura";
+    return leaderExclusiveTypeSuffix("signature", def.requiredLeaderId);
   }
   const type = getCardType(def);
   const faction = getFaction(def);

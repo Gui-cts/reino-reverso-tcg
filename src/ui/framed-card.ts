@@ -6,7 +6,11 @@ import {
   getEssenceCost,
   resolveCardFrameKind,
 } from "../game/card-meta";
-import { describeArtifactEffect, describeEquipmentEffect } from "../game/equipment";
+import { describeCaptainAbilityForCard } from "../game/captain-abilities";
+import {
+  describeArtifactEffectForCard,
+  describeEquipmentEffect,
+} from "../game/equipment";
 import {
   describeDeathEffect,
   describeKeywordRule,
@@ -85,7 +89,7 @@ function populateDescriptionEl(
 
   const cardType = getCardType(def);
   if (cardType === "artifact" && def.artifactEffect) {
-    appendDescPlain(descEl, describeArtifactEffect(def.artifactEffect));
+    appendDescPlain(descEl, describeArtifactEffectForCard(def));
     if (extraSubLabel) appendDescPlain(descEl, extraSubLabel);
     return;
   }
@@ -100,6 +104,10 @@ function populateDescriptionEl(
     for (const kw of def.keywords) {
       appendKeywordBlock(descEl, def, kw);
     }
+  }
+
+  if (def.captainAbilityId) {
+    appendDescPlain(descEl, describeCaptainAbilityForCard(def));
   }
 
   if (def.hasEssenceSymbol) {

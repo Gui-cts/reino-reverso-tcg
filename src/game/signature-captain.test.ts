@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { activateCaptainAbility } from "./captain-abilities";
-import { formatCardTypeLine } from "./card-meta";
+import {
+  activateCaptainAbility,
+  describeCaptainAbilityForCard,
+} from "./captain-abilities";
+import { describeArtifactEffectForCard } from "./equipment";
+import { formatCardTypeLine, normalizeCardDefinition } from "./card-meta";
 import { validateDeck } from "./deck-rules";
 import { applyLandingEffect, describeLandingEffectForCard } from "./keywords";
 import { defaultTroopFields } from "./spells";
@@ -52,6 +56,18 @@ const catalog = {
     requiredLeaderId: "noah-lider-base",
     equipmentTrait: "vacuum-resist" as const,
   },
+  "monteiro-violino": {
+    id: "monteiro-violino",
+    name: "Monteiro — O violino",
+    cost: 2,
+    attack: 0,
+    health: 0,
+    hasEssenceSymbol: false,
+    cardType: "artifact" as const,
+    cardRole: "signature" as const,
+    requiredLeaderId: "klaus-violinista",
+    artifactEffect: "free-spell" as const,
+  },
   "angelica-capita": {
     id: "angelica-capita",
     name: "Angelica",
@@ -87,9 +103,32 @@ const catalog = {
 };
 
 describe("capitãs e assinaturas", () => {
+  it("Canino exibe Equipamento — Assinatura · Noah após normalização", () => {
+    const raw = catalog["equip-canino-fogo-gelo"]!;
+    const canino = normalizeCardDefinition(raw);
+    expect(canino.cardRole).toBe("signature");
+    expect(formatCardTypeLine(canino)).toBe("Equipamento — Assinatura · Noah");
+  });
+
+  it("Monteiro exibe Artefato — Assinatura · Klaus", () => {
+    const monteiro = normalizeCardDefinition(catalog["monteiro-violino"]!);
+    expect(monteiro.cardRole).toBe("signature");
+    expect(formatCardTypeLine(monteiro)).toBe("Artefato — Assinatura · Klaus");
+    expect(describeArtifactEffectForCard(monteiro)).toContain("Klaus");
+    expect(describeArtifactEffectForCard(monteiro)).toContain("máx. 1");
+  });
+
+  it("Angelica exibe Capitã · Klaus e habilidade Ebony & Ivory", () => {
+    const angelica = normalizeCardDefinition(catalog["angelica-capita"]!);
+    expect(angelica.cardRole).toBe("captain");
+    expect(formatCardTypeLine(angelica)).toBe("Tropa — Capitã · Klaus");
+    expect(describeCaptainAbilityForCard(angelica)).toContain("Ebony");
+    expect(describeCaptainAbilityForCard(angelica)).toContain("máx. 1");
+  });
+
   it("Sarah exibe tipo Capitã e texto da aterrisagem específica", () => {
     const sarah = catalog["sarah-determinacao"]!;
-    expect(formatCardTypeLine(sarah)).toBe("Tropa — Capitã");
+    expect(formatCardTypeLine(sarah)).toBe("Tropa — Capitã · Noah");
     expect(describeLandingEffectForCard({
       ...sarah,
       landingEffectText: "Busca O canino de fogo e gelo no baralho e coloca na mão.",
