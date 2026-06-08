@@ -35,7 +35,6 @@ import {
   canAffordCardCost,
   formatCardCost,
   describeSpellEffect,
-  getCardSpeed,
   getEquipmentDef,
   isEquipmentCard,
   isSpellCard,
